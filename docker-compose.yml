@@ -1,8 +1,10 @@
 services:
   web:
     build: .
-    ports:
-      - "80:80"
+    # Coolify's Traefik owns host port 80 and routes to this container by
+    # label, so the port is exposed to the Docker network, never published.
+    expose:
+      - "80"
     depends_on:
       - api
 
