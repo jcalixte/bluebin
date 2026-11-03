@@ -8,7 +8,7 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ## House of Quality
 
-The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the two alternatives a team already has. Row colours match the parts of the TPS house in §1; the blue boxes mark the 3 Functions with the highest weight. Red and green are kept for OK / NOK status only, so neither house uses them.
+The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Row colours match the parts of the TPS house in §1; the blue boxes mark the 3 Functions with the highest weight. Red and green are kept for OK / NOK status only, so neither house uses them.
 
 ```tikz
 % =====================================================================
@@ -41,6 +41,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \newif\ifqfdshowimportance    \qfdshowimportancetrue
 \newif\ifqfdshowcorrlegend    \qfdshowcorrlegendtrue
 \newif\ifqfdshowevallegend    \qfdshowevallegendtrue
+\newif\ifqfdshowaltfour       \qfdshowaltfourfalse % 4th alternative in the perception zone
 \newif\ifqfdshowtitle         \qfdshowtitletrue   % title block above the roof
 
 % Dimensions — override before \begin{qfdhouse} to resize.
@@ -61,6 +62,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \def\qfdAltOneLabel{Our product}    % highlighted in legend
 \def\qfdAltTwoLabel{Competitor A}
 \def\qfdAltThreeLabel{Competitor B}
+\def\qfdAltFourLabel{Competitor C}  % shown only with \qfdshowaltfourtrue
 \def\qfdRelTitle{Relation}
 \def\qfdCorrTitle{Correlation}
 \def\qfdEvalTitle{Evaluation}
@@ -95,6 +97,10 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
   qfdalt3mk/.style={rectangle, draw, fill=black,
                     minimum size=5pt, inner sep=0pt, line width=0.7pt},
   qfdalt3ln/.style={line width=0.7pt, dotted},
+  qfdalt4mk/.style={diamond, draw, fill=black,
+                    minimum size=6pt, inner sep=0pt, line width=0.7pt},
+  qfdalt4ln/.style={line width=0.7pt,
+                    dash pattern=on 3pt off 1.5pt on 0.8pt off 1.5pt},
 }
 
 % --- Grid lines for every zone. ---
@@ -212,7 +218,8 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
     \pgfmathsetmacro{\qfdLegBottom}{%
       -2.05
       \ifqfdshowroof    \ifqfdshowcorrlegend - 2.55 \fi \fi
-      \ifqfdshowcompetitive \ifqfdshowevallegend - 2.20 \fi \fi}
+      \ifqfdshowcompetitive \ifqfdshowevallegend - 2.20
+        \ifqfdshowaltfour - 0.40 \fi \fi \fi}
     \pgfmathsetmacro{\qfdLegY}{\qfdHdrH - 0.4}
     \begin{scope}[shift={(\qfdLegX, \qfdLegY)}]
       \draw[qfdmed, rounded corners=2pt]
@@ -258,6 +265,12 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
         \draw[qfdalt3ln] (0.05, \qfdLegC) -- (0.45, \qfdLegC);
           \node[qfdalt3mk] at (0.25, \qfdLegC) {};
           \node[anchor=west] at (0.55, \qfdLegC) {\qfdAltThreeLabel};
+        \ifqfdshowaltfour
+          \pgfmathsetmacro{\qfdLegD}{\qfdEvalTop - 1.75}
+          \draw[qfdalt4ln] (0.05, \qfdLegD) -- (0.45, \qfdLegD);
+            \node[qfdalt4mk] at (0.25, \qfdLegD) {};
+            \node[anchor=west] at (0.55, \qfdLegD) {\qfdAltFourLabel};
+        \fi
       \fi \fi
     \end{scope}
   \fi
@@ -297,10 +310,12 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \def\qfdImpW{0.9}
 \def\qfdHdrH{3.6}
 \def\qfdWhatsTitle{Goals (TPS house)}
-\def\qfdCmpW{3.4}
+\def\qfdCmpW{3.8}
+\qfdshowaltfourtrue
 \def\qfdAltOneLabel{Bluebin (target)}
-\def\qfdAltTwoLabel{Digital board (Jira, Linear)}
-\def\qfdAltThreeLabel{Physical board + cards}
+\def\qfdAltTwoLabel{Jira}
+\def\qfdAltThreeLabel{Linear}
+\def\qfdAltFourLabel{Physical board + cards}
 % Coordinate of score #2 (0--5) on the row of Goal #1.
 \newcommand{\bbEv}[2]{({\qfdNH + (#2+0.5)*\qfdCmpW/6}, {-#1 + 0.5})}
 \def\qfdProjectTitle{Bluebin}
@@ -398,44 +413,51 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
     -- \bbEv{9}{5} -- \bbEv{10}{5};
   \foreach \r/\s in {1/5, 2/5, 3/4, 4/5, 5/5, 6/5, 7/4, 8/4, 9/5, 10/5}
     \node[qfdalt1mk] at \bbEv{\r}{\s} {};
-  % Digital board (Jira, Linear)
+  % Jira
   \draw[qfdalt2ln] \bbEv{1}{1} -- \bbEv{2}{1} -- \bbEv{3}{2} -- \bbEv{4}{2}
-    -- \bbEv{5}{3} -- \bbEv{6}{1} -- \bbEv{7}{3} -- \bbEv{8}{3}
+    -- \bbEv{5}{3} -- \bbEv{6}{1} -- \bbEv{7}{2} -- \bbEv{8}{1}
     -- \bbEv{9}{4} -- \bbEv{10}{3};
-  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/3, 6/1, 7/3, 8/3, 9/4, 10/3}
+  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/3, 6/1, 7/2, 8/1, 9/4, 10/3}
     \node[qfdalt2mk] at \bbEv{\r}{\s} {};
+  % Linear
+  \draw[qfdalt3ln] \bbEv{1}{1} -- \bbEv{2}{1} -- \bbEv{3}{2} -- \bbEv{4}{2}
+    -- \bbEv{5}{4} -- \bbEv{6}{1} -- \bbEv{7}{3} -- \bbEv{8}{4}
+    -- \bbEv{9}{3} -- \bbEv{10}{2};
+  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/4, 6/1, 7/3, 8/4, 9/3, 10/2}
+    \node[qfdalt3mk] at \bbEv{\r}{\s} {};
   % Physical board + cards
-  \draw[qfdalt3ln] \bbEv{1}{2} -- \bbEv{2}{3} -- \bbEv{3}{3} -- \bbEv{4}{2}
+  \draw[qfdalt4ln] \bbEv{1}{2} -- \bbEv{2}{3} -- \bbEv{3}{3} -- \bbEv{4}{2}
     -- \bbEv{5}{2} -- \bbEv{6}{3} -- \bbEv{7}{5} -- \bbEv{8}{5}
     -- \bbEv{9}{1} -- \bbEv{10}{5};
   \foreach \r/\s in {1/2, 2/3, 3/3, 4/2, 5/2, 6/3, 7/5, 8/5, 9/1, 10/5}
-    \node[qfdalt3mk] at \bbEv{\r}{\s} {};
+    \node[qfdalt4mk] at \bbEv{\r}{\s} {};
 \end{qfdhouse}
 \end{document}
 ```
 
 ### Where we land
 
-The right-hand zone scores each Goal 0–5 for three alternatives. **Bluebin** is the target score, not a measurement — nothing is built yet. **Digital board** is the card board a team already pays for — Jira for the process weight, Linear for the speed: columns, WIP limits, due dates, reports. **Physical board** is the shop-floor baseline: a wall, cards, a Heijunka box.
+The right-hand zone scores each Goal 0–5 for four alternatives. **Bluebin** is the target score, not a measurement — nothing is built yet. **Jira** and **Linear** are kept apart on purpose: they fail the lean Goals the same way but trade off against each other everywhere else — Jira buys reports and configuration with slow capture, Linear buys speed with an opinionated workflow. **Physical board** is the shop-floor baseline: a wall, cards, a Heijunka box.
 
-| Goal | Bluebin | Digital board | Physical board | Reading |
-|------|:-------:|:-------------:|:--------------:|---------|
-| G1 Takt Time visible to all | 5 | 1 | 2 | Neither alternative knows **Takt Time**; a board shows due dates, not a gap that moves with **Working Time** |
-| G2 Pull, every **Deviation** visible | 5 | 1 | 3 | A WIP limit can be ignored silently; a missing physical card is at least visible, but leaves no reason |
-| G3 One-piece flow at **Takt Time** | 4 | 2 | 3 | Tooling can push the flow, not guarantee it |
-| G4 Jidoka: stop and fix | 5 | 2 | 2 | A bug ticket at the end of the board is the opposite of stopping where the defect is found |
-| G5 Person knows the next thing | 5 | 3 | 2 | "My issues" is close; it has no **Rework**, no **Help Downstream** |
-| G6 Levelled **Product Mix** | 5 | 1 | 3 | The Heijunka box is physical practice; no card board levels anything |
-| G7 **Value Stream** at a glance | 4 | 3 | **5** | A wall wins on peripheral vision; a TV screen is our answer, not a win |
-| G8 Recording costs seconds | 4 | 3 | **5** | Moving a card costs nothing; Linear is keyboard-fast; we pay a click and a reason |
-| G9 Flow problems as numbers | 5 | 4 | 1 | The closest fight: report tooling is mature, it just measures the wrong flow |
-| G10 Design and change without code | 5 | 3 | **5** | A wall is redrawn in a minute; keeping that freedom in software is R1, our hardest conflict |
+| Goal | Bluebin | Jira | Linear | Physical board | Reading |
+|------|:-------:|:----:|:------:|:--------------:|---------|
+| G1 Takt Time visible to all | 5 | 1 | 1 | 2 | No alternative knows **Takt Time**; a board shows due dates, not a gap that moves with **Working Time** |
+| G2 Pull, every **Deviation** visible | 5 | 1 | 1 | 3 | A WIP limit can be ignored silently; a missing physical card is at least visible, but leaves no reason |
+| G3 One-piece flow at **Takt Time** | 4 | 2 | 2 | 3 | Tooling can push the flow, not guarantee it |
+| G4 Jidoka: stop and fix | 5 | 2 | 2 | 2 | A bug ticket at the end of the board is the opposite of stopping where the defect is found |
+| G5 Person knows the next thing | 5 | 3 | **4** | 2 | Linear's triage and "my issues" come closest; still no **Rework**, no **Help Downstream** |
+| G6 Levelled **Product Mix** | 5 | 1 | 1 | 3 | The Heijunka box is physical practice; no card board levels anything |
+| G7 **Value Stream** at a glance | 4 | 2 | 3 | **5** | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen is our answer, not a win |
+| G8 Recording costs seconds | 4 | 1 | 4 | **5** | Jira is form-heavy; Linear is keyboard-fast and ties us; we pay a click and a reason |
+| G9 Flow problems as numbers | 5 | 4 | 3 | 1 | Jira's reports are the closest fight; they just measure the wrong flow |
+| G10 Design and change without code | 5 | 3 | 2 | **5** | A wall is redrawn in a minute; Jira pays an admin for it; Linear refuses; keeping that freedom in software is R1 |
 
-Three readings:
+Four readings:
 
-1. **We win the lean Goals, not the board Goals.** G1, G2, G4, G6 are where no alternative competes — **Takt Time**, pull with a reason, Jidoka, Heijunka. That is the product.
-2. **The physical board beats us on G7, G8, G10, and ties nowhere by accident.** These three are exactly the costs of being software. They set hard budgets: live screens (§8), recording ≤ 10 s (F31), and change-while-running (F40) even though F40 ranks last by weight and first by difficulty.
-3. **G9 is the thin margin.** 5 vs 4 against mature reporting. The win only holds if the measures are the lean ones (**Takt Gap**, **Stagnation Time**, **Deviations**), exact and per **Work Station** — F34, the 4th priority of §5.
+1. **We win the lean Goals, not the board Goals.** G1, G2, G4, G6 are where nothing competes — **Takt Time**, pull with a reason, Jidoka, Heijunka. That is the product.
+2. **The physical board beats us on G7, G8, G10.** These three are exactly the costs of being software. They set hard budgets: live screens (§8), recording ≤ 10 s (F31), and change-while-running (F40) even though F40 ranks last by weight and first by difficulty.
+3. **Splitting the two tools splits the threat.** Jira is the threat on G9 (reports) and G10 (configuration); Linear is the threat on G5 (next thing) and G8 (speed of capture). No single competitor holds both ends, so neither one alone sets our bar — the envelope of the two does.
+4. **G8 is now a tie, not a lead.** Linear scores 4 like us. The only reason we stay level is F31; if the reason prompt grows past 10 s, Linear is ahead on the Goal that every **Person** touches all day.
 
 ---
 
