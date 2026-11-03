@@ -20,8 +20,15 @@ Dynamic colour (needs `currentColor` to flow through — paste the SVG inline as
 
 ```vue
 <template>
-  <svg class="size-5 text-primary" viewBox="0 0 24 24" fill="none"
-       stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <svg
+    class="size-5 text-primary"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
     <!-- paste paths from the Tabler SVG here -->
   </svg>
 </template>

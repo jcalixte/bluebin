@@ -6,6 +6,7 @@
 ```sh
 gleam add bluebin@1
 ```
+
 ```gleam
 import bluebin
 

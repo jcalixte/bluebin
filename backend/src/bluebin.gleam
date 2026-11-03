@@ -30,7 +30,7 @@ pub fn main() {
 
 fn handle_request(request: wisp.Request) -> wisp.Response {
   use <- wisp.log_request(request)
-  use <- wisp.rescue_crashes()
+  use <- wisp.rescue_crashes
 
   case wisp.path_segments(request) {
     ["api", "health"] -> {

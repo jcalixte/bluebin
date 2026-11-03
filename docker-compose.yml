@@ -1,0 +1,19 @@
+services:
+  web:
+    build: .
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+
+  api:
+    build: ./backend
+    environment:
+      - PORT=8000
+    volumes:
+      - bluebin-data:/app/data
+    expose:
+      - "8000"
+
+volumes:
+  bluebin-data:
