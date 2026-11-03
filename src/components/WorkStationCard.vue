@@ -16,7 +16,7 @@ const binsFull = computed(
 
 <template>
   <article
-    class="card h-full border bg-base-100 shadow-sm"
+    class="card border bg-base-100 shadow-sm"
     :class="hasRework ? 'border-error border-2' : 'border-base-300'"
   >
     <div class="card-body gap-3 p-4">
