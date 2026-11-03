@@ -15,10 +15,7 @@ pub fn main() {
 
   let _ = simplifile.create_directory_all("data")
   let assert Ok(Nil) =
-    db.with_connection(fn(connection) {
-      let assert Ok(Nil) = db.migrate(connection)
-      db.seed(connection)
-    })
+    db.with_connection(db.prepare)
 
   let assert Ok(_) =
     handle_request

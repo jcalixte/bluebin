@@ -17,6 +17,17 @@ cd backend && gleam run     # API on :8000 (needs Erlang/OTP and a C toolchain)
 docker compose up           # SPA + API together, as deployed
 ```
 
+## Test the API
+
+```bash
+backend/test.sh             # Gleam suite: Takt arithmetic, schema, seed, pull rules
+                            # runs natively with Erlang + gcc, else in the deploy image
+scripts/test-api.sh         # smoke-test a deploy: scripts/test-api.sh http://localhost:8000
+```
+
+`backend/Dockerfile` runs `gleam test` during the build, so a red suite fails the
+deploy before it reaches production.
+
 ## Deploy
 
 Pushes to `main` are picked up by Coolify at https://platform.apoena.dev and land on https://bluebin.app.

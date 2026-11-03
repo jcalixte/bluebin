@@ -184,7 +184,23 @@ values ('rw-1', 'p-offline-4', 'ws-ios', 'Sync retries lose the last edit when t
 "
 
 pub fn with_connection(run: fn(sqlight.Connection) -> a) -> a {
-  sqlight.with_connection(path, run)
+  with_connection_at(path, run)
+}
+
+/// Open any database file. Tests pass `":memory:"` to get a fresh, throwaway
+/// database that still exercises the real schema and the real queries.
+pub fn with_connection_at(
+  database: String,
+  run: fn(sqlight.Connection) -> a,
+) -> a {
+  sqlight.with_connection(database, run)
+}
+
+/// Migrate and seed one connection — what boot does, and what a test needs
+/// before it can query anything.
+pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+  use _ <- result.try(migrate(connection))
+  seed(connection)
 }
 
 /// Apply the schema steps the database has not seen yet, tracked in
