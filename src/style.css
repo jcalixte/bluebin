@@ -14,6 +14,10 @@
   --color-primary-content: #ffffff;
   --color-error: #d12a05;
   --color-error-content: #ffffff;
+  /* OK / good news green. Mid-tone: white labels on it are 2.9:1 (fails AA),
+     so the content colour is dark (6.6:1), not white like primary/error. */
+  --color-success: #10ac84;
+  --color-success-content: #0d1117;
 }
 
 @plugin "daisyui/theme" {
@@ -23,6 +27,10 @@
   --color-primary-content: #0d1117;
   --color-error: #fa6b4c;
   --color-error-content: #0d1117;
+  /* Same green as light: its luminance (0.313) already matches the dark-theme
+     error, so it reads on the dark surface (5.5:1) and keeps dark labels. */
+  --color-success: #10ac84;
+  --color-success-content: #0d1117;
 }
 
 @theme {

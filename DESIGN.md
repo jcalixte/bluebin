@@ -439,18 +439,18 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 
 The right-hand zone scores each Goal 0–5 for four alternatives. **Bluebin** is the target score, not a measurement — nothing is built yet. **Jira** and **Linear** are kept apart on purpose: they fail the lean Goals the same way but trade off against each other everywhere else — Jira buys reports and configuration with slow capture, Linear buys speed with an opinionated workflow. **Physical board** is the shop-floor baseline: a wall, cards, a Heijunka box.
 
-| Goal | Bluebin | Jira | Linear | Physical board | Reading |
-|------|:-------:|:----:|:------:|:--------------:|---------|
-| G1 Takt Time visible to all | 5 | 1 | 1 | 2 | No alternative knows **Takt Time**; a board shows due dates, not a gap that moves with **Working Time** |
-| G2 Pull, every **Deviation** visible | 5 | 1 | 1 | 3 | A WIP limit can be ignored silently; a missing physical card is at least visible, but leaves no reason |
-| G3 One-piece flow at **Takt Time** | 4 | 2 | 2 | 3 | Tooling can push the flow, not guarantee it |
-| G4 Jidoka: stop and fix | 5 | 2 | 2 | 2 | A bug ticket at the end of the board is the opposite of stopping where the defect is found |
-| G5 Person knows the next thing | 5 | 3 | **4** | 2 | Linear's triage and "my issues" come closest; still no **Rework**, no **Help Downstream** |
-| G6 Levelled **Product Mix** | 5 | 1 | 1 | 3 | The Heijunka box is physical practice; no card board levels anything |
-| G7 **Value Stream** at a glance | 4 | 2 | 3 | **5** | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen is our answer, not a win |
-| G8 Recording costs seconds | 4 | 1 | 4 | **5** | Jira is form-heavy; Linear is keyboard-fast and ties us; we pay a click and a reason |
-| G9 Flow problems as numbers | 5 | 4 | 3 | 1 | Jira's reports are the closest fight; they just measure the wrong flow |
-| G10 Design and change without code | 5 | 3 | 2 | **5** | A wall is redrawn in a minute; Jira pays an admin for it; Linear refuses; keeping that freedom in software is R1 |
+| Goal                                 | Bluebin | Jira | Linear | Physical board | Reading                                                                                                          |
+| ------------------------------------ | :-----: | :--: | :----: | :------------: | ---------------------------------------------------------------------------------------------------------------- |
+| G1 Takt Time visible to all          |    5    |  1   |   1    |       2        | No alternative knows **Takt Time**; a board shows due dates, not a gap that moves with **Working Time**          |
+| G2 Pull, every **Deviation** visible |    5    |  1   |   1    |       3        | A WIP limit can be ignored silently; a missing physical card is at least visible, but leaves no reason           |
+| G3 One-piece flow at **Takt Time**   |    4    |  2   |   2    |       3        | Tooling can push the flow, not guarantee it                                                                      |
+| G4 Jidoka: stop and fix              |    5    |  2   |   2    |       2        | A bug ticket at the end of the board is the opposite of stopping where the defect is found                       |
+| G5 Person knows the next thing       |    5    |  3   | **4**  |       2        | Linear's triage and "my issues" come closest; still no **Rework**, no **Help Downstream**                        |
+| G6 Levelled **Product Mix**          |    5    |  1   |   1    |       3        | The Heijunka box is physical practice; no card board levels anything                                             |
+| G7 **Value Stream** at a glance      |    4    |  2   |   3    |     **5**      | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen is our answer, not a win                 |
+| G8 Recording costs seconds           |    4    |  1   |   4    |     **5**      | Jira is form-heavy; Linear is keyboard-fast and ties us; we pay a click and a reason                             |
+| G9 Flow problems as numbers          |    5    |  4   |   3    |       1        | Jira's reports are the closest fight; they just measure the wrong flow                                           |
+| G10 Design and change without code   |    5    |  3   |   2    |     **5**      | A wall is redrawn in a minute; Jira pays an admin for it; Linear refuses; keeping that freedom in software is R1 |
 
 Four readings:
 
