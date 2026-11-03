@@ -1,5 +1,5 @@
 import bluebin/db
-import bluebin/demand.{Demand}
+import bluebin/demand.{type Demand, Demand}
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/json
