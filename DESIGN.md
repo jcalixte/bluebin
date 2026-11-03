@@ -8,7 +8,7 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ## House of Quality
 
-The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6) and the derived weights (§5). Row colours match the parts of the TPS house in §1; in the roof, green is a reinforcement and red a conflict; the blue boxes mark the 3 Functions with the highest weight.
+The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6) and the derived weights (§5). Row colours match the parts of the TPS house in §1; the blue boxes mark the 3 Functions with the highest weight. Red and green are kept for OK / NOK status only, so neither house uses them.
 
 ```tikz
 % =====================================================================
@@ -288,8 +288,8 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 
 \definecolor{bbRoof}{HTML}{B7791F}
 \definecolor{bbJit}{HTML}{2B6CB0}
-\definecolor{bbJidoka}{HTML}{C53030}
-\definecolor{bbPeople}{HTML}{2F855A}
+\definecolor{bbJidoka}{HTML}{6B46C1}
+\definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
 \def\qfdNW{10}
 \def\qfdNH{11}
@@ -355,14 +355,14 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
                         11/10/S, 10/10/W}
     \node[qfdrel/\s] at ({\c - 0.5}, {-\r + 0.5}) {};
   % Roof correlations
-  \node[font=\scriptsize] at (C-1-2)  {\color{bbPeople}$+\!+$};
-  \node[font=\scriptsize] at (C-9-10) {\color{bbPeople}$+\!+$};
-  \node[font=\scriptsize] at (C-6-8)  {\color{bbPeople}$+\!+$};
-  \node[font=\scriptsize] at (C-4-6)  {\color{bbPeople}$+$};
-  \node[font=\scriptsize] at (C-1-8)  {\color{bbJidoka}$-$};
-  \node[font=\scriptsize] at (C-2-6)  {\color{bbJidoka}$-$};
-  \node[font=\scriptsize] at (C-3-9)  {\color{bbJidoka}$-$};
-  \node[font=\scriptsize] at (C-10-11) {\color{bbJidoka}$-\!-$};
+  \node[font=\scriptsize] at (C-1-2)  {$+\!+$};
+  \node[font=\scriptsize] at (C-9-10) {$+\!+$};
+  \node[font=\scriptsize] at (C-6-8)  {$+\!+$};
+  \node[font=\scriptsize] at (C-4-6)  {$+$};
+  \node[font=\scriptsize] at (C-1-8)  {$-$};
+  \node[font=\scriptsize] at (C-2-6)  {$-$};
+  \node[font=\scriptsize] at (C-3-9)  {$-$};
+  \node[font=\scriptsize] at (C-10-11) {$-\!-$};
   % Basement: target / difficulty / absolute / relative
   \foreach \c/\tgt/\diff/\abs/\rel in
     {1/{$\leq$1\,min}/2/138/8,
@@ -400,8 +400,8 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 \usetikzlibrary{positioning, calc}
 \definecolor{bbRoof}{HTML}{B7791F}
 \definecolor{bbJit}{HTML}{2B6CB0}
-\definecolor{bbJidoka}{HTML}{C53030}
-\definecolor{bbPeople}{HTML}{2F855A}
+\definecolor{bbJidoka}{HTML}{6B46C1}
+\definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
