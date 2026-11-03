@@ -16,7 +16,7 @@ const behind = computed(() => demands.value.filter((d) => d.andon).length)
           <img src="/favicon.svg" alt="" class="size-8 brightness-0 invert" />
           <div>
             <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
-            <p class="text-sm opacity-80">Pull Kanban · active Demands</p>
+            <p class="text-sm opacity-80">Active Demands</p>
           </div>
         </div>
         <button class="btn btn-sm" :disabled="loading" @click="load">Refresh</button>
