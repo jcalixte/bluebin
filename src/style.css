@@ -1,0 +1,34 @@
+/* The font @import MUST come first — before @import "tailwindcss" — because
+   Tailwind inlines its import into real CSS rules, and the CSS spec requires
+   @import to precede all other rules. If it comes second, the production build
+   warns ("@import must precede all rules…") and browsers silently DROP the
+   font import, so the custom font never loads. */
+@import url("https://api.fonts.coollabs.io/css2?family=Inter:wght@400;500;600;700&display=swap");
+@import "tailwindcss";
+@plugin "daisyui";
+
+@plugin "daisyui/theme" {
+  name: "light";
+  default: true;
+  --color-primary: #1e3799;
+  --color-primary-content: #ffffff;
+  --color-error: #d12a05;
+  --color-error-content: #ffffff;
+}
+
+@plugin "daisyui/theme" {
+  name: "dark";
+  prefersdark: true;
+  --color-primary: #7289e3;
+  --color-primary-content: #0d1117;
+  --color-error: #fa6b4c;
+  --color-error-content: #0d1117;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Exact brand hex for marks that carry no small text: Andon lamps, dots,
+     strokes, the favicon. Filled controls use --color-error, one step darker,
+     so their labels pass WCAG AA (#eb2f06 fails against both black and white). */
+  --color-andon: #eb2f06;
+}

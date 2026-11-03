@@ -1,8 +1,6 @@
 # Bluebin — Design (QFD)
 
-_Pull Kanban_
-
-This document designs Bluebin, the pull Kanban app: how a team designs its Value Stream and then runs its daily work in it, with pull, Takt Time and Heijunka. It does not define terms: every term in **bold** is defined in [CONTEXT.md](./CONTEXT.md). Decisions that are hard to reverse go in [docs/adr/](./docs/adr/).
+This document designs Bluebin: how a team designs its Value Stream and then runs its daily work in it, with pull, Takt Time and Heijunka. It does not define terms: every term in **bold** is defined in [CONTEXT.md](./CONTEXT.md). Decisions that are hard to reverse go in [docs/adr/](./docs/adr/).
 
 Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank none.
 
@@ -10,7 +8,7 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ## House of Quality
 
-The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6) and the derived weights (§5).
+The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6) and the derived weights (§5). Row colours match the parts of the TPS house in §1; in the roof, green is a reinforcement and red a conflict; the blue boxes mark the 3 Functions with the highest weight.
 
 ```tikz
 % =====================================================================
@@ -288,6 +286,11 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
   \end{tikzpicture}%
 }
 
+\definecolor{bbRoof}{HTML}{B7791F}
+\definecolor{bbJit}{HTML}{2B6CB0}
+\definecolor{bbJidoka}{HTML}{C53030}
+\definecolor{bbPeople}{HTML}{2F855A}
+\definecolor{bbBase}{HTML}{4A5568}
 \def\qfdNW{10}
 \def\qfdNH{11}
 \def\qfdWhatW{4.6}
@@ -295,14 +298,22 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \def\qfdHdrH{3.6}
 \def\qfdWhatsTitle{Goals (TPS house)}
 \qfdshowcompetitivefalse
-\def\qfdProjectTitle{Bluebin --- Pull Kanban}
+\def\qfdProjectTitle{Bluebin}
 \def\qfdConcept{A \textbf{pull} system where \textbf{Kanbans} start \textbf{Work Stations}, \textbf{Heijunka} levels the \textbf{Demands}, and each \textbf{Piece} reaches the \textbf{Client} at \textbf{Takt Time}.}
 
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
 \begin{qfdhouse}
+  % Goal rows coloured by their part of the TPS house
+  \begin{scope}[on background layer]
+    \foreach \r/\col in {1/bbRoof, 2/bbJit, 3/bbJit, 4/bbJidoka, 5/bbPeople,
+                         6/bbBase, 7/bbBase, 8/bbBase, 9/bbBase, 10/bbBase} {
+      \fill[\col!14] (\qfdLeftEdge, -\r + 1) rectangle (-\qfdImpW, -\r);
+      \fill[\col] (\qfdLeftEdge, -\r + 1) rectangle ({\qfdLeftEdge + 0.12}, -\r);
+    }
+  \end{scope}
   % WHATs
-  \pgfmathsetmacro{\qfdWhatTextW}{\qfdWhatW - 0.2}
+  \pgfmathsetmacro{\qfdWhatTextW}{\qfdWhatW - 0.3}
   \foreach \r/\t in {1/{G1 Client: Takt Time visible to all},
                      2/{G2 Pull, every Deviation visible},
                      3/{G3 One-piece flow at Takt Time},
@@ -314,7 +325,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
                      9/{G9 Flow problems as numbers},
                      10/{G10 Design and change without code}}
     \node[anchor=west, font=\scriptsize, text width=\qfdWhatTextW cm, align=left]
-      at ({\qfdLeftEdge + 0.1}, {-\r + 0.5}) {\t};
+      at ({\qfdLeftEdge + 0.18}, {-\r + 0.5}) {\t};
   % Importance (%)
   \foreach \r/\imp in {1/12, 2/11, 3/10, 4/10, 5/11, 6/9, 7/10, 8/10, 9/10, 10/7}
     \node[font=\scriptsize] at ({-\qfdImpW/2}, {-\r + 0.5}) {\imp};
@@ -344,14 +355,14 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
                         11/10/S, 10/10/W}
     \node[qfdrel/\s] at ({\c - 0.5}, {-\r + 0.5}) {};
   % Roof correlations
-  \node[font=\scriptsize] at (C-1-2)  {$+\!+$};
-  \node[font=\scriptsize] at (C-9-10) {$+\!+$};
-  \node[font=\scriptsize] at (C-6-8)  {$+\!+$};
-  \node[font=\scriptsize] at (C-4-6)  {$+$};
-  \node[font=\scriptsize] at (C-1-8)  {$-$};
-  \node[font=\scriptsize] at (C-2-6)  {$-$};
-  \node[font=\scriptsize] at (C-3-9)  {$-$};
-  \node[font=\scriptsize] at (C-10-11) {$-\!-$};
+  \node[font=\scriptsize] at (C-1-2)  {\color{bbPeople}$+\!+$};
+  \node[font=\scriptsize] at (C-9-10) {\color{bbPeople}$+\!+$};
+  \node[font=\scriptsize] at (C-6-8)  {\color{bbPeople}$+\!+$};
+  \node[font=\scriptsize] at (C-4-6)  {\color{bbPeople}$+$};
+  \node[font=\scriptsize] at (C-1-8)  {\color{bbJidoka}$-$};
+  \node[font=\scriptsize] at (C-2-6)  {\color{bbJidoka}$-$};
+  \node[font=\scriptsize] at (C-3-9)  {\color{bbJidoka}$-$};
+  \node[font=\scriptsize] at (C-10-11) {\color{bbJidoka}$-\!-$};
   % Basement: target / difficulty / absolute / relative
   \foreach \c/\tgt/\diff/\abs/\rel in
     {1/{$\leq$1\,min}/2/138/8,
@@ -370,6 +381,9 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
     \node[font=\scriptsize] at ({\c - 0.5}, {-\qfdNW - 2.5}) {\abs};
     \node[font=\scriptsize\bfseries] at ({\c - 0.5}, {-\qfdNW - 3.5}) {\rel};
   }
+  % Top 3 Functions by weight (F7, F17, F3)
+  \foreach \c in {4, 6, 2}
+    \draw[bbJit, line width=1.1pt] ({\c - 1}, {-\qfdNW - 3}) rectangle (\c, {-\qfdNW - 4});
   \foreach \r/\t in {1/Target, 2/Difficulty (1--5), 3/Absolute weight, 4/Relative weight \%}
     \node[anchor=east, font=\scriptsize\itshape] at (-0.1, {-\qfdNW - \r + 0.5}) {\t};
 \end{qfdhouse}
@@ -384,47 +398,52 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 
 ```tikz
 \usetikzlibrary{positioning, calc}
+\definecolor{bbRoof}{HTML}{B7791F}
+\definecolor{bbJit}{HTML}{2B6CB0}
+\definecolor{bbJidoka}{HTML}{C53030}
+\definecolor{bbPeople}{HTML}{2F855A}
+\definecolor{bbBase}{HTML}{4A5568}
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
 \begin{tikzpicture}[x=1cm, y=1cm, line join=round,
-  box/.style={draw, line width=0.8pt},
-  head/.style={font=\bfseries\small, align=center},
+  box/.style={draw=#1!80!black, line width=0.9pt, fill=#1!10},
+  head/.style={font=\bfseries\small, align=center, text=#1!85!black},
   body/.style={font=\scriptsize, align=center, text width=#1 cm},
   ids/.style={font=\scriptsize\itshape, align=center}]
   % Title
   \node[font=\large\bfseries] at (7, 14.3) {Bluebin --- the TPS house};
   % Roof
-  \draw[box, fill=black!8] (-0.8, 9) -- (7, 13.4) -- (14.8, 9) -- cycle;
-  \node[head] at (7, 11.25) {Roof --- Client satisfaction};
+  \draw[box=bbRoof] (-0.8, 9) -- (7, 13.4) -- (14.8, 9) -- cycle;
+  \node[head=bbRoof] at (7, 11.25) {Roof --- Client satisfaction};
   \node[body=7.5] at (7, 10.35) {G1 Everyone is aligned on the active \textbf{Demands} and sees whether each one is on its \textbf{Takt Time} for its \textbf{Client}};
   \node[ids] at (7, 9.35) {F1--F5 \quad Takt Gap, Andon, forecast, on-time share};
   % Pillars
-  \draw[box] (0, 3) rectangle (4, 9);
-  \node[head] at (2, 8.4) {Just-In-Time};
+  \draw[box=bbJit] (0, 3) rectangle (4, 9);
+  \node[head=bbJit] at (2, 8.4) {Just-In-Time};
   \node[body=3.6] at (2, 6.9) {G2 Starting work without a \textbf{Kanban} is never silent: each \textbf{Deviation} is visible};
   \node[body=3.6] at (2, 5.2) {G3 Each \textbf{Piece} flows alone at its \textbf{Demand}'s \textbf{Takt Time}};
   \node[ids] at (2, 3.5) {F6--F11};
-  \draw[box] (10, 3) rectangle (14, 9);
-  \node[head] at (12, 8.4) {Jidoka};
+  \draw[box=bbJidoka] (10, 3) rectangle (14, 9);
+  \node[head=bbJidoka] at (12, 8.4) {Jidoka};
   \node[body=3.6] at (12, 6.6) {G4 A defect stops the flow where it is found, and its author repairs it first (\textbf{Rework})};
   \node[body=3.6] at (12, 4.8) {\textbf{Andon} button: stop the \textbf{Work Station}, call the \textbf{Team Leader}};
   \node[ids] at (12, 3.5) {F12--F16, F42};
   % Centre
-  \draw[box, rounded corners=4pt, fill=black!4] (4.6, 3.6) rectangle (9.4, 8.4);
-  \node[head] at (7, 7.8) {People and teamwork};
+  \draw[box=bbPeople, rounded corners=4pt] (4.6, 3.6) rectangle (9.4, 8.4);
+  \node[head=bbPeople] at (7, 7.8) {People and teamwork};
   \node[body=4.4] at (7, 6.3) {G5 A \textbf{Person} always knows the next thing to do: an \textbf{Assignment}, a \textbf{Rework}, \textbf{Help Downstream}, or wait};
   \node[ids] at (7, 4.2) {F17--F22};
   % Foundation
-  \draw[box] (-0.8, 2) rectangle (14.8, 3);
-  \node[head, anchor=west] at (-0.6, 2.5) {Heijunka};
+  \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!22] (-0.8, 2) rectangle (14.8, 3);
+  \node[head=bbBase, anchor=west] at (-0.6, 2.5) {Heijunka};
   \node[body=8.5, anchor=west, align=left] at (3.2, 2.5) {G6 The \textbf{Pieces} that leave the \textbf{Backlog} have a levelled \textbf{Product Mix}};
   \node[ids, anchor=east] at (14.6, 2.5) {F23--F26};
-  \draw[box] (-0.8, 1) rectangle (14.8, 2);
-  \node[head, anchor=west, align=left] at (-0.6, 1.5) {Stability and\\visual management};
+  \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!15] (-0.8, 1) rectangle (14.8, 2);
+  \node[head=bbBase, anchor=west, align=left] at (-0.6, 1.5) {Stability and\\visual management};
   \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Value Stream} is visible at a glance \quad G8 Recording work costs seconds};
   \node[ids, anchor=east] at (14.6, 1.5) {F27--F33};
-  \draw[box] (-0.8, 0) rectangle (14.8, 1);
-  \node[head, anchor=west] at (-0.6, 0.5) {Kaizen};
+  \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!8] (-0.8, 0) rectangle (14.8, 1);
+  \node[head=bbBase, anchor=west] at (-0.6, 0.5) {Kaizen};
   \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Value Stream} without code};
   \node[ids, anchor=east] at (14.6, 0.5) {F34--F41};
   % Deferred
