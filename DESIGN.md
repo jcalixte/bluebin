@@ -6,9 +6,431 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ---
 
+## House of Quality
+
+The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6) and the derived weights (§5).
+
+```tikz
+% =====================================================================
+% QFD "House of Quality" preamble
+% =====================================================================
+% Usage:
+%   \begin{document}
+%   \begin{qfdhouse}
+%     % WHATs at ({\qfdLeftEdge + 0.1}, {-\r + 0.5})
+%     % Importance at ({-\qfdImpW/2}, {-\r + 0.5})
+%     % HOWs rotated 90 at ({\c - 0.5}, 0.15)
+%     % Relations in cells with [qfdrel/S], [qfdrel/M], [qfdrel/W]
+%     % Roof correlations at (C-i-j)
+%     % Perception markers at ({\qfdNH + (s+0.5)*\qfdCmpW/6}, {-\r + 0.5})
+%     % Basement: target / difficulty / abs weight / rel weight, per HOW
+%   \end{qfdhouse}
+%   \end{document}
+%
+% NB: in node text, use $<$ / $>$ for less-than / greater-than under
+% OT1 encoding; bare < and > render as Spanish ¡ ¿.
+% =====================================================================
+
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.misc, calc, fit, backgrounds}
+
+% Toggles — flip before \begin{qfdhouse} to hide sections.
+\newif\ifqfdshowroof          \qfdshowrooftrue
+\newif\ifqfdshowbasement      \qfdshowbasementtrue
+\newif\ifqfdshowcompetitive   \qfdshowcompetitivetrue
+\newif\ifqfdshowlegend        \qfdshowlegendtrue
+\newif\ifqfdshowimportance    \qfdshowimportancetrue
+\newif\ifqfdshowcorrlegend    \qfdshowcorrlegendtrue
+\newif\ifqfdshowevallegend    \qfdshowevallegendtrue
+\newif\ifqfdshowtitle         \qfdshowtitletrue   % title block above the roof
+
+% Dimensions — override before \begin{qfdhouse} to resize.
+\def\qfdNW{5}           % number of WHATs (rows)
+\def\qfdNH{5}           % number of HOWs (columns)
+\def\qfdWhatW{4.0}      % width of WHATs column
+\def\qfdImpW{0.9}       % width of importance column
+\def\qfdCmpW{3}         % width of perception zone
+\def\qfdHdrH{2.6}       % height of column-titles band
+\def\qfdBasementN{4}    % number of basement rows
+
+% Titles & labels — override before \begin{qfdhouse}.
+\def\qfdWhatsTitle{Customer needs}
+\def\qfdImpTitle{Imp.\ \%}
+\def\qfdPerceptionTitle{Comparative evaluation}
+\def\qfdPoorLabel{poor}
+\def\qfdExcellentLabel{excellent}
+\def\qfdAltOneLabel{Our product}    % highlighted in legend
+\def\qfdAltTwoLabel{Competitor A}
+\def\qfdAltThreeLabel{Competitor B}
+\def\qfdRelTitle{Relation}
+\def\qfdCorrTitle{Correlation}
+\def\qfdEvalTitle{Evaluation}
+
+% Title block above the roof — set both to name the house. Leave
+% \qfdProjectTitle empty (default) to draw no title at all.
+\def\qfdProjectTitle{}  % project / feature name (large, bold)
+\def\qfdConcept{}       % concept in one sentence; \textbf{} the keywords
+
+% Styles.
+\tikzset{
+  qfdthin/.style ={line width=0.35pt},
+  qfdmed/.style  ={line width=0.7pt},
+  qfdstrong/.style={circle, draw, fill=black,
+                    minimum size=7pt, inner sep=0pt},
+  qfdmod/.style  ={circle, draw,
+                    minimum size=7pt, inner sep=0pt, line width=0.8pt},
+  qfdweak/.style ={regular polygon, regular polygon sides=3, draw,
+                    minimum size=8.5pt, inner sep=0pt, line width=0.7pt},
+  qfdrel/.is choice,
+  qfdrel/S/.style={qfdstrong},
+  qfdrel/M/.style={qfdmod},
+  qfdrel/W/.style={qfdweak},
+  % Three perception-zone alternatives. Index 1 is emphasised.
+  qfdalt1mk/.style={circle, draw, fill=black,
+                    minimum size=6pt, inner sep=0pt, line width=1pt},
+  qfdalt1ln/.style={line width=1.2pt},
+  qfdalt2mk/.style={regular polygon, regular polygon sides=3, draw,
+                    fill=black, minimum size=6pt, inner sep=0pt,
+                    line width=0.7pt},
+  qfdalt2ln/.style={line width=0.7pt, dashed},
+  qfdalt3mk/.style={rectangle, draw, fill=black,
+                    minimum size=5pt, inner sep=0pt, line width=0.7pt},
+  qfdalt3ln/.style={line width=0.7pt, dotted},
+}
+
+% --- Grid lines for every zone. ---
+\newcommand{\qfdDrawGrid}{%
+  \foreach \c in {1,...,\qfdNHm} \draw[qfdthin] (\c, 0) -- (\c, -\qfdNW);
+  \foreach \r in {1,...,\qfdNWm} \draw[qfdthin] (0, -\r) -- (\qfdNH, -\r);
+  \foreach \r in {1,...,\qfdNWm}
+    \draw[qfdthin] (\qfdLeftEdge, -\r) -- (0, -\r);
+  \ifqfdshowroof
+    \foreach \c in {1,...,\qfdNHm}
+      \draw[qfdthin] (\c, 0) -- (\c, \qfdHdrH);
+  \fi
+  \ifqfdshowcompetitive
+    \foreach \r in {1,...,\qfdNWm}
+      \draw[qfdthin] (\qfdNH, -\r) -- (\qfdNH+\qfdCmpW, -\r);
+  \fi
+  \ifqfdshowbasement
+    \foreach \r in {1,...,\qfdBasementN}
+      \draw[qfdthin] (0, -\qfdNW-\r) -- (\qfdNH, -\qfdNW-\r);
+    \foreach \c in {1,...,\qfdNHm}
+      \draw[qfdthin] (\c, -\qfdNW) -- (\c, -\qfdNW-\qfdBasementN);
+  \fi
+}
+
+% --- Roof: diagonal grid + named coordinates (C-i-j) for correlations. ---
+\newcommand{\qfdDrawRoof}{%
+  \ifqfdshowroof
+    \foreach \k in {1,...,\qfdNHm} {%
+      \pgfmathsetmacro{\rx}{(\k+\qfdNH)/2}
+      \pgfmathsetmacro{\ry}{\qfdHdrH + (\qfdNH-\k)/2}
+      \pgfmathsetmacro{\lx}{\k/2}
+      \pgfmathsetmacro{\ly}{\qfdHdrH + \k/2}
+      \draw[qfdthin] (\k, \qfdHdrH) -- (\rx, \ry);
+      \draw[qfdthin] (\k, \qfdHdrH) -- (\lx, \ly);
+    }%
+    \draw[qfdmed] (0, \qfdHdrH)
+       -- (\qfdNH/2, \qfdApexY) -- (\qfdNH, \qfdHdrH);
+    \foreach \i in {1,...,\qfdNH}
+      \foreach \k in {1,...,\qfdNH} {%
+        \pgfmathtruncatemacro{\jj}{\i+\k}
+        \ifnum\jj>\qfdNH\relax\else
+          \pgfmathsetmacro{\xx}{\i + \k/2 - 0.5}
+          \pgfmathsetmacro{\yy}{\qfdHdrH + \k/2}
+          \coordinate (C-\i-\jj) at (\xx, \yy);
+        \fi
+      }%
+  \fi
+}
+
+% --- Perception scale 0..5 + poor/excellent endpoints + zone title. ---
+\newcommand{\qfdDrawScale}{%
+  \ifqfdshowcompetitive
+    \foreach \tk in {0,1,2,3,4,5} {%
+      \pgfmathsetmacro{\tx}{\qfdNH + (\tk+0.5)*\qfdCmpW/6}
+      \node[anchor=south, font=\scriptsize] at (\tx, 0.02) {\tk};
+    }%
+    \node[anchor=south, font=\scriptsize\bfseries, align=center]
+         at ({\qfdNH + \qfdCmpW/2}, 0.7) {\qfdPerceptionTitle};
+    \node[anchor=north, font=\scriptsize\itshape]
+         at ({\qfdNH + 0.45}, -\qfdNW) {\qfdPoorLabel};
+    \node[anchor=north, font=\scriptsize\itshape]
+         at ({\qfdNH + \qfdCmpW - 0.45}, -\qfdNW) {\qfdExcellentLabel};
+  \fi
+}
+
+% --- Importance title (left) and WHATs title (header band). ---
+\newcommand{\qfdDrawZoneTitles}{%
+  \ifqfdshowimportance
+    \node[rotate=90, anchor=west, font=\footnotesize\bfseries]
+         at ({-\qfdImpW/2}, 0.12) {\qfdImpTitle};
+  \fi
+  \node[font=\scriptsize\bfseries, align=center, text width=\qfdWhatW cm]
+       at ({\qfdLeftEdge + \qfdWhatW/2},
+           {\ifqfdshowroof \qfdHdrH/2 \else 0.6 \fi}) {\qfdWhatsTitle};
+}
+
+% --- Title + concept subtitle, centred above the roof apex. ---
+\newcommand{\qfdDrawTitle}{%
+  \ifqfdshowtitle
+    \ifx\qfdProjectTitle\empty\else
+      \pgfmathsetmacro{\qfdTitleX}{\qfdNH/2}
+      \pgfmathsetmacro{\qfdTitleY}{\ifqfdshowroof \qfdApexY \else \qfdHdrH \fi + 0.9}
+      \pgfmathsetmacro{\qfdSubW}{\qfdNH + 2}    % pre-computed (braces don't do arithmetic)
+      \node[anchor=south, font=\large\bfseries, align=center]
+           at (\qfdTitleX, \qfdTitleY) {\qfdProjectTitle};
+      \ifx\qfdConcept\empty\else
+        \node[anchor=north, font=\footnotesize\itshape, align=center,
+              text width=\qfdSubW cm]
+             at (\qfdTitleX, {\qfdTitleY - 0.1}) {\qfdConcept};
+      \fi
+    \fi
+  \fi
+}
+
+% --- Outer frames around each zone. ---
+\newcommand{\qfdDrawFrames}{%
+  \begin{scope}[qfdmed]
+    \draw (\qfdLeftEdge, 0) rectangle (\qfdNH, -\qfdNW);
+    \ifqfdshowimportance \draw (-\qfdImpW, 0) -- (-\qfdImpW, -\qfdNW); \fi
+    \draw (0, 0) -- (0, -\qfdNW);
+    \ifqfdshowroof
+      \draw (0, 0) rectangle (\qfdNH, \qfdHdrH); \fi
+    \ifqfdshowbasement
+      \draw (0, -\qfdNW) rectangle (\qfdNH, -\qfdNW-\qfdBasementN); \fi
+    \ifqfdshowcompetitive
+      \draw (\qfdNH, 0) rectangle (\qfdNH+\qfdCmpW, -\qfdNW); \fi
+  \end{scope}
+}
+
+% --- Legend on the right (Relations / Correlations / Evaluation). ---
+\newcommand{\qfdDrawLegend}{%
+  \ifqfdshowlegend
+    \pgfmathsetmacro{\qfdLegX}{%
+      \qfdNH + \ifqfdshowcompetitive \qfdCmpW + 0.7 \else 0.7 \fi}
+    \pgfmathsetmacro{\qfdLegBottom}{%
+      -2.05
+      \ifqfdshowroof    \ifqfdshowcorrlegend - 2.55 \fi \fi
+      \ifqfdshowcompetitive \ifqfdshowevallegend - 2.20 \fi \fi}
+    \pgfmathsetmacro{\qfdLegY}{\qfdHdrH - 0.4}
+    \begin{scope}[shift={(\qfdLegX, \qfdLegY)}]
+      \draw[qfdmed, rounded corners=2pt]
+        (-0.15, 0.4) rectangle (4.5, \qfdLegBottom);
+      % Relations
+      \node[anchor=west, font=\footnotesize\bfseries] at (0, 0.1)
+        {\qfdRelTitle};
+      \draw[qfdthin] (0, -0.15) -- (4.35, -0.15);
+      \node[qfdstrong] at (0.22, -0.5)  {};
+        \node[anchor=west] at (0.5, -0.5)  {Strong (9)};
+      \node[qfdmod]    at (0.22, -0.95) {};
+        \node[anchor=west] at (0.5, -0.95) {Medium (3)};
+      \node[qfdweak]   at (0.22, -1.4)  {};
+        \node[anchor=west] at (0.5, -1.4)  {Weak (1)};
+      % Correlations (roof)
+      \ifqfdshowroof \ifqfdshowcorrlegend
+        \node[anchor=west, font=\footnotesize\bfseries] at (0, -2.10)
+          {\qfdCorrTitle};
+        \draw[qfdthin] (0, -2.35) -- (4.35, -2.35);
+        \node[anchor=west] at (0, -2.70) {{$+\!+$}\quad very positive};
+        \node[anchor=west] at (0, -3.05) {{$+$\phantom{$+$}}\quad positive};
+        \node[anchor=west] at (0, -3.40) {{$-$\phantom{$-$}}\quad negative};
+        \node[anchor=west] at (0, -3.75) {{$-\!-$}\quad very negative};
+      \fi \fi
+      % Evaluation (3 alternatives)
+      \ifqfdshowcompetitive \ifqfdshowevallegend
+        \pgfmathsetmacro{\qfdEvalTop}{%
+          -2.10 \ifqfdshowroof\ifqfdshowcorrlegend - 2.55 \fi\fi}
+        \node[anchor=west, font=\footnotesize\bfseries]
+          at (0, \qfdEvalTop) {\qfdEvalTitle};
+        \pgfmathsetmacro{\qfdEvalSep}{\qfdEvalTop - 0.25}
+        \draw[qfdthin] (0, \qfdEvalSep) -- (4.35, \qfdEvalSep);
+        \pgfmathsetmacro{\qfdLegA}{\qfdEvalTop - 0.55}
+        \draw[qfdalt1ln] (0.05, \qfdLegA) -- (0.45, \qfdLegA);
+          \node[qfdalt1mk] at (0.25, \qfdLegA) {};
+          \node[anchor=west, font=\bfseries] at (0.55, \qfdLegA)
+            {\qfdAltOneLabel};
+        \pgfmathsetmacro{\qfdLegB}{\qfdEvalTop - 0.95}
+        \draw[qfdalt2ln] (0.05, \qfdLegB) -- (0.45, \qfdLegB);
+          \node[qfdalt2mk] at (0.25, \qfdLegB) {};
+          \node[anchor=west] at (0.55, \qfdLegB) {\qfdAltTwoLabel};
+        \pgfmathsetmacro{\qfdLegC}{\qfdEvalTop - 1.35}
+        \draw[qfdalt3ln] (0.05, \qfdLegC) -- (0.45, \qfdLegC);
+          \node[qfdalt3mk] at (0.25, \qfdLegC) {};
+          \node[anchor=west] at (0.55, \qfdLegC) {\qfdAltThreeLabel};
+      \fi \fi
+    \end{scope}
+  \fi
+}
+
+% --- The environment users wrap their content in. ---
+\newenvironment{qfdhouse}{%
+  \begin{tikzpicture}[x=1cm, y=1cm, font=\scriptsize,
+                      line cap=round, line join=round]
+  \ifqfdshowimportance
+    \pgfmathsetmacro{\qfdLeftEdge}{-\qfdWhatW-\qfdImpW}
+  \else
+    \pgfmathsetmacro{\qfdLeftEdge}{-\qfdWhatW}
+  \fi
+  \pgfmathsetmacro{\qfdApexY}{\qfdHdrH + \qfdNH/2}
+  \pgfmathtruncatemacro{\qfdNHm}{\qfdNH - 1}
+  \pgfmathtruncatemacro{\qfdNWm}{\qfdNW - 1}
+  \qfdDrawGrid
+  \qfdDrawRoof
+  \qfdDrawScale
+  \qfdDrawZoneTitles
+  \qfdDrawTitle
+}{%
+  \qfdDrawFrames
+  \qfdDrawLegend
+  \end{tikzpicture}%
+}
+
+\def\qfdNW{10}
+\def\qfdNH{11}
+\def\qfdWhatW{4.6}
+\def\qfdImpW{0.9}
+\def\qfdHdrH{3.6}
+\def\qfdWhatsTitle{Goals (TPS house)}
+\qfdshowcompetitivefalse
+\def\qfdProjectTitle{Pull Kanban --- bluebin.app}
+\def\qfdConcept{A \textbf{pull} system where \textbf{Kanbans} start \textbf{Work Stations}, \textbf{Heijunka} levels the \textbf{Demands}, and each \textbf{Piece} reaches the \textbf{Client} at \textbf{Takt Time}.}
+
+\begin{document}
+\hyphenpenalty=10000 \exhyphenpenalty=10000
+\begin{qfdhouse}
+  % WHATs
+  \pgfmathsetmacro{\qfdWhatTextW}{\qfdWhatW - 0.2}
+  \foreach \r/\t in {1/{G1 Client: Takt Time visible to all},
+                     2/{G2 Pull, every Deviation visible},
+                     3/{G3 One-piece flow at Takt Time},
+                     4/{G4 Jidoka: stop and fix},
+                     5/{G5 Person knows the next thing},
+                     6/{G6 Levelled Product Mix},
+                     7/{G7 Value Stream at a glance},
+                     8/{G8 Recording costs seconds},
+                     9/{G9 Flow problems as numbers},
+                     10/{G10 Design and change without code}}
+    \node[anchor=west, font=\scriptsize, text width=\qfdWhatTextW cm, align=left]
+      at ({\qfdLeftEdge + 0.1}, {-\r + 0.5}) {\t};
+  % Importance (%)
+  \foreach \r/\imp in {1/12, 2/11, 3/10, 4/10, 5/11, 6/9, 7/10, 8/10, 9/10, 10/7}
+    \node[font=\scriptsize] at ({-\qfdImpW/2}, {-\r + 0.5}) {\imp};
+  % HOWs
+  \foreach \c/\t in {1/{F2 Takt Gap updated},
+                     2/{F3 Takt Andon},
+                     3/{F6 Deviation warning},
+                     4/{F7 Kanban on each pull},
+                     5/{F13 Rework to its author},
+                     6/{F17 Assignments updated},
+                     7/{F23 Heijunka Sequence},
+                     8/{F28 Live screens},
+                     9/{F30 Record a flow event},
+                     10/{F34 Exact measures},
+                     11/{F40 Change while running}}
+    \node[rotate=90, anchor=west, font=\scriptsize] at ({\c - 0.5}, 0.15) {\t};
+  % Relations: column/row/strength
+  \foreach \c/\r/\s in {1/1/S, 2/1/S, 7/1/M, 8/1/M, 9/1/M, 10/1/M,
+                        3/2/S, 4/2/S, 6/2/M,
+                        1/3/M, 4/3/M, 7/3/M, 10/3/M, 6/3/W,
+                        5/4/S, 2/4/M, 6/4/M,
+                        6/5/S, 5/5/M, 4/5/M, 8/5/M,
+                        7/6/S, 4/6/M,
+                        8/7/S, 2/7/M, 3/7/M, 4/7/M,
+                        9/8/S, 3/8/W, 6/8/W,
+                        10/9/S, 9/9/M, 11/9/M,
+                        11/10/S, 10/10/W}
+    \node[qfdrel/\s] at ({\c - 0.5}, {-\r + 0.5}) {};
+  % Roof correlations
+  \node[font=\scriptsize] at (C-1-2)  {$+\!+$};
+  \node[font=\scriptsize] at (C-9-10) {$+\!+$};
+  \node[font=\scriptsize] at (C-6-8)  {$+\!+$};
+  \node[font=\scriptsize] at (C-4-6)  {$+$};
+  \node[font=\scriptsize] at (C-1-8)  {$-$};
+  \node[font=\scriptsize] at (C-2-6)  {$-$};
+  \node[font=\scriptsize] at (C-3-9)  {$-$};
+  \node[font=\scriptsize] at (C-10-11) {$-\!-$};
+  % Basement: target / difficulty / absolute / relative
+  \foreach \c/\tgt/\diff/\abs/\rel in
+    {1/{$\leq$1\,min}/2/138/8,
+     2/{$\leq$1\,min}/2/168/10,
+     3/{100\,\%}/2/139/8,
+     4/{$\leq$\,bins}/3/219/13,
+     5/{$\leq$1\,min}/2/123/7,
+     6/{$\leq$2\,s}/3/182/11,
+     7/{$\leq$1\,min}/3/147/9,
+     8/{$\leq$2\,s}/3/159/9,
+     9/{$\leq$5\,s}/4/156/9,
+     10/{exact}/4/163/10,
+     11/{0 lost}/5/93/6} {
+    \node[font=\tiny] at ({\c - 0.5}, {-\qfdNW - 0.5}) {\tgt};
+    \node[font=\scriptsize] at ({\c - 0.5}, {-\qfdNW - 1.5}) {\diff};
+    \node[font=\scriptsize] at ({\c - 0.5}, {-\qfdNW - 2.5}) {\abs};
+    \node[font=\scriptsize\bfseries] at ({\c - 0.5}, {-\qfdNW - 3.5}) {\rel};
+  }
+  \foreach \r/\t in {1/Target, 2/Difficulty (1--5), 3/Absolute weight, 4/Relative weight \%}
+    \node[anchor=east, font=\scriptsize\itshape] at (-0.1, {-\qfdNW - \r + 0.5}) {\t};
+\end{qfdhouse}
+\end{document}
+```
+
+---
+
 ## 1. Goals — the WHATs
 
 User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Production System house: the roof is the goal, two pillars hold it, People work in the centre, and the foundation carries everything.
+
+```tikz
+\usetikzlibrary{positioning, calc}
+\begin{document}
+\hyphenpenalty=10000 \exhyphenpenalty=10000
+\begin{tikzpicture}[x=1cm, y=1cm, line join=round,
+  box/.style={draw, line width=0.8pt},
+  head/.style={font=\bfseries\small, align=center},
+  body/.style={font=\scriptsize, align=center, text width=#1 cm},
+  ids/.style={font=\scriptsize\itshape, align=center}]
+  % Title
+  \node[font=\large\bfseries] at (7, 14.3) {Pull Kanban --- the TPS house};
+  % Roof
+  \draw[box, fill=black!8] (-0.8, 9) -- (7, 13.4) -- (14.8, 9) -- cycle;
+  \node[head] at (7, 11.25) {Roof --- Client satisfaction};
+  \node[body=7.5] at (7, 10.35) {G1 Everyone is aligned on the active \textbf{Demands} and sees whether each one is on its \textbf{Takt Time} for its \textbf{Client}};
+  \node[ids] at (7, 9.35) {F1--F5 \quad Takt Gap, Andon, forecast, on-time share};
+  % Pillars
+  \draw[box] (0, 3) rectangle (4, 9);
+  \node[head] at (2, 8.4) {Just-In-Time};
+  \node[body=3.6] at (2, 6.9) {G2 Starting work without a \textbf{Kanban} is never silent: each \textbf{Deviation} is visible};
+  \node[body=3.6] at (2, 5.2) {G3 Each \textbf{Piece} flows alone at its \textbf{Demand}'s \textbf{Takt Time}};
+  \node[ids] at (2, 3.5) {F6--F11};
+  \draw[box] (10, 3) rectangle (14, 9);
+  \node[head] at (12, 8.4) {Jidoka};
+  \node[body=3.6] at (12, 6.6) {G4 A defect stops the flow where it is found, and its author repairs it first (\textbf{Rework})};
+  \node[body=3.6] at (12, 4.8) {\textbf{Andon} button: stop the \textbf{Work Station}, call the \textbf{Team Leader}};
+  \node[ids] at (12, 3.5) {F12--F16, F42};
+  % Centre
+  \draw[box, rounded corners=4pt, fill=black!4] (4.6, 3.6) rectangle (9.4, 8.4);
+  \node[head] at (7, 7.8) {People and teamwork};
+  \node[body=4.4] at (7, 6.3) {G5 A \textbf{Person} always knows the next thing to do: an \textbf{Assignment}, a \textbf{Rework}, \textbf{Help Downstream}, or wait};
+  \node[ids] at (7, 4.2) {F17--F22};
+  % Foundation
+  \draw[box] (-0.8, 2) rectangle (14.8, 3);
+  \node[head, anchor=west] at (-0.6, 2.5) {Heijunka};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 2.5) {G6 The \textbf{Pieces} that leave the \textbf{Backlog} have a levelled \textbf{Product Mix}};
+  \node[ids, anchor=east] at (14.6, 2.5) {F23--F26};
+  \draw[box] (-0.8, 1) rectangle (14.8, 2);
+  \node[head, anchor=west, align=left] at (-0.6, 1.5) {Stability and\\visual management};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Value Stream} is visible at a glance \quad G8 Recording work costs seconds};
+  \node[ids, anchor=east] at (14.6, 1.5) {F27--F33};
+  \draw[box] (-0.8, 0) rectangle (14.8, 1);
+  \node[head, anchor=west] at (-0.6, 0.5) {Kaizen};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Value Stream} without code};
+  \node[ids, anchor=east] at (14.6, 0.5) {F34--F41};
+  % Deferred
+  \draw[line width=0.6pt, dashed, black!55] (-0.8, -0.25) rectangle (14.8, -1.05);
+  \node[font=\scriptsize\itshape, black!65] at (7, -0.65) {Standardized Work --- deferred (Definition of Done per \textbf{Work Station})};
+\end{tikzpicture}
+\end{document}
+```
 
 | ID | Goal | Weight | Source |
 |----|------|:------:|--------|
@@ -129,6 +551,29 @@ Components that realise these How decisions:
 - **C3** Store — SQLite (sqlight): flow event log + current-state tables (H3)
 - **C4** Event stream — Server-Sent Events from mist (H5)
 - **C5** Deploy — Coolify, docker compose (web + API), on bluebin.app
+
+---
+
+## 5. House — Goals × key Functions
+
+Reduced to the 11 Functions that serve several Goals; the other Functions map to one Goal each (see §4). Importance = Goal weight as a share of the total (81). Cells: 9 strong, 3 medium, 1 weak.
+
+|            | F2 | F3 | F6 | F7 | F13 | F17 | F23 | F28 | F30 | F34 | F40 |
+|------------|:--:|:--:|:--:|:--:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| G1 (12 %)  | 9  | 9  |    |    |     |     |  3  |  3  |  3  |  3  |     |
+| G2 (11 %)  |    |    | 9  | 9  |     |  3  |     |     |     |     |     |
+| G3 (10 %)  | 3  |    |    | 3  |     |  1  |  3  |     |     |  3  |     |
+| G4 (10 %)  |    | 3  |    |    |  9  |  3  |     |     |     |     |     |
+| G5 (11 %)  |    |    |    | 3  |  3  |  9  |     |  3  |     |     |     |
+| G6 (9 %)   |    |    |    | 3  |     |     |  9  |     |     |     |     |
+| G7 (10 %)  |    | 3  | 3  | 3  |     |     |     |  9  |     |     |     |
+| G8 (10 %)  |    |    | 1  |    |     |  1  |     |     |  9  |     |     |
+| G9 (10 %)  |    |    |    |    |     |     |     |     |  3  |  9  |  3  |
+| G10 (7 %)  |    |    |    |    |     |     |     |     |     |  1  |  9  |
+| **Σ**      | 138 | 168 | 139 | 219 | 123 | 182 | 147 | 159 | 156 | 163 | 93 |
+| **Rank**   | 9  | 3  | 8  | 1  | 10  | 2   | 7   | 5   | 6   | 4   | 11  |
+
+**Top engineering priorities:** F7 (a **Kanban** on each pull) and F17 (**Assignments** updated) carry the pull system and the daily work of every **Person**; F3 (**Andon**) and F34 (exact measures) carry the roof and Kaizen. F40 ranks last but is the hardest (R1), so it gets the simplest rule: only empty **Blue Bins** and **Work Stations** can be removed.
 
 ---
 
