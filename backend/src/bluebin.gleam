@@ -1,7 +1,10 @@
 import bluebin/db
 import bluebin/demand
+import bluebin/value_stream
 import gleam/erlang/process
 import gleam/http
+import gleam/json
+import gleam/result
 import mist
 import simplifile
 import wisp
@@ -41,6 +44,10 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
       use <- wisp.require_method(request, http.Get)
       demands()
     }
+    ["api", "value-stream"] -> {
+      use <- wisp.require_method(request, http.Get)
+      value_stream()
+    }
     _ -> wisp.not_found()
   }
 }
@@ -51,6 +58,30 @@ fn demands() -> wisp.Response {
 
   case result {
     Ok(demands) -> wisp.json_response(demand.to_json(demands), 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn value_stream() -> wisp.Response {
+  let result =
+    db.with_connection(fn(connection) {
+      use stations <- result.try(value_stream.load(connection))
+      use demands <- result.try(demand.list_active(connection))
+      Ok(#(stations, demands))
+    })
+
+  case result {
+    Ok(#(stations, demands)) ->
+      wisp.json_response(
+        json.to_string(
+          json.object([
+            #("stations", stations),
+            #("taktTimeHours", json.float(demand.value_stream_takt_hours(demands))),
+            #("demandsBehind", json.int(demand.behind_count(demands))),
+          ]),
+        ),
+        200,
+      )
     Error(_) -> wisp.internal_server_error()
   }
 }

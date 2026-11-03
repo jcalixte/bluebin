@@ -2,6 +2,7 @@ import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/json
+import gleam/list
 import sqlight
 
 /// Hours in one working day of the Working Calendar. The Working Calendar is a
@@ -137,4 +138,25 @@ pub fn to_json(demands: List(Demand)) -> String {
     ])
   })
   |> json.to_string
+}
+
+/// The Takt Time of the whole Value Stream combines every active Demand:
+/// 1 ÷ (sum of 1 ÷ Takt Time of each Demand). It changes when a Demand enters
+/// or ends (F11).
+pub fn value_stream_takt_hours(demands: List(Demand)) -> Float {
+  let rate =
+    demands
+    |> list.map(takt_time_hours)
+    |> list.filter(fn(hours) { hours >. 0.0 })
+    |> list.fold(0.0, fn(total, hours) { total +. 1.0 /. hours })
+
+  case rate >. 0.0 {
+    True -> round_to_tenth(1.0 /. rate)
+    False -> 0.0
+  }
+}
+
+/// How many active Demands have raised an Andon (Takt Gap ≤ −1).
+pub fn behind_count(demands: List(Demand)) -> Int {
+  demands |> list.filter(andon) |> list.length
 }

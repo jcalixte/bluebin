@@ -12,3 +12,36 @@ export type Demand = {
   taktGap: number
   andon: boolean
 }
+
+/** One Blue Bin slot of a Work Station; `piece` is null when the bin is empty. */
+export type BlueBin = {
+  slot: number
+  piece: string | null
+  demand: string | null
+}
+
+/** A Person of a Work Station, busy when they transform a Piece there. */
+export type Member = {
+  name: string
+  busy: boolean
+}
+
+export type WorkStation = {
+  id: string
+  name: string
+  position: number
+  branch: string | null
+  blueBinCount: number
+  teamLeader: string | null
+  blueBins: BlueBin[]
+  people: Member[]
+  inProgress: { piece: string; demand: string; person: string | null }[]
+  rework: { piece: string; description: string }[]
+  kanbans: number
+}
+
+export type ValueStream = {
+  stations: WorkStation[]
+  taktTimeHours: number
+  demandsBehind: number
+}
