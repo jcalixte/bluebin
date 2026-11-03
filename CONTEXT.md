@@ -1,4 +1,6 @@
-# Pull Kanban
+# Bluebin
+
+_Pull Kanban_
 
 A pull system for software teams, built on Toyota Production System principles: Takt Time, one-piece flow, Heijunka and Just-In-Time. Teams design their Value Stream and then run their daily work in it. Work moves only when a downstream Work Station signals that it can take more.
 

@@ -1,6 +1,8 @@
-# Pull Kanban — Design (QFD)
+# Bluebin — Design (QFD)
 
-This document designs the Pull Kanban app: how a team designs its Value Stream and then runs its daily work in it, with pull, Takt Time and Heijunka. It does not define terms: every term in **bold** is defined in [CONTEXT.md](./CONTEXT.md). Decisions that are hard to reverse go in [docs/adr/](./docs/adr/).
+_Pull Kanban_
+
+This document designs Bluebin, the pull Kanban app: how a team designs its Value Stream and then runs its daily work in it, with pull, Takt Time and Heijunka. It does not define terms: every term in **bold** is defined in [CONTEXT.md](./CONTEXT.md). Decisions that are hard to reverse go in [docs/adr/](./docs/adr/).
 
 Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank none.
 
@@ -293,7 +295,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \def\qfdHdrH{3.6}
 \def\qfdWhatsTitle{Goals (TPS house)}
 \qfdshowcompetitivefalse
-\def\qfdProjectTitle{Pull Kanban --- bluebin.app}
+\def\qfdProjectTitle{Bluebin --- Pull Kanban}
 \def\qfdConcept{A \textbf{pull} system where \textbf{Kanbans} start \textbf{Work Stations}, \textbf{Heijunka} levels the \textbf{Demands}, and each \textbf{Piece} reaches the \textbf{Client} at \textbf{Takt Time}.}
 
 \begin{document}
@@ -390,7 +392,7 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   body/.style={font=\scriptsize, align=center, text width=#1 cm},
   ids/.style={font=\scriptsize\itshape, align=center}]
   % Title
-  \node[font=\large\bfseries] at (7, 14.3) {Pull Kanban --- the TPS house};
+  \node[font=\large\bfseries] at (7, 14.3) {Bluebin --- the TPS house};
   % Roof
   \draw[box, fill=black!8] (-0.8, 9) -- (7, 13.4) -- (14.8, 9) -- cycle;
   \node[head] at (7, 11.25) {Roof --- Client satisfaction};
