@@ -89,6 +89,31 @@ alter table piece add column station_id text references work_station(id);
 alter table piece add column assignee text references person(id);
 "
 
+/// A Piece waiting in a Blue Bin is the Piece itself, parked at its Work
+/// Station: `state = 'in_bin'`, dated by `since`. The `blue_bin` rows only
+/// repeated `work_station.blue_bins`, so the count alone is kept and a Blue
+/// Bin over its count shows as overflow — the Deviation F9 warns about.
+const schema_v4 = "
+alter table piece add column since text;
+
+update piece
+   set state = 'in_bin',
+       station_id = (select b.station_id from blue_bin b where b.piece_id = piece.id),
+       since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+ where id in (select piece_id from blue_bin where piece_id is not null);
+
+drop table blue_bin;
+
+create table if not exists deviation (
+  id         integer primary key autoincrement,
+  at         text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  rule       text not null,
+  station_id text not null references work_station(id),
+  piece_id   text references piece(id),
+  reason     text not null
+);
+"
+
 /// The name of each step of the chain — the position a Piece crosses, which
 /// may hold several Work Stations when the Value Stream splits into Branches.
 /// A team renames them to its own words (F41).
@@ -177,19 +202,24 @@ insert into station_person (station_id, person_id) values
   ('ws-qa-android', 'pe-tom'),
   ('ws-uat', 'pe-ines'), ('ws-uat', 'pe-sofia');
 
-insert into blue_bin (id, station_id, slot, piece_id)
-select w.id || '-bin-' || s.slot, w.id, s.slot, null
-from work_station w
-join (select 1 as slot union all select 2) s on s.slot <= w.blue_bins;
-
 -- Pieces being transformed right now, each by one Person of that Work Station.
-update piece set station_id = 'ws-web',    assignee = 'pe-bob'     where id = 'p-checkout-8';
-update piece set station_id = 'ws-qa-ios', assignee = 'pe-yasmine' where id = 'p-offline-4';
-update piece set station_id = 'ws-analysis', assignee = 'pe-marc'  where id = 'p-billing-2';
+update piece set station_id = 'ws-web',      assignee = 'pe-bob',
+                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 hour')
+ where id = 'p-checkout-8';
+update piece set station_id = 'ws-qa-ios',   assignee = 'pe-yasmine',
+                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour')
+ where id = 'p-offline-4';
+update piece set station_id = 'ws-analysis', assignee = 'pe-marc',
+                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 hour')
+ where id = 'p-billing-2';
 
 -- Pieces finished and waiting in a Blue Bin for the downstream pull.
-update blue_bin set piece_id = 'p-checkout-9' where id = 'ws-conception-bin-1';
-update blue_bin set piece_id = 'p-offline-5'  where id = 'ws-ios-bin-1';
+update piece set state = 'in_bin', station_id = 'ws-conception',
+                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-4 hour')
+ where id = 'p-checkout-9';
+update piece set state = 'in_bin', station_id = 'ws-ios',
+                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hour')
+ where id = 'p-offline-5';
 
 -- A Kanban is never more than the empty Blue Bins of its Work Station.
 insert into kanban (id, station_id) values
@@ -230,7 +260,7 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// `pragma user_version`. Every step runs at most once, in order.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use version <- result.try(user_version(connection))
-  [#(1, schema_v1), #(2, schema_v2), #(3, schema_v3)]
+  [#(1, schema_v1), #(2, schema_v2), #(3, schema_v3), #(4, schema_v4)]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
     case version < step_version {

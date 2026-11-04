@@ -2,7 +2,13 @@
 import { computed } from "vue"
 import type { WorkStation } from "../types"
 
-const props = defineProps<{ station: WorkStation }>()
+const props = defineProps<{ station: WorkStation; last?: boolean; busy?: boolean }>()
+
+defineEmits<{
+  pull: []
+  finish: [piece: string]
+  deliver: [piece: string]
+}>()
 
 const hasRework = computed(() => props.station.rework.length > 0)
 
@@ -36,13 +42,17 @@ const binsFull = computed(
         </span>
       </header>
 
+      <button class="btn btn-sm btn-primary" :disabled="busy" @click="$emit('pull')">
+        Pull a Piece
+      </button>
+
       <div>
         <p class="text-xs uppercase tracking-wide opacity-60">Blue Bins</p>
         <ul class="mt-1 flex flex-wrap gap-1">
           <li
             v-for="bin in station.blueBins"
             :key="bin.slot"
-            class="rounded border px-2 py-1 text-xs"
+            class="flex items-center gap-1 rounded border px-2 py-1 text-xs"
             :class="
               bin.piece
                 ? 'border-primary bg-primary text-primary-content'
@@ -51,6 +61,32 @@ const binsFull = computed(
             :title="bin.demand ?? 'Empty Blue Bin'"
           >
             {{ bin.piece ?? "empty" }}
+            <button
+              v-if="last && bin.id"
+              class="btn btn-xs"
+              :disabled="busy"
+              @click="$emit('deliver', bin.id)"
+            >
+              Deliver
+            </button>
+          </li>
+        </ul>
+        <ul v-if="station.overflow.length > 0" class="mt-1 flex flex-wrap gap-1">
+          <li
+            v-for="extra in station.overflow"
+            :key="extra.id"
+            class="flex items-center gap-1 rounded border border-warning bg-warning/20 px-2 py-1 text-xs"
+            :title="`${extra.demand} — over the Blue Bin count, put there by a Deviation`"
+          >
+            {{ extra.piece }} · over the count
+            <button
+              v-if="last"
+              class="btn btn-xs"
+              :disabled="busy"
+              @click="$emit('deliver', extra.id)"
+            >
+              Deliver
+            </button>
           </li>
         </ul>
         <p v-if="binsFull" class="mt-1 text-xs font-medium text-warning">Every Blue Bin is full</p>
@@ -59,9 +95,12 @@ const binsFull = computed(
       <div v-if="station.inProgress.length > 0">
         <p class="text-xs uppercase tracking-wide opacity-60">In the hands of</p>
         <ul class="mt-1 space-y-1 text-sm">
-          <li v-for="item in station.inProgress" :key="item.piece">
+          <li v-for="item in station.inProgress" :key="item.id" class="flex items-center gap-2">
             <span class="font-medium">{{ item.piece }}</span>
-            <span class="opacity-60"> · {{ item.person ?? "unassigned" }}</span>
+            <span class="opacity-60">· {{ item.person ?? "unassigned" }}</span>
+            <button class="btn btn-xs ml-auto" :disabled="busy" @click="$emit('finish', item.id)">
+              Finish
+            </button>
           </li>
         </ul>
       </div>
@@ -72,6 +111,16 @@ const binsFull = computed(
           <li v-for="item in station.rework" :key="item.piece">
             <span class="font-medium">{{ item.piece }}</span>
             <span class="opacity-70"> — {{ item.description }}</span>
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="station.deviations.length > 0">
+        <p class="text-xs uppercase tracking-wide text-warning">Deviations</p>
+        <ul class="mt-1 space-y-1 text-xs opacity-70">
+          <li v-for="(item, index) in station.deviations" :key="index">
+            <span class="font-medium">{{ item.piece ?? "—" }}</span>
+            — {{ item.reason }}
           </li>
         </ul>
       </div>

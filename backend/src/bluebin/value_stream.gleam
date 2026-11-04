@@ -2,7 +2,7 @@ import gleam/bool
 import gleam/dynamic/decode
 import gleam/json.{type Json}
 import gleam/list
-import gleam/option.{type Option}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import sqlight
@@ -18,13 +18,11 @@ pub type Station {
   )
 }
 
-pub type Bin {
-  Bin(
-    station_id: String,
-    slot: Int,
-    piece: Option(String),
-    demand: Option(String),
-  )
+/// A Piece parked in a Blue Bin of its Work Station, waiting for the
+/// downstream pull. The Work Station's Blue Bin count says how many fit; the
+/// ones beyond it are the overflow a Deviation put there (F9).
+pub type Parked {
+  Parked(station_id: String, id: String, reference: String, demand: String)
 }
 
 pub type Member {
@@ -34,6 +32,7 @@ pub type Member {
 pub type InProgress {
   InProgress(
     station_id: String,
+    id: String,
     piece: String,
     demand: String,
     person: Option(String),
@@ -48,19 +47,39 @@ pub type Rework {
   Rework(station_id: String, piece: String, description: String)
 }
 
+/// A pull rule broken on purpose, with the reason the Person gave (F6, F31).
+pub type Deviation {
+  Deviation(
+    station_id: String,
+    rule: String,
+    piece: Option(String),
+    reason: String,
+    at: String,
+  )
+}
+
 /// The whole Value Stream, read in six small queries and assembled here. The
 /// shape stays flat so a screen can be rebuilt from one payload (F27).
 pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
   use stations <- result.try(query_stations(connection))
-  use bins <- result.try(query_bins(connection))
+  use parked <- result.try(query_parked(connection))
   use members <- result.try(query_members(connection))
   use in_progress <- result.try(query_in_progress(connection))
   use kanbans <- result.try(query_kanbans(connection))
   use rework <- result.try(query_rework(connection))
+  use deviations <- result.try(query_deviations(connection))
 
   stations
   |> list.map(fn(station) {
-    station_json(station, bins, members, in_progress, kanbans, rework)
+    station_json(
+      station,
+      parked,
+      members,
+      in_progress,
+      kanbans,
+      rework,
+      deviations,
+    )
   })
   |> json.preprocessed_array
   |> Ok
@@ -68,20 +87,24 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
 
 fn station_json(
   station: Station,
-  bins: List(Bin),
+  parked: List(Parked),
   members: List(Member),
   in_progress: List(InProgress),
   kanbans: List(Kanbans),
   rework: List(Rework),
+  deviations: List(Deviation),
 ) -> Json {
-  let station_bins =
-    bins
-    |> list.filter(fn(bin) { bin.station_id == station.id })
-    |> list.map(fn(bin) {
+  let waiting =
+    parked |> list.filter(fn(piece) { piece.station_id == station.id })
+  let #(in_bins, over) = list.split(waiting, station.blue_bins)
+  let station_bins = bin_rows(1, station.blue_bins, in_bins)
+  let station_overflow =
+    over
+    |> list.map(fn(piece) {
       json.object([
-        #("slot", json.int(bin.slot)),
-        #("piece", json.nullable(bin.piece, json.string)),
-        #("demand", json.nullable(bin.demand, json.string)),
+        #("id", json.string(piece.id)),
+        #("piece", json.string(piece.reference)),
+        #("demand", json.string(piece.demand)),
       ])
     })
 
@@ -100,6 +123,7 @@ fn station_json(
     |> list.filter(fn(piece) { piece.station_id == station.id })
     |> list.map(fn(piece) {
       json.object([
+        #("id", json.string(piece.id)),
         #("piece", json.string(piece.piece)),
         #("demand", json.string(piece.demand)),
         #("person", json.nullable(piece.person, json.string)),
@@ -113,6 +137,19 @@ fn station_json(
       json.object([
         #("piece", json.string(item.piece)),
         #("description", json.string(item.description)),
+      ])
+    })
+
+  let station_deviations =
+    deviations
+    |> list.filter(fn(item) { item.station_id == station.id })
+    |> list.take(3)
+    |> list.map(fn(item) {
+      json.object([
+        #("rule", json.string(item.rule)),
+        #("piece", json.nullable(item.piece, json.string)),
+        #("reason", json.string(item.reason)),
+        #("at", json.string(item.at)),
       ])
     })
 
@@ -130,11 +167,46 @@ fn station_json(
     #("blueBinCount", json.int(station.blue_bins)),
     #("teamLeader", json.nullable(station.team_leader, json.string)),
     #("blueBins", json.preprocessed_array(station_bins)),
+    #("overflow", json.preprocessed_array(station_overflow)),
     #("people", json.preprocessed_array(station_members)),
     #("inProgress", json.preprocessed_array(station_pieces)),
     #("rework", json.preprocessed_array(station_rework)),
+    #("deviations", json.preprocessed_array(station_deviations)),
     #("kanbans", json.int(kanban_count)),
   ])
+}
+
+/// One row per declared Blue Bin, filled in the order the Pieces arrived.
+fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(Json) {
+  case slot > last {
+    True -> []
+    False -> {
+      let #(here, rest) = case pieces {
+        [first, ..rest] -> #(Some(first), rest)
+        [] -> #(None, [])
+      }
+      let row =
+        json.object([
+          #("slot", json.int(slot)),
+          #(
+            "id",
+            json.nullable(option.map(here, fn(one) { one.id }), json.string),
+          ),
+          #(
+            "piece",
+            json.nullable(
+              option.map(here, fn(one) { one.reference }),
+              json.string,
+            ),
+          ),
+          #(
+            "demand",
+            json.nullable(option.map(here, fn(one) { one.demand }), json.string),
+          ),
+        ])
+      [row, ..bin_rows(slot + 1, last, rest)]
+    }
+  }
 }
 
 fn query_stations(
@@ -167,22 +239,22 @@ fn query_stations(
   )
 }
 
-fn query_bins(
+fn query_parked(
   connection: sqlight.Connection,
-) -> Result(List(Bin), sqlight.Error) {
+) -> Result(List(Parked), sqlight.Error) {
   let decoder = {
     use station_id <- decode.field(0, decode.string)
-    use slot <- decode.field(1, decode.int)
-    use piece <- decode.field(2, decode.optional(decode.string))
-    use demand <- decode.field(3, decode.optional(decode.string))
-    decode.success(Bin(station_id:, slot:, piece:, demand:))
+    use id <- decode.field(1, decode.string)
+    use reference <- decode.field(2, decode.string)
+    use demand <- decode.field(3, decode.string)
+    decode.success(Parked(station_id:, id:, reference:, demand:))
   }
   sqlight.query(
-    "select b.station_id, b.slot, p.reference, d.label
-     from blue_bin b
-     left join piece p on p.id = b.piece_id
-     left join demand d on d.id = p.demand_id
-     order by b.station_id, b.slot",
+    "select p.station_id, p.id, p.reference, d.label
+     from piece p
+     join demand d on d.id = p.demand_id
+     where p.state = 'in_bin' and p.station_id is not null
+     order by p.station_id, p.since, p.rowid",
     on: connection,
     with: [],
     expecting: decoder,
@@ -216,13 +288,14 @@ fn query_in_progress(
 ) -> Result(List(InProgress), sqlight.Error) {
   let decoder = {
     use station_id <- decode.field(0, decode.string)
-    use piece <- decode.field(1, decode.string)
-    use demand <- decode.field(2, decode.string)
-    use person <- decode.field(3, decode.optional(decode.string))
-    decode.success(InProgress(station_id:, piece:, demand:, person:))
+    use id <- decode.field(1, decode.string)
+    use piece <- decode.field(2, decode.string)
+    use demand <- decode.field(3, decode.string)
+    use person <- decode.field(4, decode.optional(decode.string))
+    decode.success(InProgress(station_id:, id:, piece:, demand:, person:))
   }
   sqlight.query(
-    "select p.station_id, p.reference, d.label,
+    "select p.station_id, p.id, p.reference, d.label,
             (select pe.name from person pe where pe.id = p.assignee)
      from piece p
      join demand d on d.id = p.demand_id
@@ -265,6 +338,30 @@ fn query_rework(
      join piece p on p.id = r.piece_id
      where r.closed_at is null
      order by r.opened_at",
+    on: connection,
+    with: [],
+    expecting: decoder,
+  )
+}
+
+fn query_deviations(
+  connection: sqlight.Connection,
+) -> Result(List(Deviation), sqlight.Error) {
+  let decoder = {
+    use station_id <- decode.field(0, decode.string)
+    use rule <- decode.field(1, decode.string)
+    use piece <- decode.field(2, decode.optional(decode.string))
+    use reason <- decode.field(3, decode.string)
+    use at <- decode.field(4, decode.string)
+    decode.success(Deviation(station_id:, rule:, piece:, reason:, at:))
+  }
+  sqlight.query(
+    "select v.station_id, v.rule,
+            (select p.reference from piece p where p.id = v.piece_id),
+            v.reason, v.at
+     from deviation v
+     order by v.at desc, v.id desc
+     limit 50",
     on: connection,
     with: [],
     expecting: decoder,

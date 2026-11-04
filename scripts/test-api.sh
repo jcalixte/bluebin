@@ -61,6 +61,15 @@ check "no Piece sits in two Blue Bins at once" assert_json \
 check "every Person busy at a Work Station holds a Piece there" assert_json \
   '.stations | all(([.people[] | select(.busy)] | length) <= (.inProgress | length))' \
   "$stream"
+check "every Piece in a Blue Bin carries the id an action needs" assert_json \
+  '.stations | all(.blueBins | all(.piece == null or (.id | length) > 0))' "$stream"
+check "every Piece in the hands of a Work Station carries its id" assert_json \
+  '.stations | all(.inProgress | all((.id | length) > 0))' "$stream"
+check "a Blue Bin over its count shows as overflow" assert_json \
+  '.stations | all(.overflow | type == "array")' "$stream"
+check "every Deviation names its rule and its reason" assert_json \
+  '.stations | all(.deviations | all((.rule | length) > 0 and (.reason | length) > 0))' \
+  "$stream"
 check "every step of the chain carries a name" assert_json \
   '(.steps | length) > 0 and (.steps | all(.name != ""))' "$stream"
 check "every Work Station sits on a named step" assert_json \

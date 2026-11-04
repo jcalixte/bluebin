@@ -4,9 +4,9 @@ import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useValueStream } from "../composables/useValueStream"
-import type { WorkStation } from "../types"
+import type { FlowConfirm, WorkStation } from "../types"
 
-const { valueStream, error, loading, load, renameStep } = useValueStream()
+const { valueStream, error, loading, load, renameStep, pull, finish, deliver } = useValueStream()
 
 /** The longest step name the API accepts; kept in step with the backend. */
 const maxNameLength = 40
@@ -28,6 +28,51 @@ async function rename(position: number, name: string) {
     await load()
   }
 }
+
+// --- Pull, finish, deliver, and the Deviation a broken rule needs (F6, F9) ---
+
+/** One action waiting for the Person to confirm it and say why. */
+type Pending = { message: string; again: (reason: string) => Promise<FlowConfirm | null> }
+
+const pending = ref<Pending | null>(null)
+const reason = ref("")
+const actionError = ref<string | null>(null)
+const busy = ref(false)
+
+/** Runs one action; a warned rule opens the Deviation dialog instead. */
+async function run(action: (reason?: string) => Promise<FlowConfirm | null>) {
+  actionError.value = null
+  busy.value = true
+  try {
+    const confirm = await action()
+    if (confirm) {
+      reason.value = ""
+      pending.value = { message: confirm.message, again: (why) => action(why) }
+    }
+  } catch (cause) {
+    actionError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function recordDeviation() {
+  const why = reason.value.trim()
+  if (!pending.value || why === "") {
+    return
+  }
+  const action = pending.value.again
+  pending.value = null
+  await run(() => action(why))
+}
+
+/** The last step of the chain: production pulls out of its Blue Bins. */
+const lastPosition = computed(() =>
+  (valueStream.value?.stations ?? []).reduce(
+    (last, station) => Math.max(last, station.position),
+    0,
+  ),
+)
 
 /** The element the connectors measure the cards against. */
 const streamEl = ref<HTMLElement | null>(null)
@@ -74,6 +119,10 @@ const taktLabel = computed(() => {
       <span>The step was not renamed: {{ renameError }}</span>
     </div>
 
+    <div v-if="actionError" role="alert" class="alert alert-warning mb-4">
+      <span>{{ actionError }}</span>
+    </div>
+
     <p v-if="loading" class="flex items-center gap-3 opacity-70">
       <span class="loading loading-spinner loading-sm" />
       Loading the Value Stream…
@@ -101,7 +150,14 @@ const taktLabel = computed(() => {
               :data-column="index"
               :data-branch="station.branch ?? ''"
             >
-              <WorkStationCard :station="station" />
+              <WorkStationCard
+                :station="station"
+                :last="station.position === lastPosition"
+                :busy="busy"
+                @pull="run((why) => pull(station.id, why))"
+                @finish="(piece) => run((why) => finish(station.id, piece, why))"
+                @deliver="(piece) => run(() => deliver(piece))"
+              />
             </div>
             <p v-if="column.stations.length > 1" class="text-xs italic opacity-50">
               {{ column.stations.length }} Branches in parallel
@@ -111,5 +167,32 @@ const taktLabel = computed(() => {
         <FlowConnectors :container="streamEl" :columns="columns" />
       </div>
     </div>
+
+    <dialog v-if="pending" class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold">This breaks a pull rule</h3>
+        <p class="py-2 text-sm opacity-80">{{ pending.message }}</p>
+        <label class="form-control">
+          <span class="label-text text-sm">Why do you go on? One line, seen by everyone.</span>
+          <input
+            v-model="reason"
+            class="input input-bordered mt-1 w-full"
+            maxlength="120"
+            placeholder="The Client called: this one ships today"
+            @keyup.enter="recordDeviation"
+          />
+        </label>
+        <div class="modal-action">
+          <button class="btn btn-ghost" @click="pending = null">Cancel</button>
+          <button
+            class="btn btn-warning"
+            :disabled="busy || reason.trim() === ''"
+            @click="recordDeviation"
+          >
+            Record the Deviation
+          </button>
+        </div>
+      </div>
+    </dialog>
   </section>
 </template>

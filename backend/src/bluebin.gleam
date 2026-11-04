@@ -1,11 +1,13 @@
 import bluebin/db
 import bluebin/demand
+import bluebin/flow
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/http
 import gleam/int
 import gleam/json
+import gleam/option.{None}
 import gleam/result
 import mist
 import simplifile
@@ -45,6 +47,18 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
     ["api", "value-stream"] -> {
       use <- wisp.require_method(request, http.Get)
       value_stream()
+    }
+    ["api", "pull"] -> {
+      use <- wisp.require_method(request, http.Post)
+      pull(request)
+    }
+    ["api", "finish"] -> {
+      use <- wisp.require_method(request, http.Post)
+      finish(request)
+    }
+    ["api", "deliver"] -> {
+      use <- wisp.require_method(request, http.Post)
+      deliver(request)
     }
     ["api", "steps", position] -> {
       use <- wisp.require_method(request, http.Put)
@@ -91,6 +105,139 @@ fn value_stream() -> wisp.Response {
       )
     Error(_) -> wisp.internal_server_error()
   }
+}
+
+// --- The three flow actions: pull, finish, deliver (F7, F24, F6, F9, F30) ---
+
+/// `{"station": "ws-web", "reason": "…"}` — the reason is given only to
+/// confirm a warned pull, and makes it a Deviation.
+fn pull(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use station <- decode.field("station", decode.string)
+    use reason <- decode.optional_field(
+      "reason",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(#(station, reason))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
+    Ok(#(station, reason)) ->
+      flow_response(
+        db.with_connection(fn(connection) {
+          flow.pull(connection, station, reason)
+        }),
+      )
+  }
+}
+
+/// `{"station": "ws-web", "piece": "p-checkout-8", "reason": "…"}`
+fn finish(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use station <- decode.field("station", decode.string)
+    use piece <- decode.field("piece", decode.string)
+    use reason <- decode.optional_field(
+      "reason",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(#(station, piece, reason))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request(
+        "expected a body like {\"station\": \"ws-web\", \"piece\": \"p-checkout-8\"}",
+      )
+    Ok(#(station, piece, reason)) ->
+      flow_response(
+        db.with_connection(fn(connection) {
+          flow.finish(connection, station, piece, reason)
+        }),
+      )
+  }
+}
+
+/// `{"piece": "p-checkout-9"}` — production pulls the Piece out of the last
+/// Blue Bin of the chain.
+fn deliver(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = decode.field("piece", decode.string, decode.success)
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request("expected a body like {\"piece\": \"p-checkout-9\"}")
+    Ok(piece) ->
+      flow_response(
+        db.with_connection(fn(connection) { flow.deliver(connection, piece) }),
+      )
+  }
+}
+
+/// One shape for the three actions: what moved, or what the Person must
+/// confirm first with a reason (F6, F9, F31).
+fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
+  case result {
+    Ok(flowed) ->
+      json_body(
+        [
+          #("piece", json.string(flowed.piece)),
+          #("demand", json.string(flowed.demand)),
+          #(
+            "deviation",
+            json.nullable(
+              option.map(flowed.deviation, flow.rule_name),
+              json.string,
+            ),
+          ),
+          #("kanbanSentTo", json.nullable(flowed.kanban_sent_to, json.string)),
+        ],
+        200,
+      )
+    Error(flow.NeedsConfirmation(rule)) ->
+      json_body(
+        [
+          #("confirm", json.string(flow.rule_name(rule))),
+          #("message", json.string(flow.rule_warning(rule))),
+        ],
+        409,
+      )
+    Error(flow.NothingToPull) ->
+      json_body(
+        [
+          #("error", json.string("nothing_to_pull")),
+          #(
+            "message",
+            json.string(
+              "No Piece waits upstream of this Work Station, so there is nothing to pull.",
+            ),
+          ),
+        ],
+        409,
+      )
+    Error(flow.PieceNotHere) ->
+      json_body(
+        [
+          #("error", json.string("piece_not_here")),
+          #(
+            "message",
+            json.string("This Piece is no longer where the action expects it."),
+          ),
+        ],
+        409,
+      )
+    Error(flow.UnknownStation) -> wisp.not_found()
+    Error(flow.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+fn json_body(fields: List(#(String, json.Json)), status: Int) -> wisp.Response {
+  wisp.json_response(json.to_string(json.object(fields)), status)
 }
 
 /// Rename one step of the chain. The body is `{"name": "…"}`.
