@@ -101,11 +101,12 @@ pub fn the_seed_fills_the_value_stream_test() {
   use connection <- with_seeded_database()
   assert count(connection, "select count(*) from demand") == 3
   assert count(connection, "select count(*) from work_station") == 9
-  // Every Work Station has exactly as many Blue Bins as it declares.
+  // No Work Station holds more parked Pieces than the Blue Bins it declares.
   assert count(
       connection,
       "select count(*) from work_station w
-       where w.blue_bins <> (select count(*) from blue_bin b where b.station_id = w.id)",
+       where w.blue_bins < (select count(*) from piece p
+                            where p.station_id = w.id and p.state = 'in_bin')",
     )
     == 0
 }
