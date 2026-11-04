@@ -1,14 +1,34 @@
 <script setup lang="ts">
-import { ref } from "vue"
+import { onBeforeUnmount, ref } from "vue"
 import DemandsView from "./views/DemandsView.vue"
 import ValueStreamView from "./views/ValueStreamView.vue"
 
 const views = [
-  { id: "demands", label: "Demands" },
-  { id: "value-stream", label: "Value Stream" },
+  { id: "demands", label: "Demands", path: "/demands" },
+  { id: "value-stream", label: "Value Stream", path: "/value-stream" },
 ] as const
 
-const current = ref<(typeof views)[number]["id"]>("demands")
+type View = (typeof views)[number]
+
+/** The view lives in the URL, so a reload, a bookmark or a shared link opens
+ *  the same screen. Any other path, `/` included, shows the Demands. */
+function viewAt(path: string): View {
+  return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
+}
+
+const current = ref<View>(viewAt(location.pathname))
+
+function open(view: View) {
+  if (view.path !== location.pathname) {
+    history.pushState(null, "", view.path)
+  }
+  current.value = view
+}
+
+/** Back and forward move between the views like any other page. */
+const onPopState = () => (current.value = viewAt(location.pathname))
+addEventListener("popstate", onPopState)
+onBeforeUnmount(() => removeEventListener("popstate", onPopState))
 </script>
 
 <template>
@@ -25,25 +45,27 @@ const current = ref<(typeof views)[number]["id"]>("demands")
           <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
         </div>
         <nav class="tabs tabs-box">
-          <button
+          <a
             v-for="view in views"
             :key="view.id"
+            :href="view.path"
             class="tab"
             :class="
-              current === view.id
+              current.id === view.id
                 ? 'tab-active font-medium text-base-content'
                 : 'text-base-content/70'
             "
-            @click="current = view.id"
+            :aria-current="current.id === view.id ? 'page' : undefined"
+            @click.exact.prevent="open(view)"
           >
             {{ view.label }}
-          </button>
+          </a>
         </nav>
       </div>
     </header>
 
     <main class="mx-auto max-w-[110rem] px-6 py-8">
-      <DemandsView v-if="current === 'demands'" />
+      <DemandsView v-if="current.id === 'demands'" />
       <ValueStreamView v-else />
     </main>
   </div>
