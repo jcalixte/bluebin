@@ -195,7 +195,7 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
               json.string,
             ),
           ),
-          #("kanbanSentTo", json.nullable(flowed.kanban_sent_to, json.string)),
+          #("kanbansSentTo", json.array(flowed.kanbans_sent_to, json.string)),
         ],
         200,
       )
@@ -215,6 +215,19 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
             "message",
             json.string(
               "No Piece waits upstream of this Work Station, so there is nothing to pull.",
+            ),
+          ),
+        ],
+        409,
+      )
+    Error(flow.NothingToAssemble) ->
+      json_body(
+        [
+          #("error", json.string("nothing_to_assemble")),
+          #(
+            "message",
+            json.string(
+              "No Piece has every Sub-Piece waiting in the last Blue Bin of its Branch, so there is nothing to assemble.",
             ),
           ),
         ],

@@ -1,5 +1,7 @@
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/json
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
@@ -15,6 +17,9 @@ pub type Rule {
 pub type FlowError {
   UnknownStation
   NothingToPull
+  /// The Work Station after the Branches finds no Piece whose Sub-Pieces all
+  /// wait in the last Blue Bin of their Branch (F8).
+  NothingToAssemble
   PieceNotHere
   /// The action breaks a pull rule: the Person must confirm it with a reason.
   NeedsConfirmation(Rule)
@@ -28,7 +33,7 @@ pub type Flowed {
     piece: String,
     demand: String,
     deviation: Option(Rule),
-    kanban_sent_to: Option(String),
+    kanbans_sent_to: List(String),
   )
 }
 
@@ -54,6 +59,11 @@ pub fn rule_warning(rule: Rule) -> String {
 /// A Work Station spends one Kanban and takes the first Piece waiting in the
 /// Blue Bins upstream — or in the Backlog, for the first Work Station (F24).
 /// Emptying an upstream Blue Bin sends one Kanban back to it (F7).
+///
+/// Around a Split the pull changes shape. Each Branch pulls its own Sub-Piece,
+/// and the Piece leaves the trunk's Blue Bin only once every Branch has pulled
+/// its part. The Work Station after the Branches pulls by Assembly: all the
+/// Sub-Pieces of one Piece at once, each from the last Blue Bin of its Branch.
 pub fn pull(
   connection: sqlight.Connection,
   station_id: String,
@@ -61,35 +71,30 @@ pub fn pull(
 ) -> Result(Flowed, FlowError) {
   use <- in_transaction(connection)
   use station <- result.try(load_station(connection, station_id))
-  use first <- result.try(edge_position(connection, "min"))
+  use kind <- result.try(pull_kind(connection, station))
 
-  use source <- result.try(case station.position == first {
-    True -> next_backlog_piece(connection)
-    False -> next_upstream_piece(connection, station)
+  use source <- result.try(case kind {
+    FromBacklog -> next_backlog_piece(connection)
+    Straight -> next_upstream_piece(connection, station)
+    AtSplit -> next_unsplit_piece(connection, station)
+    Assembly -> next_complete_piece(connection, station)
   })
 
   use deviation <- result.try(spend_kanban(connection, station, source, reason))
 
-  use _ <- result.try(
-    write(
-      connection,
-      "update piece
-        set state = 'in_flow', station_id = ?1, assignee = null,
-            since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-      where id = ?2",
-      [sqlight.text(station.id), sqlight.text(source.id)],
-    ),
-  )
-
-  use sent <- result.try(case source.station_id {
-    Some(upstream) -> send_kanban(connection, upstream)
-    None -> Ok(None)
+  use #(pulled, sent) <- result.try(case kind {
+    FromBacklog | Straight -> take_whole(connection, station, source)
+    AtSplit -> split_off(connection, station, source)
+    Assembly -> assemble(connection, station, source)
   })
 
   use _ <- result.try(record_event(
     connection,
-    "piece_pulled",
-    Some(source.id),
+    case kind {
+      Assembly -> "piece_assembled"
+      _ -> "piece_pulled"
+    },
+    Some(pulled.0),
     json.object([
       #("station", json.string(station.id)),
       #("from", json.nullable(source.station_id, json.string)),
@@ -97,10 +102,10 @@ pub fn pull(
   ))
 
   Ok(Flowed(
-    piece: source.reference,
+    piece: pulled.1,
     demand: source.demand,
     deviation:,
-    kanban_sent_to: sent,
+    kanbans_sent_to: sent,
   ))
 }
 
@@ -153,12 +158,14 @@ pub fn finish(
     json.object([#("station", json.string(station.id))]),
   ))
 
-  Ok(Flowed(
-    piece: piece.reference,
-    demand: piece.demand,
-    deviation:,
-    kanban_sent_to: None,
-  ))
+  Ok(
+    Flowed(
+      piece: piece.reference,
+      demand: piece.demand,
+      deviation:,
+      kanbans_sent_to: [],
+    ),
+  )
 }
 
 /// Production pulls a Piece out of the Blue Bin of the last Work Station: the
@@ -183,7 +190,7 @@ pub fn deliver(
     ),
   )
 
-  use sent <- result.try(send_kanban(connection, piece.station_id))
+  use sent <- result.try(send_kanbans(connection, [piece.station_id]))
 
   use _ <- result.try(record_event(
     connection,
@@ -196,8 +203,175 @@ pub fn deliver(
     piece: piece.reference,
     demand: piece.demand,
     deviation: None,
-    kanban_sent_to: sent,
+    kanbans_sent_to: sent,
   ))
+}
+
+// --- How a pull moves its Piece ---
+
+/// Where a pull takes its Piece from, read from the shape of the chain.
+type Kind {
+  FromBacklog
+  /// Inside the trunk, or inside one Branch.
+  Straight
+  /// A Branch pulls from the trunk: only its own Sub-Piece.
+  AtSplit
+  /// The Work Station after the Branches pulls every Sub-Piece of one Piece.
+  Assembly
+}
+
+fn pull_kind(
+  connection: sqlight.Connection,
+  station: Station,
+) -> Result(Kind, FlowError) {
+  use first <- result.try(edge_position(connection, "min"))
+  use <- bool.guard(station.position == first, Ok(FromBacklog))
+
+  let upstream =
+    sqlight.query(
+      "select branch from work_station
+       where position = (select max(position) from work_station
+                         where position < ?1)",
+      on: connection,
+      with: [sqlight.int(station.position)],
+      expecting: decode.at([0], decode.optional(decode.string)),
+    )
+  case upstream {
+    Error(_) -> Error(StoreFailed)
+    Ok(branches) ->
+      case station.branch, list.any(branches, option.is_some) {
+        Some(_), False -> Ok(AtSplit)
+        None, True -> Ok(Assembly)
+        _, _ -> Ok(Straight)
+      }
+  }
+}
+
+/// The whole Piece moves into the hands of the Work Station. Answers the id
+/// and reference of what moved, and the Work Stations that got a Kanban back.
+fn take_whole(
+  connection: sqlight.Connection,
+  station: Station,
+  source: Source,
+) -> Result(#(#(String, String), List(String)), FlowError) {
+  use _ <- result.try(move_into_hands(connection, source.id, station.id))
+  use sent <- result.try(send_kanbans(
+    connection,
+    option.values([source.station_id]),
+  ))
+  Ok(#(#(source.id, source.reference), sent))
+}
+
+/// The Branch takes its own Sub-Piece. The Piece stays in the trunk's Blue
+/// Bin, holding it, until the last Branch has taken its part; only then the
+/// Blue Bin is empty and its Work Station gets a Kanban back.
+fn split_off(
+  connection: sqlight.Connection,
+  station: Station,
+  source: Source,
+) -> Result(#(#(String, String), List(String)), FlowError) {
+  let branch = option.unwrap(station.branch, "")
+  let created =
+    sqlight.query(
+      "insert into piece (id, demand_id, reference, state, station_id, since,
+                          parent_id, branch)
+       select id || '-' || lower(replace(?2, ' ', '-')), demand_id,
+              reference || ' · ' || ?2, 'in_flow', ?3,
+              strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), id, ?2
+       from piece where id = ?1
+       returning id, reference",
+      on: connection,
+      with: [
+        sqlight.text(source.id),
+        sqlight.text(branch),
+        sqlight.text(station.id),
+      ],
+      expecting: {
+        use id <- decode.field(0, decode.string)
+        use reference <- decode.field(1, decode.string)
+        decode.success(#(id, reference))
+      },
+    )
+  use sub_piece <- result.try(case created {
+    Ok([sub_piece, ..]) -> Ok(sub_piece)
+    _ -> Error(StoreFailed)
+  })
+
+  let left =
+    sqlight.query(
+      "update piece
+          set state = 'split', station_id = null,
+              since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        where id = ?1
+          and (select count(*) from piece s where s.parent_id = ?1)
+           >= (select count(distinct branch) from work_station
+               where position = ?2)
+        returning id",
+      on: connection,
+      with: [sqlight.text(source.id), sqlight.int(station.position)],
+      expecting: decode.at([0], decode.string),
+    )
+  use sent <- result.try(case left {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Ok([])
+    Ok(_) -> send_kanbans(connection, option.values([source.station_id]))
+  })
+  Ok(#(sub_piece, sent))
+}
+
+/// The Sub-Pieces join again: each leaves the last Blue Bin of its Branch,
+/// which sends that Work Station one Kanban, and the complete Piece goes into
+/// the hands of the Work Station after the Branches.
+fn assemble(
+  connection: sqlight.Connection,
+  station: Station,
+  source: Source,
+) -> Result(#(#(String, String), List(String)), FlowError) {
+  let branch_ends =
+    sqlight.query(
+      "select station_id from piece where parent_id = ?1 order by branch",
+      on: connection,
+      with: [sqlight.text(source.id)],
+      expecting: decode.at([0], decode.string),
+    )
+  use branch_ends <- result.try(result.replace_error(branch_ends, StoreFailed))
+
+  use _ <- result.try(
+    write(
+      connection,
+      "update piece
+        set state = 'assembled', station_id = null, assignee = null,
+            since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where parent_id = ?1",
+      [sqlight.text(source.id)],
+    ),
+  )
+  use _ <- result.try(move_into_hands(connection, source.id, station.id))
+  use sent <- result.try(send_kanbans(connection, branch_ends))
+  Ok(#(#(source.id, source.reference), sent))
+}
+
+fn move_into_hands(
+  connection: sqlight.Connection,
+  piece_id: String,
+  station_id: String,
+) -> Result(Nil, FlowError) {
+  write(
+    connection,
+    "update piece
+        set state = 'in_flow', station_id = ?1, assignee = null,
+            since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id = ?2",
+    [sqlight.text(station_id), sqlight.text(piece_id)],
+  )
+}
+
+fn send_kanbans(
+  connection: sqlight.Connection,
+  stations: List(String),
+) -> Result(List(String), FlowError) {
+  list.try_map(stations, fn(one) { send_kanban(connection, one) })
+  |> result.map(option.values)
 }
 
 // --- The pieces the actions move ---
@@ -271,73 +445,115 @@ fn edge_position(
 fn next_backlog_piece(
   connection: sqlight.Connection,
 ) -> Result(Source, FlowError) {
-  let decoder = {
-    use id <- decode.field(0, decode.string)
-    use reference <- decode.field(1, decode.string)
-    use demand <- decode.field(2, decode.string)
-    decode.success(Source(id:, reference:, demand:, station_id: None))
-  }
-  let found =
-    sqlight.query(
-      "select p.id, p.reference, d.label
-       from piece p
-       join demand d on d.id = p.demand_id
-       where p.state = 'backlog'
-       order by p.rowid
-       limit 1",
-      on: connection,
-      with: [],
-      expecting: decoder,
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(NothingToPull)
-    Ok([piece, ..]) -> Ok(piece)
-  }
+  find_source(
+    connection,
+    "select p.id, p.reference, d.label, null
+     from piece p
+     join demand d on d.id = p.demand_id
+     where p.state = 'backlog' and p.parent_id is null
+     order by p.rowid
+     limit 1",
+    [],
+    NothingToPull,
+  )
 }
 
-/// The Piece that has waited longest in a Blue Bin of the step just upstream.
-/// Inside a Branch a Work Station pulls from its own Branch; the trunk feeds
-/// every Branch, and the Work Station after the Branches may take any of them
-/// until the Assembly exists (F8).
+/// The Piece that has waited longest in a Blue Bin of the step just upstream,
+/// in the trunk or in the same Branch.
 fn next_upstream_piece(
   connection: sqlight.Connection,
   station: Station,
+) -> Result(Source, FlowError) {
+  find_source(
+    connection,
+    "select p.id, p.reference, d.label, p.station_id
+     from piece p
+     join demand d on d.id = p.demand_id
+     join work_station w on w.id = p.station_id
+     where p.state = 'in_bin'
+       and w.position = (select max(position) from work_station
+                         where position < ?1)
+       and w.branch is ?2
+     order by p.since, p.rowid
+     limit 1",
+    [
+      sqlight.int(station.position),
+      sqlight.nullable(sqlight.text, station.branch),
+    ],
+    NothingToPull,
+  )
+}
+
+/// At the Split: the Piece that has waited longest in the trunk's Blue Bins
+/// and whose Sub-Piece for this Branch is not pulled yet.
+fn next_unsplit_piece(
+  connection: sqlight.Connection,
+  station: Station,
+) -> Result(Source, FlowError) {
+  find_source(
+    connection,
+    "select p.id, p.reference, d.label, p.station_id
+     from piece p
+     join demand d on d.id = p.demand_id
+     join work_station w on w.id = p.station_id
+     where p.state = 'in_bin'
+       and w.position = (select max(position) from work_station
+                         where position < ?1)
+       and not exists (select 1 from piece s
+                       where s.parent_id = p.id and s.branch = ?2)
+     order by p.since, p.rowid
+     limit 1",
+    [
+      sqlight.int(station.position),
+      sqlight.nullable(sqlight.text, station.branch),
+    ],
+    NothingToPull,
+  )
+}
+
+/// At the Assembly: the Piece whose Sub-Pieces all wait in the last Blue Bin
+/// of their Branch, the one complete for the longest time first.
+fn next_complete_piece(
+  connection: sqlight.Connection,
+  station: Station,
+) -> Result(Source, FlowError) {
+  find_source(
+    connection,
+    "select p.id, p.reference, d.label, null
+     from piece p
+     join demand d on d.id = p.demand_id
+     where p.state = 'split'
+       and not exists (
+         select 1 from piece s
+         left join work_station w on w.id = s.station_id
+         where s.parent_id = p.id
+           and not (s.state = 'in_bin'
+                    and w.position = (select max(position) from work_station
+                                      where position < ?1)))
+     order by (select max(s.since) from piece s where s.parent_id = p.id),
+              p.rowid
+     limit 1",
+    [sqlight.int(station.position)],
+    NothingToAssemble,
+  )
+}
+
+fn find_source(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(sqlight.Value),
+  when_none: FlowError,
 ) -> Result(Source, FlowError) {
   let decoder = {
     use id <- decode.field(0, decode.string)
     use reference <- decode.field(1, decode.string)
     use demand <- decode.field(2, decode.string)
-    use station_id <- decode.field(3, decode.string)
-    decode.success(Source(
-      id:,
-      reference:,
-      demand:,
-      station_id: Some(station_id),
-    ))
+    use station_id <- decode.field(3, decode.optional(decode.string))
+    decode.success(Source(id:, reference:, demand:, station_id:))
   }
-  let found =
-    sqlight.query(
-      "select p.id, p.reference, d.label, p.station_id
-       from piece p
-       join demand d on d.id = p.demand_id
-       join work_station w on w.id = p.station_id
-       where p.state = 'in_bin'
-         and w.position = (select max(position) from work_station
-                           where position < ?1)
-         and (?2 is null or w.branch is null or w.branch = ?2)
-       order by p.since, p.rowid
-       limit 1",
-      on: connection,
-      with: [
-        sqlight.int(station.position),
-        sqlight.nullable(sqlight.text, station.branch),
-      ],
-      expecting: decoder,
-    )
-  case found {
+  case sqlight.query(sql, on: connection, with: values, expecting: decoder) {
     Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(NothingToPull)
+    Ok([]) -> Error(when_none)
     Ok([piece, ..]) -> Ok(piece)
   }
 }

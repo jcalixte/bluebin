@@ -114,6 +114,25 @@ create table if not exists deviation (
 );
 "
 
+/// Sub-Pieces: past a Split a Piece flows as one Sub-Piece per Branch, a
+/// `piece` row with `parent_id` and `branch`. The Pieces already in a Branch
+/// were whole, which the pull rules no longer allow, so the demo data is
+/// reset: the seed runs again on the emptied tables. Step names stay.
+const schema_v5 = "
+alter table piece add column parent_id text references piece(id);
+alter table piece add column branch text;
+
+delete from deviation;
+delete from rework;
+delete from kanban;
+delete from flow_event;
+delete from station_person;
+delete from piece;
+delete from demand;
+delete from work_station;
+delete from person;
+"
+
 /// The name of each step of the chain — the position a Piece crosses, which
 /// may hold several Work Stations when the Value Stream splits into Branches.
 /// A team renames them to its own words (F41).
@@ -202,38 +221,53 @@ insert into station_person (station_id, person_id) values
   ('ws-qa-android', 'pe-tom'),
   ('ws-uat', 'pe-ines'), ('ws-uat', 'pe-sofia');
 
--- Pieces being transformed right now, each by one Person of that Work Station.
-update piece set station_id = 'ws-web',      assignee = 'pe-bob',
-                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 hour')
- where id = 'p-checkout-8';
-update piece set station_id = 'ws-qa-ios',   assignee = 'pe-yasmine',
-                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour')
- where id = 'p-offline-4';
+-- Analysis transforms a whole Piece: the trunk carries Pieces whole.
 update piece set station_id = 'ws-analysis', assignee = 'pe-marc',
                  since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 hour')
  where id = 'p-billing-2';
 
--- Pieces finished and waiting in a Blue Bin for the downstream pull.
+-- US-9 waits in Tech Conception's Blue Bin; no Branch has pulled its part yet.
 update piece set state = 'in_bin', station_id = 'ws-conception',
                  since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-4 hour')
  where id = 'p-checkout-9';
-update piece set state = 'in_bin', station_id = 'ws-ios',
-                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hour')
- where id = 'p-offline-5';
+update piece set state = 'backlog' where id = 'p-offline-5';
 
--- A Kanban is never more than the empty Blue Bins of its Work Station.
+-- Past the Split a Piece flows as one Sub-Piece per Branch. The Piece itself
+-- left the trunk once all three Branches pulled their part.
+update piece set state = 'split', station_id = null,
+                 since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')
+ where id in ('p-checkout-8', 'p-offline-4');
+
+insert into piece (id, demand_id, reference, state, station_id, assignee,
+                   since, parent_id, branch) values
+  ('p-checkout-8-web', 'd-checkout', 'US-8 · Web', 'in_flow', 'ws-web', 'pe-bob',
+   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 hour'), 'p-checkout-8', 'Web'),
+  ('p-checkout-8-ios', 'd-checkout', 'US-8 · iOS', 'in_bin', 'ws-ios', null,
+   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hour'), 'p-checkout-8', 'iOS'),
+  ('p-checkout-8-android', 'd-checkout', 'US-8 · Android', 'in_flow', 'ws-android', 'pe-nina',
+   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 hour'), 'p-checkout-8', 'Android'),
+  ('p-offline-4-web', 'd-offline', 'US-4 · Web', 'in_bin', 'ws-qa-web', null,
+   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour'), 'p-offline-4', 'Web'),
+  ('p-offline-4-ios', 'd-offline', 'US-4 · iOS', 'in_flow', 'ws-qa-ios', 'pe-yasmine',
+   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour'), 'p-offline-4', 'iOS'),
+  ('p-offline-4-android', 'd-offline', 'US-4 · Android', 'in_bin', 'ws-qa-android', null,
+   strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hour'), 'p-offline-4', 'Android');
+
+-- A Work Station never holds more Kanbans than it has Blue Bins left once its
+-- Pieces in hand and in its Blue Bins are counted.
 insert into kanban (id, station_id) values
   ('kb-analysis-1', 'ws-analysis'),
   ('kb-conception-1', 'ws-conception'),
   ('kb-web-1', 'ws-web'),
+  ('kb-ios-1', 'ws-ios'),
   ('kb-android-1', 'ws-android'),
-  ('kb-android-2', 'ws-android'),
   ('kb-qa-web-1', 'ws-qa-web'),
   ('kb-uat-1', 'ws-uat');
 
--- QA iOS found a defect; the Rework is against the Work Station that made it.
+-- QA iOS found a defect in the iOS part of US-4; the Rework is against the
+-- Work Station that made it.
 insert into rework (id, piece_id, station_id, description)
-values ('rw-1', 'p-offline-4', 'ws-ios', 'Sync retries lose the last edit when the tunnel drops');
+values ('rw-1', 'p-offline-4-ios', 'ws-ios', 'Sync retries lose the last edit when the tunnel drops');
 "
 
 pub fn with_connection(run: fn(sqlight.Connection) -> a) -> a {
@@ -260,7 +294,13 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// `pragma user_version`. Every step runs at most once, in order.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use version <- result.try(user_version(connection))
-  [#(1, schema_v1), #(2, schema_v2), #(3, schema_v3), #(4, schema_v4)]
+  [
+    #(1, schema_v1),
+    #(2, schema_v2),
+    #(3, schema_v3),
+    #(4, schema_v4),
+    #(5, schema_v5),
+  ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
     case version < step_version {
