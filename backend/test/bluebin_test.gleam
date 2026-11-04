@@ -164,3 +164,66 @@ pub fn the_value_stream_payload_lists_every_work_station_test() {
   // The seeded Rework is open, so it must reach the screen.
   assert string.contains(text, "Sync retries lose the last edit")
 }
+
+// --- Naming the steps of the chain (F41) ---
+
+pub fn the_seed_names_every_step_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(steps) = value_stream.list_steps(connection)
+  assert list.length(steps) == 5
+  let assert [first, ..] = steps
+  assert first.name == "From the Backlog"
+}
+
+pub fn a_step_can_be_renamed_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(step) = value_stream.rename_step(connection, 2, "  Design  ")
+  // The name is stored trimmed, and what the API answers is what was stored.
+  assert step.name == "Design"
+  let assert Ok(steps) = value_stream.list_steps(connection)
+  assert list.contains(steps, value_stream.Step(position: 2, name: "Design"))
+}
+
+pub fn a_rename_is_dated_in_the_flow_event_log_test() {
+  use connection <- with_seeded_database()
+  let before = count(connection, "select count(*) from flow_event")
+  let assert Ok(_) = value_stream.rename_step(connection, 2, "Design")
+  assert count(connection, "select count(*) from flow_event") == before + 1
+  assert count(
+      connection,
+      "select count(*) from stream_step
+       where position = 2 and renamed_at is not null",
+    )
+    == 1
+}
+
+pub fn a_step_never_loses_its_name_test() {
+  use connection <- with_seeded_database()
+  assert value_stream.rename_step(connection, 2, "   ")
+    == Error(value_stream.EmptyName)
+  let assert Ok(steps) = value_stream.list_steps(connection)
+  assert list.contains(steps, value_stream.Step(position: 2, name: "Step 2"))
+}
+
+pub fn a_step_name_stays_short_enough_for_a_wall_tv_test() {
+  use connection <- with_seeded_database()
+  let too_long = string.repeat("a", value_stream.max_name_length + 1)
+  assert value_stream.rename_step(connection, 2, too_long)
+    == Error(value_stream.NameTooLong)
+  // One character shorter is accepted.
+  let longest = string.repeat("a", value_stream.max_name_length)
+  let assert Ok(step) = value_stream.rename_step(connection, 2, longest)
+  assert step.name == longest
+}
+
+pub fn renaming_a_step_that_does_not_exist_is_refused_test() {
+  use connection <- with_seeded_database()
+  assert value_stream.rename_step(connection, 99, "Nowhere")
+    == Error(value_stream.UnknownStep)
+}
+
+pub fn a_quote_in_a_name_is_stored_as_typed_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(step) = value_stream.rename_step(connection, 2, "Dev's turn")
+  assert step.name == "Dev's turn"
+}

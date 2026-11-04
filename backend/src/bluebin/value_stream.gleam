@@ -1,8 +1,10 @@
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option}
 import gleam/result
+import gleam/string
 import sqlight
 
 pub type Station {
@@ -48,9 +50,7 @@ pub type Rework {
 
 /// The whole Value Stream, read in six small queries and assembled here. The
 /// shape stays flat so a screen can be rebuilt from one payload (F27).
-pub fn load(
-  connection: sqlight.Connection,
-) -> Result(Json, sqlight.Error) {
+pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
   use stations <- result.try(query_stations(connection))
   use bins <- result.try(query_bins(connection))
   use members <- result.try(query_members(connection))
@@ -269,4 +269,95 @@ fn query_rework(
     with: [],
     expecting: decoder,
   )
+}
+
+// --- Steps: the named positions of the chain (F41) ---
+
+pub type Step {
+  Step(position: Int, name: String)
+}
+
+pub type RenameError {
+  EmptyName
+  NameTooLong
+  UnknownStep
+  StoreFailed
+}
+
+/// A name a team can read on a wall TV: trimmed, never empty, never a wall of
+/// text that breaks the column layout.
+pub const max_name_length = 40
+
+pub fn list_steps(
+  connection: sqlight.Connection,
+) -> Result(List(Step), sqlight.Error) {
+  let decoder = {
+    use position <- decode.field(0, decode.int)
+    use name <- decode.field(1, decode.string)
+    decode.success(Step(position:, name:))
+  }
+  sqlight.query(
+    "select position, name from stream_step order by position",
+    on: connection,
+    with: [],
+    expecting: decoder,
+  )
+}
+
+pub fn steps_json(steps: List(Step)) -> Json {
+  json.array(steps, fn(step) {
+    json.object([
+      #("position", json.int(step.position)),
+      #("name", json.string(step.name)),
+    ])
+  })
+}
+
+/// Rename one step. Renaming is a Value Stream change, so it is dated and
+/// appended to the flow event log like any other (F40, ADR-0002).
+pub fn rename_step(
+  connection: sqlight.Connection,
+  position: Int,
+  name: String,
+) -> Result(Step, RenameError) {
+  let trimmed = string.trim(name)
+  use <- bool.guard(trimmed == "", Error(EmptyName))
+  use <- bool.guard(
+    string.length(trimmed) > max_name_length,
+    Error(NameTooLong),
+  )
+
+  let update =
+    sqlight.query(
+      "update stream_step
+       set name = ?, renamed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+       where position = ?
+       returning position, name",
+      on: connection,
+      with: [sqlight.text(trimmed), sqlight.int(position)],
+      expecting: {
+        use position <- decode.field(0, decode.int)
+        use name <- decode.field(1, decode.string)
+        decode.success(Step(position:, name:))
+      },
+    )
+
+  case update {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Error(UnknownStep)
+    Ok([step, ..]) -> {
+      let event =
+        sqlight.query(
+          "insert into flow_event (kind, payload) values ('step_renamed', ?)
+           returning id",
+          on: connection,
+          with: [sqlight.text(trimmed)],
+          expecting: decode.at([0], decode.int),
+        )
+      case event {
+        Ok(_) -> Ok(step)
+        Error(_) -> Error(StoreFailed)
+      }
+    }
+  }
 }

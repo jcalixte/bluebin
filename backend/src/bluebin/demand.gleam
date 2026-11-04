@@ -105,8 +105,7 @@ pub fn takt_gap(demand: Demand) -> Float {
     total -> {
       let share =
         int.to_float(demand.working_days_elapsed) /. int.to_float(total)
-      let expected =
-        float.min(1.0, share) *. int.to_float(demand.pieces_asked)
+      let expected = float.min(1.0, share) *. int.to_float(demand.pieces_asked)
       round_to_tenth(int.to_float(demand.pieces_produced) -. expected)
     }
   }

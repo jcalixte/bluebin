@@ -40,8 +40,15 @@ export type WorkStation = {
   kanbans: number
 }
 
+/** A named position in the chain; a Split puts several Work Stations on one. */
+export type Step = {
+  position: number
+  name: string
+}
+
 export type ValueStream = {
   stations: WorkStation[]
+  steps: Step[]
   taktTimeHours: number
   demandsBehind: number
 }

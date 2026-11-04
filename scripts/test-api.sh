@@ -61,6 +61,10 @@ check "no Piece sits in two Blue Bins at once" assert_json \
 check "every Person busy at a Work Station holds a Piece there" assert_json \
   '.stations | all(([.people[] | select(.busy)] | length) <= (.inProgress | length))' \
   "$stream"
+check "every step of the chain carries a name" assert_json \
+  '(.steps | length) > 0 and (.steps | all(.name != ""))' "$stream"
+check "every Work Station sits on a named step" assert_json \
+  '[.stations[].position] - [.steps[].position] | length == 0' "$stream"
 
 echo
 if [ "$failures" -eq 0 ]; then

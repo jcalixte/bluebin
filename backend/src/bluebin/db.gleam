@@ -89,6 +89,29 @@ alter table piece add column station_id text references work_station(id);
 alter table piece add column assignee text references person(id);
 "
 
+/// The name of each step of the chain — the position a Piece crosses, which
+/// may hold several Work Stations when the Value Stream splits into Branches.
+/// A team renames them to its own words (F41).
+const schema_v3 = "
+create table if not exists stream_step (
+  position   integer primary key,
+  name       text not null,
+  renamed_at text
+);
+"
+
+/// One row per position already in use, named after where the Pieces come from
+/// and then by rank, until the team renames them.
+const seed_steps_sql = "
+insert into stream_step (position, name)
+select w.position,
+       case when w.position = (select min(position) from work_station)
+            then 'From the Backlog'
+            else 'Step ' || w.position end
+from work_station w
+group by w.position;
+"
+
 /// One Value Stream's worth of Demands and Pieces, so a fresh instance shows
 /// real numbers instead of an empty screen.
 const seed_demands_sql = "
@@ -207,14 +230,17 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// `pragma user_version`. Every step runs at most once, in order.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use version <- result.try(user_version(connection))
-  [#(1, schema_v1), #(2, schema_v2)]
+  [#(1, schema_v1), #(2, schema_v2), #(3, schema_v3)]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
     case version < step_version {
       False -> Ok(Nil)
       True ->
         sqlight.exec(
-          sql <> "\npragma user_version = " <> int.to_string(step_version) <> ";",
+          sql
+            <> "\npragma user_version = "
+            <> int.to_string(step_version)
+            <> ";",
           connection,
         )
     }
@@ -241,7 +267,12 @@ fn user_version(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
 /// Seed only what is still empty, so a running instance is never overwritten.
 pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use _ <- result.try(seed_when_empty(connection, "demand", seed_demands_sql))
-  seed_when_empty(connection, "work_station", seed_value_stream_sql)
+  use _ <- result.try(seed_when_empty(
+    connection,
+    "work_station",
+    seed_value_stream_sql,
+  ))
+  seed_when_empty(connection, "stream_step", seed_steps_sql)
 }
 
 fn seed_when_empty(
