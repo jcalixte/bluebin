@@ -123,7 +123,9 @@ const taktLabel = computed(() => {
       <span>{{ actionError }}</span>
     </div>
 
-    <p v-if="loading" class="flex items-center gap-3 opacity-70">
+    <!-- Only the first load shows the spinner: a reload after an action keeps the
+         stream on screen, so the page keeps its scroll position. -->
+    <p v-if="loading && !valueStream" class="flex items-center gap-3 opacity-70">
       <span class="loading loading-spinner loading-sm" />
       Loading the Value Stream…
     </p>
