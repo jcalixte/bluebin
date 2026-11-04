@@ -1,11 +1,36 @@
 <script setup lang="ts">
-import { computed } from "vue"
-import FlowArrow from "../components/FlowArrow.vue"
+import { computed, ref } from "vue"
+import FlowConnectors from "../components/FlowConnectors.vue"
+import StepName from "../components/StepName.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useValueStream } from "../composables/useValueStream"
 import type { WorkStation } from "../types"
 
-const { valueStream, error, loading, load } = useValueStream()
+const { valueStream, error, loading, load, renameStep } = useValueStream()
+
+/** The longest step name the API accepts; kept in step with the backend. */
+const maxNameLength = 40
+
+const renameError = ref<string | null>(null)
+
+function stepName(position: number) {
+  return (
+    valueStream.value?.steps.find((step) => step.position === position)?.name ?? `Step ${position}`
+  )
+}
+
+async function rename(position: number, name: string) {
+  renameError.value = null
+  try {
+    await renameStep(position, name)
+  } catch (cause) {
+    renameError.value = cause instanceof Error ? cause.message : String(cause)
+    await load()
+  }
+}
+
+/** The element the connectors measure the cards against. */
+const streamEl = ref<HTMLElement | null>(null)
 
 /** One column per position in the chain; a Split shows as several Work
  *  Stations stacked in the same column, one per Branch. */
@@ -45,6 +70,10 @@ const taktLabel = computed(() => {
       <button class="btn btn-sm" :disabled="loading" @click="load">Refresh</button>
     </header>
 
+    <div v-if="renameError" role="alert" class="alert alert-error mb-4">
+      <span>The step was not renamed: {{ renameError }}</span>
+    </div>
+
     <p v-if="loading" class="flex items-center gap-3 opacity-70">
       <span class="loading loading-spinner loading-sm" />
       Loading the Value Stream…
@@ -56,23 +85,31 @@ const taktLabel = computed(() => {
 
     <p v-else-if="columns.length === 0" class="opacity-70">No Work Station yet.</p>
 
-    <div v-else class="flex gap-4 overflow-x-auto pb-4">
-      <template v-for="(column, index) in columns" :key="column.position">
-        <FlowArrow v-if="index > 0" :kanbans="column.kanbans" />
-        <div class="flex min-w-[15rem] flex-1 flex-col gap-3">
-          <p class="text-xs uppercase tracking-wide opacity-50">
-            {{ index === 0 ? "From the Backlog" : `Step ${column.position}` }}
-          </p>
-          <WorkStationCard
-            v-for="station in column.stations"
-            :key="station.id"
-            :station="station"
-          />
-          <p v-if="column.stations.length > 1" class="text-xs italic opacity-50">
-            {{ column.stations.length }} Branches in parallel
-          </p>
-        </div>
-      </template>
+    <div v-else class="overflow-x-auto pb-4">
+      <div ref="streamEl" class="relative flex min-w-max gap-4">
+        <template v-for="(column, index) in columns" :key="column.position">
+          <div v-if="index > 0" class="w-24 shrink-0" />
+          <div class="flex min-w-[15rem] flex-1 flex-col gap-3">
+            <StepName
+              :name="stepName(column.position)"
+              :max-length="maxNameLength"
+              @rename="(name) => rename(column.position, name)"
+            />
+            <div
+              v-for="station in column.stations"
+              :key="station.id"
+              :data-column="index"
+              :data-branch="station.branch ?? ''"
+            >
+              <WorkStationCard :station="station" />
+            </div>
+            <p v-if="column.stations.length > 1" class="text-xs italic opacity-50">
+              {{ column.stations.length }} Branches in parallel
+            </p>
+          </div>
+        </template>
+        <FlowConnectors :container="streamEl" :columns="columns" />
+      </div>
     </div>
   </section>
 </template>
