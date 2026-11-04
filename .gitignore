@@ -28,3 +28,6 @@ dist-ssr
 
 # Erlang crash dumps
 erl_crash.dump
+
+# Local SQLite of the backend, never committed
+backend/data/

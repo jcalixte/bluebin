@@ -7,8 +7,10 @@ import gleam/erlang/process
 import gleam/http
 import gleam/int
 import gleam/json
+import gleam/list
 import gleam/option.{None}
 import gleam/result
+import gleam/string
 import mist
 import simplifile
 import wisp
@@ -59,6 +61,14 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
     ["api", "deliver"] -> {
       use <- wisp.require_method(request, http.Post)
       deliver(request)
+    }
+    ["api", "rework"] -> {
+      use <- wisp.require_method(request, http.Post)
+      raise_rework(request)
+    }
+    ["api", "rework", "repair"] -> {
+      use <- wisp.require_method(request, http.Post)
+      repair_rework(request)
     }
     ["api", "steps", position] -> {
       use <- wisp.require_method(request, http.Put)
@@ -115,21 +125,26 @@ fn pull(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
+    use person <- decode.optional_field(
+      "person",
+      None,
+      decode.optional(decode.string),
+    )
     use reason <- decode.optional_field(
       "reason",
       None,
       decode.optional(decode.string),
     )
-    decode.success(#(station, reason))
+    decode.success(#(station, person, reason))
   }
 
   case decode.run(body, decoder) {
     Error(_) ->
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
-    Ok(#(station, reason)) ->
+    Ok(#(station, person, reason)) ->
       flow_response(
         db.with_connection(fn(connection) {
-          flow.pull(connection, station, reason)
+          flow.pull(connection, station, person, reason)
         }),
       )
   }
@@ -189,21 +204,30 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
           #("piece", json.string(flowed.piece)),
           #("demand", json.string(flowed.demand)),
           #(
-            "deviation",
-            json.nullable(
-              option.map(flowed.deviation, flow.rule_name),
-              json.string,
-            ),
+            "deviations",
+            json.array(flowed.deviations, fn(rule) {
+              json.string(flow.rule_name(rule))
+            }),
           ),
           #("kanbansSentTo", json.array(flowed.kanbans_sent_to, json.string)),
         ],
         200,
       )
-    Error(flow.NeedsConfirmation(rule)) ->
+    Error(flow.NeedsConfirmation(rules)) ->
       json_body(
         [
-          #("confirm", json.string(flow.rule_name(rule))),
-          #("message", json.string(flow.rule_warning(rule))),
+          #(
+            "confirm",
+            json.string(list.map(rules, flow.rule_name) |> string.join(" ")),
+          ),
+          #(
+            "rules",
+            json.array(rules, fn(rule) { json.string(flow.rule_name(rule)) }),
+          ),
+          #(
+            "message",
+            json.string(list.map(rules, flow.rule_warning) |> string.join(" ")),
+          ),
         ],
         409,
       )
@@ -244,8 +268,99 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
         ],
         409,
       )
+    Error(flow.NotUpstream) ->
+      json_body(
+        [
+          #("error", json.string("not_upstream")),
+          #(
+            "message",
+            json.string(
+              "A Piece never moves backward: the defect belongs to a Work Station it already crossed.",
+            ),
+          ),
+        ],
+        409,
+      )
+    Error(flow.EmptyDescription) ->
+      wisp.bad_request("a Rework says in one line what the defect is")
+    Error(flow.UnknownRework) ->
+      json_body(
+        [
+          #("error", json.string("unknown_rework")),
+          #("message", json.string("This Rework is already repaired.")),
+        ],
+        409,
+      )
     Error(flow.UnknownStation) -> wisp.not_found()
     Error(flow.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+// --- Jidoka: raise a Rework, repair it (F12, F13) ---
+
+/// `{"station": "ws-qa-ios", "piece": "p-offline-4-ios",
+///   "madeBy": "ws-ios", "description": "…"}` — the Work Station that found
+/// the defect names the one that made it.
+fn raise_rework(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use station <- decode.field("station", decode.string)
+    use piece <- decode.field("piece", decode.string)
+    use made_by <- decode.field("madeBy", decode.string)
+    use description <- decode.field("description", decode.string)
+    decode.success(#(station, piece, made_by, description))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request(
+        "expected a body like {\"station\": \"ws-qa-ios\", \"piece\": \"p-offline-4-ios\", \"madeBy\": \"ws-ios\", \"description\": \"…\"}",
+      )
+    Ok(#(station, piece, made_by, description)) ->
+      case
+        db.with_connection(fn(connection) {
+          flow.raise_rework(connection, station, piece, made_by, description)
+        })
+      {
+        Ok(raised) ->
+          json_body(
+            [
+              #("id", json.string(raised.id)),
+              #("piece", json.string(raised.piece)),
+              #("demand", json.string(raised.demand)),
+              #("assignee", json.nullable(raised.assignee, json.string)),
+              #("paused", json.nullable(raised.paused, json.string)),
+            ],
+            200,
+          )
+        Error(failure) -> flow_response(Error(failure))
+      }
+  }
+}
+
+/// `{"rework": "rw-…"}` — the defect is repaired and the Rework closes.
+fn repair_rework(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = decode.field("rework", decode.string, decode.success)
+
+  case decode.run(body, decoder) {
+    Error(_) -> wisp.bad_request("expected a body like {\"rework\": \"rw-1\"}")
+    Ok(rework) ->
+      case
+        db.with_connection(fn(connection) {
+          flow.repair_rework(connection, rework)
+        })
+      {
+        Ok(repaired) ->
+          json_body(
+            [
+              #("piece", json.string(repaired.piece)),
+              #("resumed", json.nullable(repaired.resumed, json.string)),
+            ],
+            200,
+          )
+        Error(failure) -> flow_response(Error(failure))
+      }
   }
 }
 

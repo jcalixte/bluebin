@@ -40,8 +40,29 @@ export type Deviation = {
 
 /** A Person of a Work Station, busy when they transform a Piece there. */
 export type Member = {
+  id: string
   name: string
   busy: boolean
+}
+
+/** A Piece in the hands of a Work Station, paused while its Person repairs a
+ *  Rework first (F13, F32). */
+export type InProgressPiece = {
+  id: string
+  piece: string
+  demand: string
+  person: string | null
+  paused: boolean
+}
+
+/** The repair of a defect, standing against the Work Station that made it. */
+export type Rework = {
+  id: string
+  piece: string
+  description: string
+  /** The Work Station that found the defect and holds the Piece. */
+  foundBy: string
+  assignee: string | null
 }
 
 export type WorkStation = {
@@ -54,8 +75,12 @@ export type WorkStation = {
   blueBins: BlueBin[]
   overflow: Overflow[]
   people: Member[]
-  inProgress: { id: string; piece: string; demand: string; person: string | null }[]
-  rework: { piece: string; description: string }[]
+  inProgress: InProgressPiece[]
+  rework: Rework[]
+  /** The share of Pieces that left and needed no Rework; null until one did. */
+  firstPassYield: number | null
+  /** Hours spent repairing the defects this Work Station made (F16). */
+  reworkHours: number
   deviations: Deviation[]
   kanbans: number
 }

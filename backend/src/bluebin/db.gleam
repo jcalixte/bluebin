@@ -133,6 +133,60 @@ delete from work_station;
 delete from person;
 "
 
+/// Jidoka: a Rework now says who found the defect, who repairs it and what
+/// that Person put down to do it, so the repair can be timed and given back.
+/// `piece_pass` records which Person transformed a Piece at a Work Station —
+/// the author a Rework goes to by default (F13), and the denominator of the
+/// First Pass Yield (F16).
+const schema_v6 = "
+alter table rework add column raised_by text references work_station(id);
+alter table rework add column assignee text references person(id);
+alter table rework add column started_at text;
+alter table rework add column paused_piece text references piece(id);
+
+create table if not exists piece_pass (
+  piece_id   text not null references piece(id),
+  station_id text not null references work_station(id),
+  person_id  text references person(id),
+  at         text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  primary key (piece_id, station_id)
+);
+"
+
+/// The passes a running instance never recorded: every Work Station a Piece
+/// already crossed, with the first Person of that Work Station. Demo data, so
+/// the First Pass Yield shows numbers from the first screen. Written with
+/// `insert or ignore`, which makes it safe to replay.
+const seed_passes_sql = "
+insert or ignore into piece_pass (piece_id, station_id, person_id, at)
+select p.id, w.id,
+       (select sp.person_id from station_person sp
+         where sp.station_id = w.id order by sp.rowid limit 1),
+       p.produced_at
+  from piece p, work_station w
+ where p.state = 'produced' and p.produced_at is not null;
+
+insert or ignore into piece_pass (piece_id, station_id, person_id, at)
+select p.id, w.id,
+       (select sp.person_id from station_person sp
+         where sp.station_id = w.id order by sp.rowid limit 1),
+       p.since
+  from piece p
+  join work_station here on here.id = p.station_id
+  join work_station w on w.branch is p.branch and w.position < here.position
+ where p.station_id is not null;
+
+update rework
+   set raised_by = coalesce(raised_by,
+         (select p.station_id from piece p where p.id = rework.piece_id)),
+       assignee = coalesce(assignee,
+         (select pp.person_id from piece_pass pp
+           where pp.station_id = rework.station_id
+             and pp.piece_id = rework.piece_id)),
+       started_at = coalesce(started_at, opened_at)
+ where closed_at is null;
+"
+
 /// The name of each step of the chain — the position a Piece crosses, which
 /// may hold several Work Stations when the Value Stream splits into Branches.
 /// A team renames them to its own words (F41).
@@ -266,8 +320,10 @@ insert into kanban (id, station_id) values
 
 -- QA iOS found a defect in the iOS part of US-4; the Rework is against the
 -- Work Station that made it.
-insert into rework (id, piece_id, station_id, description)
-values ('rw-1', 'p-offline-4-ios', 'ws-ios', 'Sync retries lose the last edit when the tunnel drops');
+insert into rework (id, piece_id, station_id, description, opened_at)
+values ('rw-1', 'p-offline-4-ios', 'ws-ios',
+        'Sync retries lose the last edit when the tunnel drops',
+        strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour'));
 "
 
 pub fn with_connection(run: fn(sqlight.Connection) -> a) -> a {
@@ -293,7 +349,7 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// Apply the schema steps the database has not seen yet, tracked in
 /// `pragma user_version`. Every step runs at most once, in order.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  migrate_to(connection, 5)
+  migrate_to(connection, 6)
 }
 
 /// Apply the schema steps up to `target` only, so a test can rebuild a
@@ -309,6 +365,7 @@ pub fn migrate_to(
     #(3, schema_v3),
     #(4, schema_v4),
     #(5, schema_v5),
+    #(6, schema_v6 <> seed_passes_sql),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
@@ -349,7 +406,7 @@ pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use _ <- result.try(seed_when_empty(
     connection,
     "work_station",
-    seed_value_stream_sql,
+    seed_value_stream_sql <> seed_passes_sql,
   ))
   seed_when_empty(connection, "stream_step", seed_steps_sql)
 }

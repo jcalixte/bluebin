@@ -6,7 +6,18 @@ import WorkStationCard from "../components/WorkStationCard.vue"
 import { useValueStream } from "../composables/useValueStream"
 import type { FlowConfirm, WorkStation } from "../types"
 
-const { valueStream, error, loading, load, renameStep, pull, finish, deliver } = useValueStream()
+const {
+  valueStream,
+  error,
+  loading,
+  load,
+  renameStep,
+  pull,
+  finish,
+  deliver,
+  raiseRework,
+  repairRework,
+} = useValueStream()
 
 /** The longest step name the API accepts; kept in step with the backend. */
 const maxNameLength = 40
@@ -64,6 +75,47 @@ async function recordDeviation() {
   const action = pending.value.again
   pending.value = null
   await run(() => action(why))
+}
+
+// --- Jidoka: raise a Rework on the Piece in hand (F12, F13) ---
+
+/** The Piece a Work Station found a defect in, waiting for the defect to be
+ *  named and described. */
+const raising = ref<{ station: WorkStation; piece: string; reference: string } | null>(null)
+const madeBy = ref("")
+const defect = ref("")
+
+function openRework(station: WorkStation, piece: string) {
+  raising.value = {
+    station,
+    piece,
+    reference: station.inProgress.find((one) => one.id === piece)?.piece ?? piece,
+  }
+  madeBy.value = ""
+  defect.value = ""
+}
+
+/** The Work Stations the Piece already crossed: an earlier position, in the
+ *  trunk or in the same Branch. A Piece never moves backward. */
+const madeByChoices = computed(() => {
+  const found = raising.value?.station
+  if (!found) {
+    return []
+  }
+  return (valueStream.value?.stations ?? []).filter(
+    (one) =>
+      one.position < found.position &&
+      (one.branch === null || found.branch === null || one.branch === found.branch),
+  )
+})
+
+async function recordRework() {
+  const asked = raising.value
+  if (!asked || madeBy.value === "" || defect.value.trim() === "") {
+    return
+  }
+  raising.value = null
+  await run(() => raiseRework(asked.station.id, asked.piece, madeBy.value, defect.value.trim()))
 }
 
 /** The last step of the chain: production pulls out of its Blue Bins. */
@@ -159,9 +211,11 @@ const taktLabel = computed(() => {
                   station.branch === null && (columns[index - 1]?.stations.length ?? 0) > 1
                 "
                 :busy="busy"
-                @pull="run((why) => pull(station.id, why))"
+                @pull="(who) => run((why) => pull(station.id, who, why))"
                 @finish="(piece) => run((why) => finish(station.id, piece, why))"
                 @deliver="(piece) => run(() => deliver(piece))"
+                @rework="(piece) => openRework(station, piece)"
+                @repair="(rework) => run(() => repairRework(rework))"
               />
             </div>
             <p v-if="column.stations.length > 1" class="text-xs italic opacity-50">
@@ -172,6 +226,45 @@ const taktLabel = computed(() => {
         <FlowConnectors :container="streamEl" :columns="columns" />
       </div>
     </div>
+
+    <dialog v-if="raising" class="modal modal-open">
+      <div class="modal-box">
+        <h3 class="text-lg font-semibold">A defect in {{ raising.reference }}</h3>
+        <p class="py-2 text-sm opacity-80">
+          The Piece stays here: name the Work Station that made the defect, and one of its People
+          comes to repair it.
+        </p>
+        <label class="form-control">
+          <span class="label-text text-sm">Made by</span>
+          <select v-model="madeBy" class="select select-bordered mt-1 w-full">
+            <option value="" disabled>Pick a Work Station</option>
+            <option v-for="one in madeByChoices" :key="one.id" :value="one.id">
+              {{ one.name }}
+            </option>
+          </select>
+        </label>
+        <label class="form-control mt-2">
+          <span class="label-text text-sm">What is wrong? One line.</span>
+          <input
+            v-model="defect"
+            class="input input-bordered mt-1 w-full"
+            maxlength="120"
+            placeholder="Sync retries lose the last edit"
+            @keyup.enter="recordRework"
+          />
+        </label>
+        <div class="modal-action">
+          <button class="btn btn-ghost" @click="raising = null">Cancel</button>
+          <button
+            class="btn btn-error"
+            :disabled="busy || madeBy === '' || defect.trim() === ''"
+            @click="recordRework"
+          >
+            Raise the Rework
+          </button>
+        </div>
+      </div>
+    </dialog>
 
     <dialog v-if="pending" class="modal modal-open">
       <div class="modal-box">

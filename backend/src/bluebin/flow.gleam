@@ -12,6 +12,9 @@ import sqlight
 pub type Rule {
   PullWithoutKanban
   SecondPieceInABlueBin
+  /// Jidoka: while the Rework this Work Station raised is open, it repairs or
+  /// helps downstream — it does not start another Piece (F14).
+  PullWithAnOpenRework
 }
 
 pub type FlowError {
@@ -21,8 +24,16 @@ pub type FlowError {
   /// wait in the last Blue Bin of their Branch (F8).
   NothingToAssemble
   PieceNotHere
-  /// The action breaks a pull rule: the Person must confirm it with a reason.
-  NeedsConfirmation(Rule)
+  /// The action breaks one or more rules: the Person must confirm it with a
+  /// reason, which records one Deviation per rule broken.
+  NeedsConfirmation(List(Rule))
+  /// A defect is named against a Work Station that is not upstream of the one
+  /// that found it; a Piece never moves backward.
+  NotUpstream
+  /// A Rework says in one line what the defect is.
+  EmptyDescription
+  /// No open Rework carries that id.
+  UnknownRework
   StoreFailed
 }
 
@@ -32,7 +43,7 @@ pub type Flowed {
   Flowed(
     piece: String,
     demand: String,
-    deviation: Option(Rule),
+    deviations: List(Rule),
     kanbans_sent_to: List(String),
   )
 }
@@ -41,6 +52,7 @@ pub fn rule_name(rule: Rule) -> String {
   case rule {
     PullWithoutKanban -> "pull_without_kanban"
     SecondPieceInABlueBin -> "second_piece_in_a_blue_bin"
+    PullWithAnOpenRework -> "pull_with_an_open_rework"
   }
 }
 
@@ -51,6 +63,8 @@ pub fn rule_warning(rule: Rule) -> String {
       "This Work Station holds no Kanban, so nothing downstream asked for a Piece. Pulling one anyway is a Deviation."
     SecondPieceInABlueBin ->
       "Every Blue Bin of this Work Station is full. Putting a second Piece in one is a Deviation."
+    PullWithAnOpenRework ->
+      "This Work Station found a defect and its Rework is still open. Starting another Piece before it is repaired is a Deviation."
   }
 }
 
@@ -67,6 +81,7 @@ pub fn rule_warning(rule: Rule) -> String {
 pub fn pull(
   connection: sqlight.Connection,
   station_id: String,
+  person: Option(String),
   reason: Option(String),
 ) -> Result(Flowed, FlowError) {
   use <- in_transaction(connection)
@@ -80,13 +95,34 @@ pub fn pull(
     Assembly -> next_complete_piece(connection, station)
   })
 
-  use deviation <- result.try(spend_kanban(connection, station, source, reason))
+  use kanban <- result.try(oldest_kanban(connection, station.id))
+  use open_rework <- result.try(has_an_open_rework(connection, station.id))
+  let broken =
+    list.append(
+      case open_rework {
+        True -> [PullWithAnOpenRework]
+        False -> []
+      },
+      case kanban {
+        None -> [PullWithoutKanban]
+        Some(_) -> []
+      },
+    )
+  use deviations <- result.try(record_deviations(
+    connection,
+    broken,
+    station.id,
+    source.id,
+    reason,
+  ))
+  use _ <- result.try(spend_kanban(connection, kanban))
 
   use #(pulled, sent) <- result.try(case kind {
     FromBacklog | Straight -> take_whole(connection, station, source)
     AtSplit -> split_off(connection, station, source)
     Assembly -> assemble(connection, station, source)
   })
+  use _ <- result.try(take_in_hand(connection, pulled.0, station.id, person))
 
   use _ <- result.try(record_event(
     connection,
@@ -104,7 +140,7 @@ pub fn pull(
   Ok(Flowed(
     piece: pulled.1,
     demand: source.demand,
-    deviation:,
+    deviations:,
     kanbans_sent_to: sent,
   ))
 }
@@ -128,17 +164,20 @@ pub fn finish(
   ))
 
   use free <- result.try(free_blue_bins(connection, station.id))
-  use deviation <- result.try(case free > 0 {
-    True -> Ok(None)
-    False ->
-      record_deviation(
-        connection,
-        SecondPieceInABlueBin,
-        station.id,
-        piece.id,
-        reason,
-      )
-  })
+  use deviations <- result.try(record_deviations(
+    connection,
+    case free > 0 {
+      True -> []
+      False -> [SecondPieceInABlueBin]
+    },
+    station.id,
+    piece.id,
+    reason,
+  ))
+
+  // Who transformed the Piece here: the author a Rework goes to (F13), and
+  // one more Piece out of this Work Station for its First Pass Yield (F16).
+  use _ <- result.try(record_pass(connection, piece.id, station.id))
 
   use _ <- result.try(
     write(
@@ -162,7 +201,7 @@ pub fn finish(
     Flowed(
       piece: piece.reference,
       demand: piece.demand,
-      deviation:,
+      deviations:,
       kanbans_sent_to: [],
     ),
   )
@@ -202,9 +241,257 @@ pub fn deliver(
   Ok(Flowed(
     piece: piece.reference,
     demand: piece.demand,
-    deviation: None,
+    deviations: [],
     kanbans_sent_to: sent,
   ))
+}
+
+// --- Jidoka: a defect stops where it is found (F12, F13, F14, F32) ---
+
+/// A Rework just raised: who repairs it, and what that Person put down.
+pub type Raised {
+  Raised(
+    id: String,
+    piece: String,
+    demand: String,
+    assignee: Option(String),
+    paused: Option(String),
+  )
+}
+
+/// A Rework just closed, and the Piece its author takes up again.
+pub type Repaired {
+  Repaired(piece: String, resumed: Option(String))
+}
+
+/// A Work Station finds a defect in the Piece it holds and names the Work
+/// Station that made it (F12). The Piece never moves backward: it stays in
+/// these hands, and the repair goes by default to its author — the Person who
+/// transformed it at that Work Station — whose current Piece is paused so the
+/// repair comes first (F13, F32).
+pub fn raise_rework(
+  connection: sqlight.Connection,
+  station_id: String,
+  piece_id: String,
+  made_by_id: String,
+  description: String,
+) -> Result(Raised, FlowError) {
+  use <- in_transaction(connection)
+  let description = string.trim(description)
+  use <- bool.guard(description == "", Error(EmptyDescription))
+
+  use found_by <- result.try(load_station(connection, station_id))
+  use made_by <- result.try(load_station(connection, made_by_id))
+  use <- bool.guard(!upstream_of(made_by, found_by), Error(NotUpstream))
+  use piece <- result.try(load_piece_at(
+    connection,
+    piece_id,
+    found_by.id,
+    "in_flow",
+  ))
+
+  use author <- result.try(author_of(connection, piece.id, made_by.id))
+  use paused <- result.try(case author {
+    None -> Ok(None)
+    Some(#(person, _)) -> current_piece_of(connection, person, piece.id)
+  })
+
+  let opened =
+    sqlight.query(
+      "insert into rework (id, piece_id, station_id, description, raised_by,
+                           assignee, started_at, paused_piece)
+       values ('rw-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5,
+               case when ?5 is null then null
+                    else strftime('%Y-%m-%dT%H:%M:%SZ', 'now') end,
+               ?6)
+       returning id",
+      on: connection,
+      with: [
+        sqlight.text(piece.id),
+        sqlight.text(made_by.id),
+        sqlight.text(description),
+        sqlight.text(found_by.id),
+        sqlight.nullable(sqlight.text, option.map(author, fn(one) { one.0 })),
+        sqlight.nullable(sqlight.text, option.map(paused, fn(one) { one.0 })),
+      ],
+      expecting: decode.at([0], decode.string),
+    )
+  use id <- result.try(case opened {
+    Ok([id, ..]) -> Ok(id)
+    _ -> Error(StoreFailed)
+  })
+
+  use _ <- result.try(case paused {
+    None -> Ok(Nil)
+    Some(#(paused_id, _)) ->
+      write(
+        connection,
+        "update piece set state = 'paused',
+                          since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+          where id = ?1 and state = 'in_flow'",
+        [sqlight.text(paused_id)],
+      )
+  })
+
+  use _ <- result.try(record_event(
+    connection,
+    "rework_raised",
+    Some(piece.id),
+    json.object([
+      #("station", json.string(made_by.id)),
+      #("raisedBy", json.string(found_by.id)),
+      #("description", json.string(description)),
+    ]),
+  ))
+
+  Ok(Raised(
+    id:,
+    piece: piece.reference,
+    demand: piece.demand,
+    assignee: option.map(author, fn(one) { one.1 }),
+    paused: option.map(paused, fn(one) { one.1 }),
+  ))
+}
+
+/// The defect is repaired: the Rework closes, and the Piece its author put
+/// down goes back in their hands.
+pub fn repair_rework(
+  connection: sqlight.Connection,
+  rework_id: String,
+) -> Result(Repaired, FlowError) {
+  use <- in_transaction(connection)
+
+  let decoder = {
+    use piece_id <- decode.field(0, decode.string)
+    use reference <- decode.field(1, decode.string)
+    use paused <- decode.field(2, decode.optional(decode.string))
+    use paused_reference <- decode.field(3, decode.optional(decode.string))
+    decode.success(#(piece_id, reference, paused, paused_reference))
+  }
+  let found =
+    sqlight.query(
+      "select r.piece_id, p.reference, r.paused_piece,
+              (select q.reference from piece q where q.id = r.paused_piece)
+         from rework r
+         join piece p on p.id = r.piece_id
+        where r.id = ?1 and r.closed_at is null",
+      on: connection,
+      with: [sqlight.text(rework_id)],
+      expecting: decoder,
+    )
+  use #(piece_id, reference, paused, paused_reference) <- result.try(
+    case found {
+      Error(_) -> Error(StoreFailed)
+      Ok([]) -> Error(UnknownRework)
+      Ok([rework, ..]) -> Ok(rework)
+    },
+  )
+
+  use _ <- result.try(
+    write(
+      connection,
+      "update rework
+          set closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        where id = ?1",
+      [sqlight.text(rework_id)],
+    ),
+  )
+
+  use resumed <- result.try(case paused {
+    None -> Ok(None)
+    Some(paused_id) -> {
+      use _ <- result.try(
+        write(
+          connection,
+          "update piece set state = 'in_flow',
+                            since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            where id = ?1 and state = 'paused'",
+          [sqlight.text(paused_id)],
+        ),
+      )
+      Ok(paused_reference)
+    }
+  })
+
+  use _ <- result.try(record_event(
+    connection,
+    "rework_repaired",
+    Some(piece_id),
+    json.object([#("rework", json.string(rework_id))]),
+  ))
+
+  Ok(Repaired(piece: reference, resumed:))
+}
+
+/// A defect is named against a Work Station the Piece already crossed: an
+/// earlier position, in the trunk or in the same Branch.
+fn upstream_of(made_by: Station, found_by: Station) -> Bool {
+  made_by.position < found_by.position
+  && case made_by.branch, found_by.branch {
+    Some(one), Some(other) -> one == other
+    _, _ -> True
+  }
+}
+
+/// The Person who transformed this Piece at that Work Station — of the Piece
+/// itself, or of one of its Sub-Pieces when the defect was made in a Branch.
+fn author_of(
+  connection: sqlight.Connection,
+  piece_id: String,
+  station_id: String,
+) -> Result(Option(#(String, String)), FlowError) {
+  let decoder = {
+    use id <- decode.field(0, decode.string)
+    use name <- decode.field(1, decode.string)
+    decode.success(#(id, name))
+  }
+  let found =
+    sqlight.query(
+      "select pp.person_id, pe.name
+         from piece_pass pp
+         join person pe on pe.id = pp.person_id
+        where pp.station_id = ?2
+          and (pp.piece_id = ?1
+               or pp.piece_id in (select s.id from piece s
+                                   where s.parent_id = ?1))
+        order by pp.at desc
+        limit 1",
+      on: connection,
+      with: [sqlight.text(piece_id), sqlight.text(station_id)],
+      expecting: decoder,
+    )
+  case found {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Ok(None)
+    Ok([author, ..]) -> Ok(Some(author))
+  }
+}
+
+/// The Piece that Person is transforming right now, which the Rework pauses.
+fn current_piece_of(
+  connection: sqlight.Connection,
+  person_id: String,
+  except: String,
+) -> Result(Option(#(String, String)), FlowError) {
+  let decoder = {
+    use id <- decode.field(0, decode.string)
+    use reference <- decode.field(1, decode.string)
+    decode.success(#(id, reference))
+  }
+  let found =
+    sqlight.query(
+      "select id, reference from piece
+        where assignee = ?1 and state = 'in_flow' and id <> ?2
+        order by since limit 1",
+      on: connection,
+      with: [sqlight.text(person_id), sqlight.text(except)],
+      expecting: decoder,
+    )
+  case found {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Ok(None)
+    Ok([piece, ..]) -> Ok(Some(piece))
+  }
 }
 
 // --- How a pull moves its Piece ---
@@ -618,42 +905,97 @@ fn held_decoder() -> decode.Decoder(Held) {
 
 // --- Kanbans, Blue Bins and Deviations ---
 
-/// Spend the oldest Kanban of the Work Station. With none, the pull breaks a
-/// rule: it needs a confirmed reason, and becomes a Deviation (F6).
-fn spend_kanban(
+/// The oldest Kanban of the Work Station, the one a pull spends. None means
+/// nothing downstream asked for a Piece: pulling anyway is a Deviation (F6).
+fn oldest_kanban(
   connection: sqlight.Connection,
-  station: Station,
-  source: Source,
-  reason: Option(String),
-) -> Result(Option(Rule), FlowError) {
+  station_id: String,
+) -> Result(Option(String), FlowError) {
   let oldest =
     sqlight.query(
       "select id from kanban where station_id = ?1
        order by created_at, rowid limit 1",
       on: connection,
-      with: [sqlight.text(station.id)],
+      with: [sqlight.text(station_id)],
       expecting: decode.at([0], decode.string),
     )
-
   case oldest {
     Error(_) -> Error(StoreFailed)
-    Ok([kanban, ..]) -> {
-      use _ <- result.try(
-        write(connection, "delete from kanban where id = ?1", [
-          sqlight.text(kanban),
-        ]),
-      )
-      Ok(None)
-    }
-    Ok([]) ->
-      record_deviation(
+    Ok([]) -> Ok(None)
+    Ok([kanban, ..]) -> Ok(Some(kanban))
+  }
+}
+
+fn spend_kanban(
+  connection: sqlight.Connection,
+  kanban: Option(String),
+) -> Result(Nil, FlowError) {
+  case kanban {
+    None -> Ok(Nil)
+    Some(id) ->
+      write(connection, "delete from kanban where id = ?1", [sqlight.text(id)])
+  }
+}
+
+/// Whether the Work Station is waiting on a defect it found itself: until the
+/// repair is done, it does not start another Piece (F14).
+fn has_an_open_rework(
+  connection: sqlight.Connection,
+  station_id: String,
+) -> Result(Bool, FlowError) {
+  let open =
+    sqlight.query(
+      "select count(*) from rework
+       where raised_by = ?1 and closed_at is null",
+      on: connection,
+      with: [sqlight.text(station_id)],
+      expecting: decode.at([0], decode.int),
+    )
+  case open {
+    Ok([count, ..]) -> Ok(count > 0)
+    Ok([]) -> Ok(False)
+    Error(_) -> Error(StoreFailed)
+  }
+}
+
+/// The Person of the Work Station who takes the Piece in hand. A name that is
+/// not of this Work Station leaves the Piece unassigned.
+fn take_in_hand(
+  connection: sqlight.Connection,
+  piece_id: String,
+  station_id: String,
+  person: Option(String),
+) -> Result(Nil, FlowError) {
+  case person {
+    None -> Ok(Nil)
+    Some(person) ->
+      write(
         connection,
-        PullWithoutKanban,
-        station.id,
-        source.id,
-        reason,
+        "update piece
+            set assignee = (select sp.person_id from station_person sp
+                             where sp.station_id = ?2 and sp.person_id = ?3)
+          where id = ?1",
+        [
+          sqlight.text(piece_id),
+          sqlight.text(station_id),
+          sqlight.text(person),
+        ],
       )
   }
+}
+
+/// One Piece more out of this Work Station, by the Person who transformed it.
+fn record_pass(
+  connection: sqlight.Connection,
+  piece_id: String,
+  station_id: String,
+) -> Result(Nil, FlowError) {
+  write(
+    connection,
+    "insert or replace into piece_pass (piece_id, station_id, person_id)
+     select ?1, ?2, assignee from piece where id = ?1",
+    [sqlight.text(piece_id), sqlight.text(station_id)],
+  )
 }
 
 /// How many Blue Bins of the Work Station hold no Piece. Negative is possible:
@@ -706,44 +1048,60 @@ fn send_kanban(
   }
 }
 
-/// Record a broken rule with the one-line reason the Person gave (F31). With
-/// no reason, nothing is written and the caller is asked to confirm first.
+/// Record every rule the action breaks, with the one-line reason the Person
+/// gave (F31). With no reason, nothing is written and the caller is asked to
+/// confirm first; an action that breaks no rule asks for nothing.
+fn record_deviations(
+  connection: sqlight.Connection,
+  rules: List(Rule),
+  station_id: String,
+  piece_id: String,
+  reason: Option(String),
+) -> Result(List(Rule), FlowError) {
+  use <- bool.guard(rules == [], Ok([]))
+  case option.map(reason, string.trim) {
+    None | Some("") -> Error(NeedsConfirmation(rules))
+    Some(reason) -> {
+      use _ <- result.try(
+        list.try_map(rules, fn(rule) {
+          record_deviation(connection, rule, station_id, piece_id, reason)
+        }),
+      )
+      Ok(rules)
+    }
+  }
+}
+
 fn record_deviation(
   connection: sqlight.Connection,
   rule: Rule,
   station_id: String,
   piece_id: String,
-  reason: Option(String),
-) -> Result(Option(Rule), FlowError) {
-  case option.map(reason, string.trim) {
-    None | Some("") -> Error(NeedsConfirmation(rule))
-    Some(reason) -> {
-      use _ <- result.try(
-        write(
-          connection,
-          "insert into deviation (rule, station_id, piece_id, reason)
-         values (?1, ?2, ?3, ?4)",
-          [
-            sqlight.text(rule_name(rule)),
-            sqlight.text(station_id),
-            sqlight.text(piece_id),
-            sqlight.text(reason),
-          ],
-        ),
-      )
-      use _ <- result.try(record_event(
-        connection,
-        "deviation",
-        Some(piece_id),
-        json.object([
-          #("rule", json.string(rule_name(rule))),
-          #("station", json.string(station_id)),
-          #("reason", json.string(reason)),
-        ]),
-      ))
-      Ok(Some(rule))
-    }
-  }
+  reason: String,
+) -> Result(Nil, FlowError) {
+  use _ <- result.try(
+    write(
+      connection,
+      "insert into deviation (rule, station_id, piece_id, reason)
+       values (?1, ?2, ?3, ?4)",
+      [
+        sqlight.text(rule_name(rule)),
+        sqlight.text(station_id),
+        sqlight.text(piece_id),
+        sqlight.text(reason),
+      ],
+    ),
+  )
+  record_event(
+    connection,
+    "deviation",
+    Some(piece_id),
+    json.object([
+      #("rule", json.string(rule_name(rule))),
+      #("station", json.string(station_id)),
+      #("reason", json.string(reason)),
+    ]),
+  )
 }
 
 fn record_event(

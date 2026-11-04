@@ -70,6 +70,25 @@ check "a Blue Bin over its count shows as overflow" assert_json \
 check "every Deviation names its rule and its reason" assert_json \
   '.stations | all(.deviations | all((.rule | length) > 0 and (.reason | length) > 0))' \
   "$stream"
+check "every open Rework says what it is, who found it and who repairs it" \
+  assert_json \
+  '.stations | all(.rework | all((.id | length) > 0 and (.piece | length) > 0
+     and (.description | length) > 0 and (.foundBy | length) > 0
+     and (.assignee == null or (.assignee | length) > 0)))' "$stream"
+check "the Work Station that found a defect holds the Piece of its Rework" \
+  assert_json \
+  '[.stations[].rework[].piece] - [.stations[].inProgress[].piece] | length == 0' \
+  "$stream"
+check "every First Pass Yield is a share, or none until a Piece has left" \
+  assert_json \
+  '.stations | all(.firstPassYield == null
+     or (.firstPassYield >= 0 and .firstPassYield <= 1))' "$stream"
+check "no Work Station reports a negative Rework Time" assert_json \
+  '.stations | all(.reworkHours >= 0)' "$stream"
+check "a paused Piece waits for a Rework its Person repairs first" assert_json \
+  '.stations | all(.inProgress | all(.paused | type == "boolean"))' "$stream"
+check "every Person carries the id an action needs" assert_json \
+  '.stations | all(.people | all((.id | length) > 0))' "$stream"
 check "every step of the chain carries a name" assert_json \
   '(.steps | length) > 0 and (.steps | all(.name != ""))' "$stream"
 check "every Work Station sits on a named step" assert_json \

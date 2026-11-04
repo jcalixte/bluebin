@@ -45,8 +45,10 @@ export function useValueStream() {
     return null
   }
 
-  /** A Work Station spends a Kanban and takes the first Piece upstream. */
-  const pull = (station: string, reason?: string) => act("/api/pull", { station, reason })
+  /** A Work Station spends a Kanban and takes the first Piece upstream. The
+   *  Person who takes it in hand is the author a later Rework goes to. */
+  const pull = (station: string, person?: string, reason?: string) =>
+    act("/api/pull", { station, person, reason })
 
   /** The Piece leaves the hands of the Work Station for one of its Blue Bins. */
   const finish = (station: string, piece: string, reason?: string) =>
@@ -54,6 +56,14 @@ export function useValueStream() {
 
   /** Production pulls the Piece out of the last Blue Bin of the chain. */
   const deliver = (piece: string) => act("/api/deliver", { piece })
+
+  /** The Work Station holding the Piece raises a Rework against the Work
+   *  Station that made the defect (F12). */
+  const raiseRework = (station: string, piece: string, madeBy: string, description: string) =>
+    act("/api/rework", { station, piece, madeBy, description })
+
+  /** The defect is repaired: the Rework closes and the paused Piece resumes. */
+  const repairRework = (rework: string) => act("/api/rework/repair", { rework })
 
   /** Rename one step. The server trims and validates; its answer wins. */
   async function renameStep(position: number, name: string) {
@@ -74,5 +84,16 @@ export function useValueStream() {
 
   onMounted(load)
 
-  return { valueStream, error, loading, load, renameStep, pull, finish, deliver }
+  return {
+    valueStream,
+    error,
+    loading,
+    load,
+    renameStep,
+    pull,
+    finish,
+    deliver,
+    raiseRework,
+    repairRework,
+  }
 }

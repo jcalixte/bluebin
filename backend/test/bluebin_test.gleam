@@ -191,9 +191,9 @@ pub fn a_pull_spends_a_kanban_and_sends_one_upstream_test() {
   use connection <- with_seeded_database()
   // Tech Conception holds a Kanban; Analysis has a Piece to finish first.
   let assert Ok(_) = flow.finish(connection, "ws-analysis", "p-billing-2", None)
-  let assert Ok(flowed) = flow.pull(connection, "ws-conception", None)
+  let assert Ok(flowed) = flow.pull(connection, "ws-conception", None, None)
   assert flowed.piece == "US-2"
-  assert flowed.deviation == None
+  assert flowed.deviations == []
   assert flowed.kanbans_sent_to == ["ws-analysis"]
   assert kanbans(connection, "ws-conception") == 0
   assert state_of(connection, "p-billing-2") == "in_flow"
@@ -205,7 +205,7 @@ pub fn the_first_work_station_pulls_out_of_the_backlog_test() {
   let backlog =
     count(connection, "select count(*) from piece where state = 'backlog'")
 
-  let assert Ok(flowed) = flow.pull(connection, "ws-analysis", None)
+  let assert Ok(flowed) = flow.pull(connection, "ws-analysis", None, None)
   // Nothing sits upstream of the first Work Station, so no Kanban goes back.
   assert flowed.kanbans_sent_to == []
   assert kanbans(connection, "ws-analysis") == 0
@@ -218,26 +218,26 @@ pub fn the_first_work_station_pulls_out_of_the_backlog_test() {
 pub fn each_branch_pulls_its_own_sub_piece_at_the_split_test() {
   use connection <- with_seeded_database()
   // US-9 waits in Tech Conception's Blue Bin. iOS pulls first...
-  let assert Ok(ios) = flow.pull(connection, "ws-ios", None)
+  let assert Ok(ios) = flow.pull(connection, "ws-ios", None, None)
   assert ios.piece == "US-9 · iOS"
   // ...and the Piece stays in the Blue Bin, so Web can still pull its part.
   assert state_of(connection, "p-checkout-9") == "in_bin"
   assert ios.kanbans_sent_to == []
 
-  let assert Ok(web) = flow.pull(connection, "ws-web", None)
+  let assert Ok(web) = flow.pull(connection, "ws-web", None, None)
   assert web.piece == "US-9 · Web"
   // A Branch never pulls the same Piece twice.
-  assert flow.pull(connection, "ws-web", Some("again"))
+  assert flow.pull(connection, "ws-web", None, Some("again"))
     == Error(flow.NothingToPull)
 }
 
 pub fn the_piece_leaves_the_trunk_when_the_last_branch_pulls_test() {
   use connection <- with_seeded_database()
-  let assert Ok(_) = flow.pull(connection, "ws-web", None)
-  let assert Ok(_) = flow.pull(connection, "ws-ios", None)
+  let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
+  let assert Ok(_) = flow.pull(connection, "ws-ios", None, None)
   assert kanbans(connection, "ws-conception") == 1
 
-  let assert Ok(android) = flow.pull(connection, "ws-android", None)
+  let assert Ok(android) = flow.pull(connection, "ws-android", None, None)
   // The Blue Bin is empty only now: Tech Conception gets its Kanban back.
   assert android.kanbans_sent_to == ["ws-conception"]
   assert kanbans(connection, "ws-conception") == 2
@@ -255,17 +255,30 @@ pub fn a_branch_pulls_inside_itself_test() {
   use connection <- with_seeded_database()
   // QA iOS holds no Kanban; iOS has US-8's iOS part in a Blue Bin.
   assert kanbans(connection, "ws-qa-ios") == 0
-  assert flow.pull(connection, "ws-qa-ios", None)
-    == Error(flow.NeedsConfirmation(flow.PullWithoutKanban))
+  // It holds no Kanban, and the Rework it raised is still open: one pull,
+  // two rules broken, two Deviations once the reason is given.
+  assert flow.pull(connection, "ws-qa-ios", None, None)
+    == Error(
+      flow.NeedsConfirmation([
+        flow.PullWithAnOpenRework,
+        flow.PullWithoutKanban,
+      ]),
+    )
   // The warning changed nothing.
   assert state_of(connection, "p-checkout-8-ios") == "in_bin"
-  assert flow.pull(connection, "ws-qa-ios", Some("   "))
-    == Error(flow.NeedsConfirmation(flow.PullWithoutKanban))
+  assert flow.pull(connection, "ws-qa-ios", None, Some("   "))
+    == Error(
+      flow.NeedsConfirmation([
+        flow.PullWithAnOpenRework,
+        flow.PullWithoutKanban,
+      ]),
+    )
 
   let assert Ok(flowed) =
-    flow.pull(connection, "ws-qa-ios", Some("Blocking the demo"))
+    flow.pull(connection, "ws-qa-ios", None, Some("Blocking the demo"))
   assert flowed.piece == "US-8 · iOS"
-  assert flowed.deviation == Some(flow.PullWithoutKanban)
+  assert flowed.deviations
+    == [flow.PullWithAnOpenRework, flow.PullWithoutKanban]
   assert flowed.kanbans_sent_to == ["ws-ios"]
   assert count(
       connection,
@@ -281,7 +294,8 @@ pub fn a_branch_pulls_inside_itself_test() {
 pub fn the_assembly_waits_for_every_sub_piece_test() {
   use connection <- with_seeded_database()
   // US-4: Web and Android parts wait in QA, the iOS part is still in hand.
-  assert flow.pull(connection, "ws-uat", None) == Error(flow.NothingToAssemble)
+  assert flow.pull(connection, "ws-uat", None, None)
+    == Error(flow.NothingToAssemble)
   assert state_of(connection, "p-offline-4-web") == "in_bin"
 }
 
@@ -290,7 +304,7 @@ pub fn the_assembly_joins_the_sub_pieces_and_sends_each_branch_a_kanban_test() {
   let assert Ok(_) =
     flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
 
-  let assert Ok(flowed) = flow.pull(connection, "ws-uat", None)
+  let assert Ok(flowed) = flow.pull(connection, "ws-uat", None, None)
   assert flowed.piece == "US-4"
   assert list.sort(flowed.kanbans_sent_to, string.compare)
     == ["ws-qa-android", "ws-qa-ios", "ws-qa-web"]
@@ -315,7 +329,7 @@ pub fn finishing_a_piece_puts_it_in_a_blue_bin_test() {
   let assert Ok(flowed) =
     flow.finish(connection, "ws-analysis", "p-billing-2", None)
   assert flowed.piece == "US-2"
-  assert flowed.deviation == None
+  assert flowed.deviations == []
   assert state_of(connection, "p-billing-2") == "in_bin"
   assert kanbans_over_empty_blue_bins(connection) == 0
 }
@@ -329,7 +343,7 @@ pub fn a_second_piece_in_a_blue_bin_is_warned_then_recorded_test() {
   )
 
   assert flow.finish(connection, "ws-analysis", "p-billing-2", None)
-    == Error(flow.NeedsConfirmation(flow.SecondPieceInABlueBin))
+    == Error(flow.NeedsConfirmation([flow.SecondPieceInABlueBin]))
   assert state_of(connection, "p-billing-2") == "in_flow"
 
   let assert Ok(flowed) =
@@ -339,7 +353,7 @@ pub fn a_second_piece_in_a_blue_bin_is_warned_then_recorded_test() {
       "p-billing-2",
       Some("UAT asked for it today"),
     )
-  assert flowed.deviation == Some(flow.SecondPieceInABlueBin)
+  assert flowed.deviations == [flow.SecondPieceInABlueBin]
   assert state_of(connection, "p-billing-2") == "in_bin"
 }
 
@@ -347,7 +361,8 @@ pub fn a_piece_the_work_station_does_not_hold_cannot_be_finished_test() {
   use connection <- with_seeded_database()
   assert flow.finish(connection, "ws-web", "p-billing-2", None)
     == Error(flow.PieceNotHere)
-  assert flow.pull(connection, "ws-nowhere", None) == Error(flow.UnknownStation)
+  assert flow.pull(connection, "ws-nowhere", None, None)
+    == Error(flow.UnknownStation)
 }
 
 pub fn delivering_sends_a_kanban_back_to_the_last_work_station_test() {
@@ -374,7 +389,7 @@ pub fn only_the_last_work_station_delivers_to_production_test() {
 pub fn every_action_writes_one_flow_event_test() {
   use connection <- with_seeded_database()
   let before = count(connection, "select count(*) from flow_event")
-  let assert Ok(_) = flow.pull(connection, "ws-web", None)
+  let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
   let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-9-web", None)
   assert count(connection, "select count(*) from flow_event") == before + 2
 }
@@ -392,6 +407,197 @@ pub fn the_reset_keeps_the_names_of_the_steps_test() {
     == 6
   let assert Ok(steps) = value_stream.list_steps(connection)
   assert list.contains(steps, value_stream.Step(position: 2, name: "Design"))
+}
+
+// --- Jidoka: Rework (F12, F13, F14, F16, F32) ---
+
+pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
+  use connection <- with_seeded_database()
+  // Alice takes US-9's iOS part in hand; she made US-4's iOS part before.
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-alice"), None)
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+
+  // QA iOS finds a second defect in US-4 · iOS and names iOS.
+  let assert Ok(raised) =
+    flow.raise_rework(
+      connection,
+      "ws-qa-ios",
+      "p-offline-4-ios",
+      "ws-ios",
+      "  The retry banner never goes away  ",
+    )
+  assert raised.piece == "US-4 · iOS"
+  assert raised.assignee == Some("Alice")
+  assert raised.paused == Some("US-9 · iOS")
+  // The Piece she was transforming waits: the repair comes first.
+  assert state_of(connection, "p-checkout-9-ios") == "paused"
+  assert count(
+      connection,
+      "select count(*) from rework
+       where station_id = 'ws-ios' and raised_by = 'ws-qa-ios'
+         and assignee = 'pe-alice' and started_at is not null
+         and description = 'The retry banner never goes away'",
+    )
+    == 1
+  // The Piece never moves backward: it stays in the hands of QA iOS.
+  assert state_of(connection, "p-offline-4-ios") == "in_flow"
+
+  let assert Ok(repaired) = flow.repair_rework(connection, raised.id)
+  assert repaired.resumed == Some("US-9 · iOS")
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+  // A Rework closes once; a second repair finds nothing open.
+  assert flow.repair_rework(connection, raised.id) == Error(flow.UnknownRework)
+}
+
+pub fn a_defect_belongs_to_a_work_station_the_piece_crossed_test() {
+  use connection <- with_seeded_database()
+  // UAT is downstream of QA iOS, so it cannot have made the defect.
+  assert flow.raise_rework(
+      connection,
+      "ws-qa-ios",
+      "p-offline-4-ios",
+      "ws-uat",
+      "Broken",
+    )
+    == Error(flow.NotUpstream)
+  // Neither can another Branch: US-4's iOS part never went through Web.
+  assert flow.raise_rework(
+      connection,
+      "ws-qa-ios",
+      "p-offline-4-ios",
+      "ws-web",
+      "Broken",
+    )
+    == Error(flow.NotUpstream)
+  // A Rework says what the defect is.
+  assert flow.raise_rework(
+      connection,
+      "ws-qa-ios",
+      "p-offline-4-ios",
+      "ws-ios",
+      "   ",
+    )
+    == Error(flow.EmptyDescription)
+  // And it is raised by the Work Station that holds the Piece: UAT is
+  // downstream of iOS, but US-4's iOS part is not in its hands.
+  assert flow.raise_rework(
+      connection,
+      "ws-uat",
+      "p-offline-4-ios",
+      "ws-ios",
+      "Broken",
+    )
+    == Error(flow.PieceNotHere)
+  assert count(connection, "select count(*) from rework") == 1
+}
+
+pub fn the_work_station_that_found_a_defect_does_not_pull_test() {
+  use connection <- with_seeded_database()
+  // Give QA iOS a Kanban, so only the open Rework stands in the way (F14).
+  exec(
+    connection,
+    "insert into kanban (id, station_id) values ('kb-qa-ios-1', 'ws-qa-ios')",
+  )
+  assert flow.pull(connection, "ws-qa-ios", None, None)
+    == Error(flow.NeedsConfirmation([flow.PullWithAnOpenRework]))
+  assert kanbans(connection, "ws-qa-ios") == 1
+
+  let assert Ok(flowed) =
+    flow.pull(connection, "ws-qa-ios", None, Some("The Client waits"))
+  assert flowed.deviations == [flow.PullWithAnOpenRework]
+  assert count(
+      connection,
+      "select count(*) from deviation
+       where rule = 'pull_with_an_open_rework' and station_id = 'ws-qa-ios'",
+    )
+    == 1
+}
+
+pub fn a_repaired_rework_lets_the_work_station_pull_again_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "insert into kanban (id, station_id) values ('kb-qa-ios-1', 'ws-qa-ios')",
+  )
+  let assert Ok(_) = flow.repair_rework(connection, "rw-1")
+
+  let assert Ok(flowed) = flow.pull(connection, "ws-qa-ios", None, None)
+  assert flowed.deviations == []
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'rework_repaired'",
+    )
+    == 1
+}
+
+pub fn finishing_a_piece_records_who_transformed_it_test() {
+  use connection <- with_seeded_database()
+  // Karim is of iOS, so the Piece goes in his hands; in Web his name is not
+  // of the Work Station, and the Piece stays unassigned.
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+  let assert Ok(_) = flow.pull(connection, "ws-web", Some("pe-karim"), None)
+  assert count(
+      connection,
+      "select count(*) from piece where id = 'p-checkout-9-ios'
+       and assignee = 'pe-karim'",
+    )
+    == 1
+  assert count(
+      connection,
+      "select count(*) from piece where id = 'p-checkout-9-web'
+       and assignee is null",
+    )
+    == 1
+
+  let assert Ok(_) = flow.finish(connection, "ws-ios", "p-checkout-9-ios", None)
+  assert count(
+      connection,
+      "select count(*) from piece_pass
+       where piece_id = 'p-checkout-9-ios' and station_id = 'ws-ios'
+         and person_id = 'pe-karim'",
+    )
+    == 1
+}
+
+pub fn a_rework_on_an_assembled_piece_finds_its_author_in_the_branch_test() {
+  use connection <- with_seeded_database()
+  // UAT assembles US-4 and finds a defect made in the iOS Branch.
+  let assert Ok(_) =
+    flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
+  let assert Ok(_) = flow.pull(connection, "ws-uat", None, None)
+
+  let assert Ok(raised) =
+    flow.raise_rework(
+      connection,
+      "ws-uat",
+      "p-offline-4",
+      "ws-ios",
+      "The iOS build crashes on launch",
+    )
+  // The pass that counts is the one of the Sub-Piece, made by Alice.
+  assert raised.assignee == Some("Alice")
+}
+
+pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
+  use connection <- with_seeded_database()
+  // Twelve Pieces left iOS and one came back: its First Pass Yield is below 1.
+  assert count(
+      connection,
+      "select count(*) from piece_pass where station_id = 'ws-ios'",
+    )
+    == 12
+  let assert Ok(payload) = value_stream.load(connection)
+  let text = json.to_string(payload)
+  assert string.contains(text, "\"firstPassYield\"")
+  assert string.contains(text, "\"reworkHours\"")
+  assert string.contains(text, "\"firstPassYield\":0.91")
+  // Three hours of Rework stand against iOS, the Work Station that made it.
+  assert string.contains(text, "\"reworkHours\":3.0")
+
+  // A Work Station no Piece ever left has no First Pass Yield to show.
+  exec(connection, "delete from piece_pass where station_id = 'ws-uat'")
+  let assert Ok(empty) = value_stream.load(connection)
+  assert string.contains(json.to_string(empty), "\"firstPassYield\":null")
 }
 
 // --- The two read endpoints, through their real queries ---

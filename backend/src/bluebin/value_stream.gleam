@@ -1,5 +1,6 @@
 import gleam/bool
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
@@ -33,7 +34,7 @@ pub type Parked {
 }
 
 pub type Member {
-  Member(station_id: String, name: String, busy: Bool)
+  Member(station_id: String, id: String, name: String, busy: Bool)
 }
 
 pub type InProgress {
@@ -43,6 +44,8 @@ pub type InProgress {
     piece: String,
     demand: String,
     person: Option(String),
+    /// Put down for a Rework its Person must repair first (F13, F32).
+    paused: Bool,
   )
 }
 
@@ -51,7 +54,21 @@ pub type Kanbans {
 }
 
 pub type Rework {
-  Rework(station_id: String, piece: String, description: String)
+  Rework(
+    station_id: String,
+    id: String,
+    piece: String,
+    description: String,
+    /// The Work Station that found the defect, which holds the Piece.
+    found_by: String,
+    assignee: Option(String),
+  )
+}
+
+/// What the defects of one Work Station cost: the share of its Pieces that
+/// needed no Rework, and the time spent repairing them (F16).
+pub type Quality {
+  Quality(station_id: String, passes: Int, defects: Int, rework_hours: Float)
 }
 
 /// A pull rule broken on purpose, with the reason the Person gave (F6, F31).
@@ -74,6 +91,7 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
   use in_progress <- result.try(query_in_progress(connection))
   use kanbans <- result.try(query_kanbans(connection))
   use rework <- result.try(query_rework(connection))
+  use quality <- result.try(query_quality(connection))
   use deviations <- result.try(query_deviations(connection))
 
   stations
@@ -85,6 +103,7 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
       in_progress,
       kanbans,
       rework,
+      quality,
       deviations,
     )
   })
@@ -99,6 +118,7 @@ fn station_json(
   in_progress: List(InProgress),
   kanbans: List(Kanbans),
   rework: List(Rework),
+  quality: List(Quality),
   deviations: List(Deviation),
 ) -> Json {
   let waiting =
@@ -120,6 +140,7 @@ fn station_json(
     |> list.filter(fn(member) { member.station_id == station.id })
     |> list.map(fn(member) {
       json.object([
+        #("id", json.string(member.id)),
         #("name", json.string(member.name)),
         #("busy", json.bool(member.busy)),
       ])
@@ -134,6 +155,7 @@ fn station_json(
         #("piece", json.string(piece.piece)),
         #("demand", json.string(piece.demand)),
         #("person", json.nullable(piece.person, json.string)),
+        #("paused", json.bool(piece.paused)),
       ])
     })
 
@@ -142,8 +164,11 @@ fn station_json(
     |> list.filter(fn(item) { item.station_id == station.id })
     |> list.map(fn(item) {
       json.object([
+        #("id", json.string(item.id)),
         #("piece", json.string(item.piece)),
         #("description", json.string(item.description)),
+        #("foundBy", json.string(item.found_by)),
+        #("assignee", json.nullable(item.assignee, json.string)),
       ])
     })
 
@@ -159,6 +184,21 @@ fn station_json(
         #("at", json.string(item.at)),
       ])
     })
+
+  let station_quality =
+    quality |> list.find(fn(item) { item.station_id == station.id })
+
+  // No Piece has left this Work Station yet: it has no First Pass Yield, and
+  // an empty share would read as 0 % (F16).
+  let first_pass_yield = case station_quality {
+    Ok(Quality(passes: passes, defects: defects, ..)) if passes > 0 ->
+      Some(int.to_float(int.max(passes - defects, 0)) /. int.to_float(passes))
+    _ -> None
+  }
+  let rework_hours = case station_quality {
+    Ok(one) -> one.rework_hours
+    Error(_) -> 0.0
+  }
 
   let kanban_count =
     kanbans
@@ -178,6 +218,8 @@ fn station_json(
     #("people", json.preprocessed_array(station_members)),
     #("inProgress", json.preprocessed_array(station_pieces)),
     #("rework", json.preprocessed_array(station_rework)),
+    #("firstPassYield", json.nullable(first_pass_yield, json.float)),
+    #("reworkHours", json.float(rework_hours)),
     #("deviations", json.preprocessed_array(station_deviations)),
     #("kanbans", json.int(kanban_count)),
   ])
@@ -283,12 +325,13 @@ fn query_members(
 ) -> Result(List(Member), sqlight.Error) {
   let decoder = {
     use station_id <- decode.field(0, decode.string)
-    use name <- decode.field(1, decode.string)
-    use busy <- decode.field(2, decode.int)
-    decode.success(Member(station_id:, name:, busy: busy > 0))
+    use id <- decode.field(1, decode.string)
+    use name <- decode.field(2, decode.string)
+    use busy <- decode.field(3, decode.int)
+    decode.success(Member(station_id:, id:, name:, busy: busy > 0))
   }
   sqlight.query(
-    "select sp.station_id, p.name,
+    "select sp.station_id, p.id, p.name,
             (select count(*) from piece pi
              where pi.assignee = p.id and pi.station_id = sp.station_id)
      from station_person sp
@@ -309,14 +352,23 @@ fn query_in_progress(
     use piece <- decode.field(2, decode.string)
     use demand <- decode.field(3, decode.string)
     use person <- decode.field(4, decode.optional(decode.string))
-    decode.success(InProgress(station_id:, id:, piece:, demand:, person:))
+    use paused <- decode.field(5, decode.int)
+    decode.success(InProgress(
+      station_id:,
+      id:,
+      piece:,
+      demand:,
+      person:,
+      paused: paused > 0,
+    ))
   }
   sqlight.query(
     "select p.station_id, p.id, p.reference, d.label,
-            (select pe.name from person pe where pe.id = p.assignee)
+            (select pe.name from person pe where pe.id = p.assignee),
+            p.state = 'paused'
      from piece p
      join demand d on d.id = p.demand_id
-     where p.station_id is not null and p.state = 'in_flow'
+     where p.station_id is not null and p.state in ('in_flow', 'paused')
      order by p.station_id, p.reference",
     on: connection,
     with: [],
@@ -345,16 +397,60 @@ fn query_rework(
 ) -> Result(List(Rework), sqlight.Error) {
   let decoder = {
     use station_id <- decode.field(0, decode.string)
-    use piece <- decode.field(1, decode.string)
-    use description <- decode.field(2, decode.string)
-    decode.success(Rework(station_id:, piece:, description:))
+    use id <- decode.field(1, decode.string)
+    use piece <- decode.field(2, decode.string)
+    use description <- decode.field(3, decode.string)
+    use found_by <- decode.field(4, decode.string)
+    use assignee <- decode.field(5, decode.optional(decode.string))
+    decode.success(Rework(
+      station_id:,
+      id:,
+      piece:,
+      description:,
+      found_by:,
+      assignee:,
+    ))
   }
   sqlight.query(
-    "select r.station_id, p.reference, r.description
+    "select r.station_id, r.id, p.reference, r.description,
+            coalesce((select w.name from work_station w where w.id = r.raised_by),
+                     'downstream'),
+            (select pe.name from person pe where pe.id = r.assignee)
      from rework r
      join piece p on p.id = r.piece_id
      where r.closed_at is null
      order by r.opened_at",
+    on: connection,
+    with: [],
+    expecting: decoder,
+  )
+}
+
+/// First Pass Yield and Rework Time, per Work Station (F16). A pass is one
+/// Piece that left the Work Station; a defect is one of those Pieces a
+/// Rework came back on. A Rework still open counts the time spent so far.
+fn query_quality(
+  connection: sqlight.Connection,
+) -> Result(List(Quality), sqlight.Error) {
+  let decoder = {
+    use station_id <- decode.field(0, decode.string)
+    use passes <- decode.field(1, decode.int)
+    use defects <- decode.field(2, decode.int)
+    use rework_hours <- decode.field(3, decode.float)
+    decode.success(Quality(station_id:, passes:, defects:, rework_hours:))
+  }
+  sqlight.query(
+    "select w.id,
+            (select count(*) from piece_pass pp where pp.station_id = w.id),
+            (select count(distinct r.piece_id) from rework r
+              where r.station_id = w.id),
+            (select coalesce(round(sum(
+               (julianday(coalesce(r.closed_at,
+                                   strftime('%Y-%m-%dT%H:%M:%SZ', 'now')))
+                - julianday(r.started_at)) * 24.0), 2), 0.0)
+               from rework r
+              where r.station_id = w.id and r.started_at is not null)
+     from work_station w",
     on: connection,
     with: [],
     expecting: decoder,
