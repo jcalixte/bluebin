@@ -25,3 +25,6 @@ dist-ssr
 
 # Session task file, never committed
 .ai/
+
+# Erlang crash dumps
+erl_crash.dump
