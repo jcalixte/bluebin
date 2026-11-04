@@ -155,6 +155,9 @@ const taktLabel = computed(() => {
               <WorkStationCard
                 :station="station"
                 :last="station.position === lastPosition"
+                :assembly="
+                  station.branch === null && (columns[index - 1]?.stations.length ?? 0) > 1
+                "
                 :busy="busy"
                 @pull="run((why) => pull(station.id, why))"
                 @finish="(piece) => run((why) => finish(station.id, piece, why))"

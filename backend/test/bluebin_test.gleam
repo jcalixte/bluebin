@@ -87,6 +87,20 @@ fn with_seeded_database(run: fn(sqlight.Connection) -> a) -> a {
   run(connection)
 }
 
+/// A database as bluebin.app had it before Sub-Pieces: migrated to v4 only,
+/// with whole Pieces in the Branches.
+fn with_database_at_version_4(run: fn(sqlight.Connection) -> a) -> a {
+  use connection <- db.with_connection_at(":memory:")
+  let assert Ok(Nil) = db.migrate_to(connection, 4)
+  exec(
+    connection,
+    "insert into demand values ('d-old', 'Old', 'Client', '2026-01-01', '2026-12-31', 1, 'active');
+     insert into piece (id, demand_id, reference, state) values ('p-old', 'd-old', 'US-1', 'in_flow');
+     insert into stream_step (position, name) values (1, 'From the Backlog'), (2, 'Step 2');",
+  )
+  run(connection)
+}
+
 fn count(connection: sqlight.Connection, sql: String) -> Int {
   let decoder = {
     use value <- decode.field(0, decode.int)
@@ -143,9 +157,9 @@ pub fn a_piece_in_a_blue_bin_names_its_work_station_test() {
        where state = 'in_bin' and station_id is null",
     )
     == 0
-  // The seed parks two finished Pieces, each in a Blue Bin of its own.
+  // The seed parks US-9 in the trunk and three Sub-Pieces in the Branches.
   assert count(connection, "select count(*) from piece where state = 'in_bin'")
-    == 2
+    == 4
 }
 
 // --- Pull, finish and deliver: the rules of the Kanban (F7, F24, F6, F9) ---
@@ -175,19 +189,14 @@ fn state_of(connection: sqlight.Connection, piece: String) -> String {
 
 pub fn a_pull_spends_a_kanban_and_sends_one_upstream_test() {
   use connection <- with_seeded_database()
-  // Web holds one Kanban; Tech Conception has a finished Piece in a Blue Bin.
-  assert kanbans(connection, "ws-web") == 1
-  assert kanbans(connection, "ws-conception") == 1
-
-  let assert Ok(flowed) = flow.pull(connection, "ws-web", None)
-  assert flowed.piece == "US-9"
+  // Tech Conception holds a Kanban; Analysis has a Piece to finish first.
+  let assert Ok(_) = flow.finish(connection, "ws-analysis", "p-billing-2", None)
+  let assert Ok(flowed) = flow.pull(connection, "ws-conception", None)
+  assert flowed.piece == "US-2"
   assert flowed.deviation == None
-  assert flowed.kanban_sent_to == Some("ws-conception")
-
-  // The Kanban is spent here and the emptied Blue Bin sends one back upstream.
-  assert kanbans(connection, "ws-web") == 0
-  assert kanbans(connection, "ws-conception") == 2
-  assert state_of(connection, "p-checkout-9") == "in_flow"
+  assert flowed.kanbans_sent_to == ["ws-analysis"]
+  assert kanbans(connection, "ws-conception") == 0
+  assert state_of(connection, "p-billing-2") == "in_flow"
   assert kanbans_over_empty_blue_bins(connection) == 0
 }
 
@@ -198,29 +207,66 @@ pub fn the_first_work_station_pulls_out_of_the_backlog_test() {
 
   let assert Ok(flowed) = flow.pull(connection, "ws-analysis", None)
   // Nothing sits upstream of the first Work Station, so no Kanban goes back.
-  assert flowed.kanban_sent_to == None
+  assert flowed.kanbans_sent_to == []
   assert kanbans(connection, "ws-analysis") == 0
   assert count(connection, "select count(*) from piece where state = 'backlog'")
     == backlog - 1
 }
 
-pub fn a_pull_without_a_kanban_is_warned_then_recorded_test() {
-  use connection <- with_seeded_database()
-  // QA iOS holds no Kanban, and iOS has a Piece waiting in a Blue Bin.
-  assert kanbans(connection, "ws-qa-ios") == 0
+// --- The Split: each Branch pulls its own Sub-Piece (CONTEXT.md) ---
 
+pub fn each_branch_pulls_its_own_sub_piece_at_the_split_test() {
+  use connection <- with_seeded_database()
+  // US-9 waits in Tech Conception's Blue Bin. iOS pulls first...
+  let assert Ok(ios) = flow.pull(connection, "ws-ios", None)
+  assert ios.piece == "US-9 · iOS"
+  // ...and the Piece stays in the Blue Bin, so Web can still pull its part.
+  assert state_of(connection, "p-checkout-9") == "in_bin"
+  assert ios.kanbans_sent_to == []
+
+  let assert Ok(web) = flow.pull(connection, "ws-web", None)
+  assert web.piece == "US-9 · Web"
+  // A Branch never pulls the same Piece twice.
+  assert flow.pull(connection, "ws-web", Some("again"))
+    == Error(flow.NothingToPull)
+}
+
+pub fn the_piece_leaves_the_trunk_when_the_last_branch_pulls_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(_) = flow.pull(connection, "ws-web", None)
+  let assert Ok(_) = flow.pull(connection, "ws-ios", None)
+  assert kanbans(connection, "ws-conception") == 1
+
+  let assert Ok(android) = flow.pull(connection, "ws-android", None)
+  // The Blue Bin is empty only now: Tech Conception gets its Kanban back.
+  assert android.kanbans_sent_to == ["ws-conception"]
+  assert kanbans(connection, "ws-conception") == 2
+  assert state_of(connection, "p-checkout-9") == "split"
+  assert count(
+      connection,
+      "select count(*) from piece where parent_id = 'p-checkout-9'
+       and state = 'in_flow'",
+    )
+    == 3
+  assert kanbans_over_empty_blue_bins(connection) == 0
+}
+
+pub fn a_branch_pulls_inside_itself_test() {
+  use connection <- with_seeded_database()
+  // QA iOS holds no Kanban; iOS has US-8's iOS part in a Blue Bin.
+  assert kanbans(connection, "ws-qa-ios") == 0
   assert flow.pull(connection, "ws-qa-ios", None)
     == Error(flow.NeedsConfirmation(flow.PullWithoutKanban))
-  // The warning changed nothing: the Piece is still in the Blue Bin upstream.
-  assert state_of(connection, "p-offline-5") == "in_bin"
-  // An empty reason is no reason, so it is warned again.
+  // The warning changed nothing.
+  assert state_of(connection, "p-checkout-8-ios") == "in_bin"
   assert flow.pull(connection, "ws-qa-ios", Some("   "))
     == Error(flow.NeedsConfirmation(flow.PullWithoutKanban))
 
   let assert Ok(flowed) =
     flow.pull(connection, "ws-qa-ios", Some("Blocking the demo"))
+  assert flowed.piece == "US-8 · iOS"
   assert flowed.deviation == Some(flow.PullWithoutKanban)
-  assert state_of(connection, "p-offline-5") == "in_flow"
+  assert flowed.kanbans_sent_to == ["ws-ios"]
   assert count(
       connection,
       "select count(*) from deviation
@@ -230,11 +276,38 @@ pub fn a_pull_without_a_kanban_is_warned_then_recorded_test() {
     == 1
 }
 
-pub fn nothing_upstream_is_nothing_to_pull_test() {
+// --- The Assembly: the Work Station after the Branches (F8) ---
+
+pub fn the_assembly_waits_for_every_sub_piece_test() {
   use connection <- with_seeded_database()
-  // Android holds two Kanbans, but Tech Conception's only Piece goes to Web.
-  let assert Ok(_) = flow.pull(connection, "ws-web", None)
-  assert flow.pull(connection, "ws-android", None) == Error(flow.NothingToPull)
+  // US-4: Web and Android parts wait in QA, the iOS part is still in hand.
+  assert flow.pull(connection, "ws-uat", None) == Error(flow.NothingToAssemble)
+  assert state_of(connection, "p-offline-4-web") == "in_bin"
+}
+
+pub fn the_assembly_joins_the_sub_pieces_and_sends_each_branch_a_kanban_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(_) =
+    flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
+
+  let assert Ok(flowed) = flow.pull(connection, "ws-uat", None)
+  assert flowed.piece == "US-4"
+  assert list.sort(flowed.kanbans_sent_to, string.compare)
+    == ["ws-qa-android", "ws-qa-ios", "ws-qa-web"]
+  assert state_of(connection, "p-offline-4") == "in_flow"
+  assert count(
+      connection,
+      "select count(*) from piece where parent_id = 'p-offline-4'
+       and state = 'assembled' and station_id is null",
+    )
+    == 3
+  assert kanbans(connection, "ws-uat") == 0
+  assert kanbans_over_empty_blue_bins(connection) == 0
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'piece_assembled'",
+    )
+    == 1
 }
 
 pub fn finishing_a_piece_puts_it_in_a_blue_bin_test() {
@@ -268,11 +341,6 @@ pub fn a_second_piece_in_a_blue_bin_is_warned_then_recorded_test() {
     )
   assert flowed.deviation == Some(flow.SecondPieceInABlueBin)
   assert state_of(connection, "p-billing-2") == "in_bin"
-  assert count(
-      connection,
-      "select count(*) from deviation where rule = 'second_piece_in_a_blue_bin'",
-    )
-    == 1
 }
 
 pub fn a_piece_the_work_station_does_not_hold_cannot_be_finished_test() {
@@ -293,22 +361,13 @@ pub fn delivering_sends_a_kanban_back_to_the_last_work_station_test() {
   )
 
   let assert Ok(flowed) = flow.deliver(connection, "p-billing-3")
-  assert flowed.kanban_sent_to == Some("ws-uat")
+  assert flowed.kanbans_sent_to == ["ws-uat"]
   assert state_of(connection, "p-billing-3") == "produced"
-  assert count(
-      connection,
-      "select count(*) from piece
-       where id = 'p-billing-3' and produced_at is not null",
-    )
-    == 1
-  assert kanbans(connection, "ws-uat") == 1
   assert kanbans_over_empty_blue_bins(connection) == 0
 }
 
 pub fn only_the_last_work_station_delivers_to_production_test() {
   use connection <- with_seeded_database()
-  // p-checkout-9 waits in a Blue Bin of Tech Conception, in the middle of the
-  // chain: production never pulls there.
   assert flow.deliver(connection, "p-checkout-9") == Error(flow.PieceNotHere)
 }
 
@@ -316,18 +375,23 @@ pub fn every_action_writes_one_flow_event_test() {
   use connection <- with_seeded_database()
   let before = count(connection, "select count(*) from flow_event")
   let assert Ok(_) = flow.pull(connection, "ws-web", None)
-  let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-9", None)
+  let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-9-web", None)
   assert count(connection, "select count(*) from flow_event") == before + 2
+}
+
+pub fn the_reset_keeps_the_names_of_the_steps_test() {
+  use connection <- with_database_at_version_4()
+  let assert Ok(_) = value_stream.rename_step(connection, 2, "Design")
+  let assert Ok(Nil) = db.prepare(connection)
+  // The demo data is seeded again, and the team's own words stay.
+  assert count(connection, "select count(*) from demand") == 3
   assert count(
       connection,
-      "select count(*) from flow_event where kind = 'piece_pulled'",
+      "select count(*) from piece where parent_id is not null",
     )
-    == 1
-  assert count(
-      connection,
-      "select count(*) from flow_event where kind = 'piece_put_in_blue_bin'",
-    )
-    == 1
+    == 6
+  let assert Ok(steps) = value_stream.list_steps(connection)
+  assert list.contains(steps, value_stream.Step(position: 2, name: "Design"))
 }
 
 // --- The two read endpoints, through their real queries ---

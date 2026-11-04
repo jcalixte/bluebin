@@ -19,6 +19,8 @@ export type BlueBin = {
   id: string | null
   piece: string | null
   demand: string | null
+  /** At a Split, the Branches that already pulled their Sub-Piece of it. */
+  pulledBy: string | null
 }
 
 /** A Piece a Deviation put in a Blue Bin that was already full (F9). */

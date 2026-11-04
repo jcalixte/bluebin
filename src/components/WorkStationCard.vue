@@ -2,7 +2,13 @@
 import { computed } from "vue"
 import type { WorkStation } from "../types"
 
-const props = defineProps<{ station: WorkStation; last?: boolean; busy?: boolean }>()
+const props = defineProps<{
+  station: WorkStation
+  last?: boolean
+  busy?: boolean
+  /** The Work Station after the Branches pulls by Assembly. */
+  assembly?: boolean
+}>()
 
 defineEmits<{
   pull: []
@@ -43,7 +49,7 @@ const binsFull = computed(
       </header>
 
       <button class="btn btn-sm btn-primary" :disabled="busy" @click="$emit('pull')">
-        Pull a Piece
+        {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
       </button>
 
       <div>
@@ -61,6 +67,7 @@ const binsFull = computed(
             :title="bin.demand ?? 'Empty Blue Bin'"
           >
             {{ bin.piece ?? "empty" }}
+            <span v-if="bin.pulledBy" class="opacity-80">· {{ bin.pulledBy }} pulled</span>
             <button
               v-if="last && bin.id"
               class="btn btn-xs"

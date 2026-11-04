@@ -22,7 +22,14 @@ pub type Station {
 /// downstream pull. The Work Station's Blue Bin count says how many fit; the
 /// ones beyond it are the overflow a Deviation put there (F9).
 pub type Parked {
-  Parked(station_id: String, id: String, reference: String, demand: String)
+  Parked(
+    station_id: String,
+    id: String,
+    reference: String,
+    demand: String,
+    /// At a Split, the Branches that already took their Sub-Piece.
+    pulled_by: Option(String),
+  )
 }
 
 pub type Member {
@@ -203,6 +210,13 @@ fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(Json) {
             "demand",
             json.nullable(option.map(here, fn(one) { one.demand }), json.string),
           ),
+          #(
+            "pulledBy",
+            json.nullable(
+              option.then(here, fn(one) { one.pulled_by }),
+              json.string,
+            ),
+          ),
         ])
       [row, ..bin_rows(slot + 1, last, rest)]
     }
@@ -247,10 +261,13 @@ fn query_parked(
     use id <- decode.field(1, decode.string)
     use reference <- decode.field(2, decode.string)
     use demand <- decode.field(3, decode.string)
-    decode.success(Parked(station_id:, id:, reference:, demand:))
+    use pulled_by <- decode.field(4, decode.optional(decode.string))
+    decode.success(Parked(station_id:, id:, reference:, demand:, pulled_by:))
   }
   sqlight.query(
-    "select p.station_id, p.id, p.reference, d.label
+    "select p.station_id, p.id, p.reference, d.label,
+            (select group_concat(s.branch, ', ') from piece s
+             where s.parent_id = p.id)
      from piece p
      join demand d on d.id = p.demand_id
      where p.state = 'in_bin' and p.station_id is not null

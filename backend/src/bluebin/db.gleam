@@ -293,6 +293,15 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// Apply the schema steps the database has not seen yet, tracked in
 /// `pragma user_version`. Every step runs at most once, in order.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+  migrate_to(connection, 5)
+}
+
+/// Apply the schema steps up to `target` only, so a test can rebuild a
+/// database as an older deploy left it and check what the next step does.
+pub fn migrate_to(
+  connection: sqlight.Connection,
+  target: Int,
+) -> Result(Nil, sqlight.Error) {
   use version <- result.try(user_version(connection))
   [
     #(1, schema_v1),
@@ -303,7 +312,7 @@ pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
-    case version < step_version {
+    case version < step_version && step_version <= target {
       False -> Ok(Nil)
       True ->
         sqlight.exec(
