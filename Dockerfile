@@ -36,7 +36,8 @@ COPY --from=web /app/dist ./static
 RUN mkdir -p /app/data
 EXPOSE 8000
 ENV PORT=8000
-# Coolify reads this and moves the traffic only once it passes.
+# For a plain `docker run`. Coolify runs its own check (host 127.0.0.1: mist
+# listens on IPv4 only, and busybox wget resolves localhost to ::1 first).
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:8000/api/health || exit 1
 ENTRYPOINT ["./entrypoint.sh", "run"]
