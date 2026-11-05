@@ -123,6 +123,35 @@ pub fn the_seed_runs_once_test() {
   assert count(connection, "select count(*) from work_station") == 9
 }
 
+/// Row counts of every table, plus the step names and Piece states, so two
+/// databases with the same seed give the same fingerprint.
+fn fingerprint(connection: sqlight.Connection) -> List(Int) {
+  [
+    "demand", "piece", "flow_event", "person", "work_station", "station_person",
+    "kanban", "rework", "deviation", "piece_pass", "stream_step",
+  ]
+  |> list.map(fn(table) { count(connection, "select count(*) from " <> table) })
+  |> list.append([
+    count(
+      connection,
+      "select count(*) from stream_step where name like 'Step %'",
+    ),
+    count(connection, "select count(*) from piece where state = 'produced'"),
+  ])
+}
+
+pub fn the_demo_reset_puts_back_the_seed_test() {
+  use connection <- with_seeded_database()
+  let seeded = fingerprint(connection)
+  let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
+  let assert Ok(_) = value_stream.rename_step(connection, 2, "Design")
+  exec(connection, "delete from kanban; delete from deviation;")
+  assert fingerprint(connection) != seeded
+  let assert Ok(Nil) = db.reset(connection)
+  assert fingerprint(connection) == seeded
+  assert kanbans_over_empty_blue_bins(connection) == 0
+}
+
 /// Invariant F7 (DESIGN.md): always 0.
 fn kanbans_over_empty_blue_bins(connection: sqlight.Connection) -> Int {
   count(

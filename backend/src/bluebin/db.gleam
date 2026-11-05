@@ -380,6 +380,34 @@ pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   seed_when_empty(connection, "stream_step", seed_steps_sql)
 }
 
+/// Empties every table and seeds the demo data again, in one transaction.
+pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+  use _ <- result.try(sqlight.exec("begin;" <> empty_sql, connection))
+  case seed(connection) {
+    Ok(Nil) -> sqlight.exec("commit;", connection)
+    Error(error) -> {
+      let _ = sqlight.exec("rollback;", connection)
+      Error(error)
+    }
+  }
+}
+
+/// Children before parents, for `pragma foreign_keys = on`.
+const empty_sql = "
+delete from deviation;
+delete from rework;
+delete from kanban;
+delete from piece_pass;
+delete from flow_event;
+delete from station_person;
+delete from piece;
+delete from demand;
+delete from work_station;
+delete from person;
+delete from stream_step;
+delete from sqlite_sequence;
+"
+
 fn seed_when_empty(
   connection: sqlight.Connection,
   table: String,

@@ -25,6 +25,20 @@ function open(view: View) {
   current.value = view
 }
 
+const resetting = ref(false)
+
+async function resetDemo() {
+  if (!confirm("Reset all the demo data? Every change made on Bluebin will be lost.")) return
+  resetting.value = true
+  const response = await fetch("/api/reset", { method: "POST" })
+  if (response.ok) {
+    location.reload()
+  } else {
+    resetting.value = false
+    alert("The reset failed. Try again.")
+  }
+}
+
 const onPopState = () => (current.value = viewAt(location.pathname))
 addEventListener("popstate", onPopState)
 onBeforeUnmount(() => removeEventListener("popstate", onPopState))
@@ -43,23 +57,34 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
           />
           <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
         </div>
-        <nav class="tabs tabs-box">
-          <a
-            v-for="view in views"
-            :key="view.id"
-            :href="view.path"
-            class="tab"
-            :class="
-              current.id === view.id
-                ? 'tab-active font-medium text-base-content'
-                : 'text-base-content/70'
-            "
-            :aria-current="current.id === view.id ? 'page' : undefined"
-            @click.exact.prevent="open(view)"
+        <div class="flex flex-wrap items-center gap-3">
+          <nav class="tabs tabs-box">
+            <a
+              v-for="view in views"
+              :key="view.id"
+              :href="view.path"
+              class="tab"
+              :class="
+                current.id === view.id
+                  ? 'tab-active font-medium text-base-content'
+                  : 'text-base-content/70'
+              "
+              :aria-current="current.id === view.id ? 'page' : undefined"
+              @click.exact.prevent="open(view)"
+            >
+              {{ view.label }}
+            </a>
+          </nav>
+          <button
+            type="button"
+            class="btn btn-sm btn-ghost"
+            :disabled="resetting"
+            title="Put back the demo data"
+            @click="resetDemo"
           >
-            {{ view.label }}
-          </a>
-        </nav>
+            Reset demo
+          </button>
+        </div>
       </div>
     </header>
 

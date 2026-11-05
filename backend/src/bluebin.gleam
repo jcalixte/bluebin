@@ -87,7 +87,18 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
       use <- wisp.require_method(request, http.Put)
       rename_step(request, position)
     }
+    ["api", "reset"] -> {
+      use <- wisp.require_method(request, http.Post)
+      reset()
+    }
     _ -> wisp.not_found()
+  }
+}
+
+fn reset() -> wisp.Response {
+  case db.with_connection(db.reset) {
+    Ok(Nil) -> wisp.no_content()
+    Error(_) -> wisp.internal_server_error()
   }
 }
 
