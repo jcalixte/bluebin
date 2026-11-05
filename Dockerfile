@@ -2,14 +2,15 @@
 # waits for its healthcheck, moves the traffic, then stops the old one. Its
 # Docker Compose build pack cannot, and stops the stack before starting again.
 
+# Before the first FROM, or the FROM lines below cannot read it.
+ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.17.0-erlang-alpine
+
 FROM node:22-alpine AS web
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
-
-ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.17.0-erlang-alpine
 
 FROM ${GLEAM_IMAGE} AS api
 # sqlight builds the esqlite NIF from C, so the build stage needs a toolchain.
