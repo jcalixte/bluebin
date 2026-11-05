@@ -7,6 +7,7 @@ import bluebin/flow
 import bluebin/heijunka
 import bluebin/live
 import bluebin/measures
+import bluebin/spa
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/erlang/process
@@ -52,7 +53,12 @@ pub fn main() {
   process.sleep_forever()
 }
 
+/// Holds the built SPA in the image; absent in dev, where Vite serves it.
+const static_directory = "static"
+
 fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
+  // Before the log, so each page load writes one line per API call, not per asset.
+  use <- spa.serve(request, from: static_directory)
   use <- wisp.log_request(request)
   use <- wisp.rescue_crashes
   use <- announce_change(request, hub)

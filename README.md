@@ -14,7 +14,8 @@ pnpm fmt           # oxfmt   (pnpm fmt:check to verify only)
 pnpm build         # vue-tsc + vite build, the same build Coolify runs
 
 cd backend && gleam run     # API on :8000 (needs Erlang/OTP and a C toolchain)
-docker compose up           # SPA + API together, as deployed
+docker build -t bluebin . && docker run -p 8000:8000 bluebin
+                            # SPA + API in one image, as deployed, on :8000
 ```
 
 ## Test the API
@@ -25,12 +26,18 @@ backend/test.sh             # Gleam suite: Takt arithmetic, schema, seed, pull r
 scripts/test-api.sh         # smoke-test a deploy: scripts/test-api.sh http://localhost:8000
 ```
 
-`backend/Dockerfile` runs `gleam test` during the build, so a red suite fails the
+The `Dockerfile` runs `gleam test` during the build, so a red suite fails the
 deploy before it reaches production.
 
 ## Deploy
 
 Pushes to `main` are picked up by Coolify at https://platform.apoena.dev and land on https://bluebin.app.
+
+One image: the Gleam API serves the built SPA from `static/`. Coolify builds it
+with the Dockerfile build pack and does a rolling update: the new container
+starts, passes `/api/health`, takes the traffic, then the old one stops. For a
+few seconds both write to the SQLite file, so a migration must stay additive:
+the old code must still run on the new schema.
 
 <!-- docs:start -->
 

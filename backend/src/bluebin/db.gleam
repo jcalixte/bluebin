@@ -433,7 +433,11 @@ pub fn with_connection_at(
   database: String,
   run: fn(sqlight.Connection) -> a,
 ) -> a {
-  sqlight.with_connection(database, run)
+  use connection <- sqlight.with_connection(database)
+  // During a rolling deploy the old and the new container write to the same
+  // file for a few seconds: wait for the lock instead of failing with BUSY.
+  let _ = sqlight.exec("pragma busy_timeout = 5000;", connection)
+  run(connection)
 }
 
 pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {

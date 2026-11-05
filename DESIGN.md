@@ -640,7 +640,7 @@ Components that realise these How decisions:
 - **C2** API — Gleam (wisp + mist): flow rules, **Deviations**, **Priority List** ordering, Heijunka sequencer
 - **C3** Store — SQLite (sqlight): flow event log + current-state tables (H3)
 - **C4** Event stream — Server-Sent Events from mist (H5)
-- **C5** Deploy — Coolify, docker compose (web + API), on bluebin.app
+- **C5** Deploy — Coolify, one image (the API serves the SPA), rolling updates, on bluebin.app
 
 ---
 
@@ -684,13 +684,13 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 
 ## 7. Components
 
-| ID  | Component                                                | Role                                                                                                                             | Main Functions                   | ADR                                                              |
-| --- | -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
-| C1  | SPA: Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI   | All screens: **Demands** and **Takt Gap**, **Assignments**, **Value Stream** view (wall TV), **Value Stream** designer, measures | F1, F19, F25, F27, F35, F38, F39 | —                                                                |
-| C2  | API: Gleam (wisp + mist)                                 | HTTP actions; pull rules and **Deviations**; **Priority List** and **Assignment** ordering; Heijunka sequencer; measures         | F6–F26, F30–F34, F40             | —                                                                |
-| C3  | Store: SQLite (sqlight)                                  | Flow event log and current-state tables, written in one transaction                                                              | F34, F38, F40                    | [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) |
-| C4  | Event stream: Server-Sent Events from mist               | Pushes each new flow event to the open screens                                                                                   | F2, F3, F15, F17, F28            | —                                                                |
-| C5  | Deploy: Coolify, docker compose (web + API), bluebin.app | Hosting                                                                                                                          | —                                | —                                                                |
+| ID  | Component                                                    | Role                                                                                                                             | Main Functions                   | ADR                                                              |
+| --- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
+| C1  | SPA: Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI       | All screens: **Demands** and **Takt Gap**, **Assignments**, **Value Stream** view (wall TV), **Value Stream** designer, measures | F1, F19, F25, F27, F35, F38, F39 | —                                                                |
+| C2  | API: Gleam (wisp + mist)                                     | HTTP actions; pull rules and **Deviations**; **Priority List** and **Assignment** ordering; Heijunka sequencer; measures         | F6–F26, F30–F34, F40             | —                                                                |
+| C3  | Store: SQLite (sqlight)                                      | Flow event log and current-state tables, written in one transaction                                                              | F34, F38, F40                    | [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) |
+| C4  | Event stream: Server-Sent Events from mist                   | Pushes each new flow event to the open screens                                                                                   | F2, F3, F15, F17, F28            | —                                                                |
+| C5  | Deploy: Coolify, one image with rolling updates, bluebin.app | Hosting                                                                                                                          | —                                | —                                                                |
 
 ---
 
