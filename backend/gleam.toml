@@ -17,7 +17,10 @@ gleam_stdlib = ">= 1.0.0 and < 2.0.0"
 wisp = ">= 2.2.2 and < 3.0.0"
 mist = ">= 6.0.3 and < 7.0.0"
 gleam_erlang = ">= 1.3.0 and < 2.0.0"
-gleam_http = ">= 4.5.0 and < 5.0.0"
+# 4.4.0 deprecates `http.Header`, which mist, wisp and gramps still use, so
+# every clean build prints deprecation warnings from their code. Lift the cap
+# once those packages move to `#(String, String)`.
+gleam_http = ">= 4.3.0 and < 4.4.0"
 gleam_json = ">= 3.1.0 and < 4.0.0"
 sqlight = ">= 1.2.0 and < 2.0.0"
 simplifile = ">= 2.7.0 and < 3.0.0"
