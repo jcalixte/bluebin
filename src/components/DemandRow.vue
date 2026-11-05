@@ -152,16 +152,20 @@ const barLabel = computed(
         </p>
         <span
           v-if="status === 'andon'"
-          class="badge badge-error gap-1.5 font-semibold"
+          class="badge badge-error gap-1.5 font-semibold whitespace-nowrap"
           title="A Takt Gap of −1 Piece or less raises an Andon"
         >
           <span class="size-2 rounded-full bg-current" aria-hidden="true" />
           Andon
         </span>
-        <span v-else-if="status === 'behind'" class="badge badge-warning font-medium">
-          Less than 1 Piece behind
+        <span
+          v-else-if="status === 'behind'"
+          class="badge badge-warning font-medium whitespace-nowrap"
+          title="Less than 1 Piece behind the Takt Time: no Andon yet"
+        >
+          Behind Takt
         </span>
-        <span v-else class="badge badge-success font-medium">On Takt</span>
+        <span v-else class="badge badge-success font-medium whitespace-nowrap">On Takt</span>
       </div>
     </div>
   </article>

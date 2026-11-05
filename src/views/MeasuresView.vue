@@ -84,6 +84,12 @@ const summary = computed(() => {
   if (!measures.value) return []
   const a = measures.value.before.pieces
   const b = measures.value.after.pieces
+  const stationsA = measures.value.before.stations
+  const stationsB = measures.value.after.stations
+  const andonsA = stationsA.reduce((total, station) => total + station.andons, 0)
+  const andonsB = stationsB.reduce((total, station) => total + station.andons, 0)
+  const stoppedA = totalAndonTime(stationsA)
+  const stoppedB = totalAndonTime(stationsB)
   const durations = [
     { label: "Lead Time", a: pick(a.leadTime), b: pick(b.leadTime) },
     { label: "Touch Time", a: pick(a.touchTime), b: pick(b.touchTime) },
@@ -103,8 +109,24 @@ const summary = computed(() => {
       after: hours(row.b),
       change: hoursChange(row.a, row.b),
     })),
+    {
+      label: "Andons raised",
+      before: String(andonsA),
+      after: String(andonsB),
+      change: countChange(andonsA, andonsB),
+    },
+    {
+      label: "Andon Time (total of all Work Stations)",
+      before: hours(stoppedA),
+      after: hours(stoppedB),
+      change: hoursChange(stoppedA, stoppedB),
+    },
   ]
 })
+
+function totalAndonTime(stations: StationMeasures[]) {
+  return stations.reduce((total, station) => total + (pick(station.andonTime) ?? 0), 0)
+}
 
 type Paired<T> = { id: string; first: T; before?: T; after?: T }
 
@@ -324,8 +346,8 @@ const deviationList = computed(() =>
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Work Station</h3>
           <p class="text-sm opacity-70">
-            Station Lead Time and Touch Time are averages per pass; Starvation Time is the total of
-            the period.
+            Station Lead Time and Touch Time are averages per pass; Starvation Time and Andon Time
+            are totals of the period.
           </p>
           <p v-if="stations.length === 0" class="opacity-70">No Work Station.</p>
           <div v-else class="overflow-x-auto">
@@ -337,10 +359,11 @@ const deviationList = computed(() =>
                   <th colspan="2" class="text-center">Touch Time</th>
                   <th colspan="2" class="text-center">Touch share</th>
                   <th colspan="2" class="text-center">Starvation Time</th>
+                  <th colspan="2" class="text-center">Andon Time</th>
                   <th colspan="2" class="text-center">Deviations / pulls</th>
                 </tr>
                 <tr>
-                  <template v-for="n in 5" :key="n">
+                  <template v-for="n in 6" :key="n">
                     <th class="text-right">Before</th>
                     <th class="text-right">After</th>
                   </template>
@@ -372,6 +395,18 @@ const deviationList = computed(() =>
                   </td>
                   <td class="text-right tabular-nums">
                     {{ hours(pick(row.after?.starvationTime)) }}
+                  </td>
+                  <td class="text-right tabular-nums">
+                    {{ hours(pick(row.before?.andonTime)) }}
+                    <span v-if="row.before?.andons" class="block text-xs opacity-60">
+                      {{ row.before.andons }} raised
+                    </span>
+                  </td>
+                  <td class="text-right tabular-nums">
+                    {{ hours(pick(row.after?.andonTime)) }}
+                    <span v-if="row.after?.andons" class="block text-xs opacity-60">
+                      {{ row.after.andons }} raised
+                    </span>
                   </td>
                   <td class="text-right tabular-nums">
                     {{ row.before ? `${row.before.deviations} / ${row.before.pulls}` : "—" }}

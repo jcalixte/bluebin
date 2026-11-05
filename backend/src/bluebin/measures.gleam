@@ -301,6 +301,9 @@ pub type StationMeasure {
     passes: List(Span),
     starvation: Int,
     starvation_working: Int,
+    andon: Int,
+    andon_working: Int,
+    andons: Int,
     pulls: Int,
     deviations: Int,
   )
@@ -398,6 +401,21 @@ pub fn load(
         use start <- decode.field(1, decode.int)
         use end <- decode.field(2, decode.int)
         decode.success(#(piece, #(start, end)))
+      },
+    ),
+  )
+  use stops <- result.try(
+    query(
+      connection,
+      "select station_id, cast(strftime('%s', raised_at) as integer),
+            cast(strftime('%s', coalesce(closed_at, 'now')) as integer)
+       from andon",
+      [],
+      {
+        use station <- decode.field(0, decode.string)
+        use start <- decode.field(1, decode.int)
+        use end <- decode.field(2, decode.int)
+        decode.success(#(station, #(start, end)))
       },
     ),
   )
@@ -535,6 +553,15 @@ pub fn load(
     })
 
   let held = kanban_held(events, now)
+  let in_measured = fn(intervals) {
+    let intervals = clip(intervals, period.start, int.min(period.end, now))
+    #(
+      list.fold(intervals, 0, fn(total, one) { total + one.1 - one.0 }),
+      list.fold(intervals, 0, fn(total, one) {
+        total + calendar.working_seconds(calendar, one.0, one.1)
+      }),
+    )
+  }
   let station_measures =
     list.map(stations, fn(station) {
       let #(id, name, branch, position) = station
@@ -558,22 +585,27 @@ pub fn load(
             _, _ -> Error(Nil)
           }
         })
-      let starving =
-        dict.get(held, id)
-        |> result.unwrap([])
-        |> clip(period.start, int.min(period.end, now))
+      let #(starvation, starvation_working) =
+        dict.get(held, id) |> result.unwrap([]) |> in_measured
+      let station_stops =
+        list.filter_map(stops, fn(stop) {
+          case stop.0 == id {
+            True -> Ok(stop.1)
+            False -> Error(Nil)
+          }
+        })
+      let #(andon, andon_working) = in_measured(station_stops)
       StationMeasure(
         id:,
         name:,
         branch:,
         position:,
         passes: station_passes,
-        starvation: list.fold(starving, 0, fn(total, one) {
-          total + one.1 - one.0
-        }),
-        starvation_working: list.fold(starving, 0, fn(total, one) {
-          total + calendar.working_seconds(calendar, one.0, one.1)
-        }),
+        starvation:,
+        starvation_working:,
+        andon:,
+        andon_working:,
+        andons: list.count(station_stops, fn(stop) { in_period(stop.0) }),
         pulls: list.count(events, fn(event) {
           { event.kind == "piece_pulled" || event.kind == "piece_assembled" }
           && event.station == Some(id)
@@ -740,6 +772,11 @@ pub fn to_json(measures: Measures) -> json.Json {
             "starvationTime",
             duration(Some(station.starvation), Some(station.starvation_working)),
           ),
+          #(
+            "andonTime",
+            duration(Some(station.andon), Some(station.andon_working)),
+          ),
+          #("andons", json.int(station.andons)),
           #("pulls", json.int(station.pulls)),
           #("deviations", json.int(station.deviations)),
         ])

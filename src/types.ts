@@ -261,7 +261,7 @@ export type DemandMeasures = {
   demandLeadTime: Duration | null
 }
 
-/** `stationLeadTime` and `touchTime` are averages per pass; `starvationTime` is a total. */
+/** `stationLeadTime` and `touchTime` are averages per pass; `starvationTime` and `andonTime` are totals. */
 export type StationMeasures = {
   id: string
   name: string
@@ -273,6 +273,10 @@ export type StationMeasures = {
   /** A fraction in 0..1. */
   touchShare: number | null
   starvationTime: Duration | null
+  /** The time an Andon stopped the Work Station inside the period. */
+  andonTime: Duration | null
+  /** The Andons raised on the Work Station inside the period. */
+  andons: number
   pulls: number
   deviations: number
 }

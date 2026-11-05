@@ -134,6 +134,10 @@ _Avoid_: stage time, column time
 The time a Work Station holds a Kanban but has no Piece to pull.
 _Avoid_: idle time, blocked time, starving
 
+**Andon Time**:
+The time an Andon stops a Work Station, from its raise until its Team Leader closes it.
+_Avoid_: downtime, stop time, outage
+
 ### People
 
 **Person**:
@@ -182,7 +186,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - **Lead Time** = **Touch Time** + **Stagnation Time**
 - **Lead Time** = the **Backlog** wait + the sum of the **Station Lead Times**
 - **Station Lead Time** = **Touch Time** at that **Work Station** + the wait in its **Blue Bin**
-- **Lead Time**, **Station Lead Time**, **Stagnation Time** and **Starvation Time** are shown in **Calendar Time** by default, and in **Working Time** as a second view
+- **Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Calendar Time** by default, and in **Working Time** as a second view
 - **Touch Time** is net time, so it is the same in both views
 - **Takt Time** always uses **Working Time**
 - The **Takt Gap** of a **Demand** = its **Pieces** in production − the elapsed **Working Time** ÷ its **Takt Time**

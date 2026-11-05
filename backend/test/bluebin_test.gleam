@@ -1175,6 +1175,25 @@ pub fn an_andon_stops_the_work_station_until_its_team_leader_closes_it_test() {
     == 2
 }
 
+pub fn andon_time_is_the_stop_inside_the_period_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "insert into andon (station_id, raised_at, closed_at) values
+       ('ws-web', '2026-09-30T23:00:00Z', '2026-10-01T01:00:00Z'),
+       ('ws-web', '2026-10-01T10:00:00Z', '2026-10-01T11:30:00Z'),
+       ('ws-web', '2026-10-02T10:00:00Z', '2026-10-02T11:00:00Z')",
+  )
+  let assert Ok(found) = measures.load(connection, "2026-10-01", "2026-10-01")
+  let assert Ok(web) = list.find(found.stations, fn(one) { one.id == "ws-web" })
+  // 1 h after midnight of the first stop, and the whole 1 h 30 of the second.
+  assert web.andon == 9000
+  assert web.andons == 1
+  let assert Ok(other) =
+    list.find(found.stations, fn(one) { one.id != "ws-web" })
+  assert other.andon == 0
+}
+
 pub fn a_stopped_work_station_holds_one_andon_test() {
   use connection <- with_seeded_database()
   let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", Some("pe-bob"))
@@ -1296,6 +1315,9 @@ pub fn capacity_is_the_average_touch_time_shared_by_the_people_test() {
       ],
       starvation: 0,
       starvation_working: 0,
+      andon: 0,
+      andon_working: 0,
+      andons: 0,
       pulls: 2,
       deviations: 0,
     )

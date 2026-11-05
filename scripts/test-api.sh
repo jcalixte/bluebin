@@ -124,6 +124,8 @@ check "Lead Time = Touch Time + Stagnation Time, in both views" assert_json \
   "$measures"
 check "every Work Station has a Touch share between 0 and 1" assert_json \
   '.stations | all(.touchShare == null or (.touchShare >= 0 and .touchShare <= 1))' "$measures"
+check "every Work Station has an Andon Time no longer than its Calendar Time" assert_json \
+  '.stations | all(.andons >= 0 and .andonTime.working <= .andonTime.calendar)' "$measures"
 check "every Deviation of the period carries its reason" assert_json \
   '.deviations.list | all(.reason != "")' "$measures"
 check "a period ending before it starts is refused" test \
