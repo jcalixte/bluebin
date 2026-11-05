@@ -1,9 +1,11 @@
 import bluebin/assignment
+import bluebin/calendar
 import bluebin/db
 import bluebin/demand
 import bluebin/flow
 import bluebin/heijunka
 import bluebin/live
+import bluebin/measures
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/erlang/process
@@ -17,6 +19,7 @@ import gleam/result
 import gleam/string
 import mist
 import simplifile
+import sqlight
 import wisp
 import wisp/wisp_mist
 
@@ -110,11 +113,92 @@ fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
       use <- wisp.require_method(request, http.Put)
       rename_step(request, position)
     }
+    ["api", "measures"] -> {
+      use <- wisp.require_method(request, http.Get)
+      measures_of(request)
+    }
+    ["api", "calendar"] ->
+      case request.method {
+        http.Put -> save_calendar(request)
+        _ -> {
+          use <- wisp.require_method(request, http.Get)
+          working_calendar()
+        }
+      }
     ["api", "reset"] -> {
       use <- wisp.require_method(request, http.Post)
       reset()
     }
     _ -> wisp.not_found()
+  }
+}
+
+/// `from` and `to` are days, both included; the last 7 days by default.
+fn measures_of(request: wisp.Request) -> wisp.Response {
+  let query = wisp.get_query(request)
+  let day = fn(key, default) {
+    list.key_find(query, key) |> result.unwrap(default)
+  }
+  let result =
+    db.with_connection(fn(connection) {
+      use #(week_ago, today) <- result.try(
+        sqlight.query(
+          "select date('now', '-6 day'), date('now')",
+          on: connection,
+          with: [],
+          expecting: {
+            use from <- decode.field(0, decode.string)
+            use to <- decode.field(1, decode.string)
+            decode.success(#(from, to))
+          },
+        )
+        |> result.replace_error(measures.StoreFailed)
+        |> result.try(fn(rows) {
+          list.first(rows) |> result.replace_error(measures.StoreFailed)
+        }),
+      )
+      measures.load(connection, day("from", week_ago), day("to", today))
+    })
+
+  case result {
+    Ok(found) ->
+      wisp.json_response(json.to_string(measures.to_json(found)), 200)
+    Error(measures.InvalidPeriod) ->
+      wisp.bad_request(
+        "expected ?from=2026-10-30&to=2026-11-05, with from on or before to",
+      )
+    Error(measures.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+fn working_calendar() -> wisp.Response {
+  case db.with_connection(calendar.load) {
+    Ok(found) ->
+      wisp.json_response(json.to_string(calendar.to_json(found)), 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn save_calendar(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  case decode.run(body, calendar.decoder()) {
+    Error(_) ->
+      wisp.bad_request(
+        "expected a body like {\"days\": [1, 2, 3, 4, 5], \"start\": \"09:00\", \"end\": \"16:00\", \"holidays\": [{\"day\": \"2026-12-25\", \"label\": \"Christmas\"}]}",
+      )
+    Ok(wanted) ->
+      case
+        db.with_connection(fn(connection) {
+          use _ <- result.try(calendar.save(connection, wanted))
+          calendar.load(connection)
+          |> result.replace_error(calendar.StoreFailed)
+        })
+      {
+        Ok(saved) ->
+          wisp.json_response(json.to_string(calendar.to_json(saved)), 200)
+        Error(calendar.Invalid(message)) -> wisp.bad_request(message)
+        Error(calendar.StoreFailed) -> wisp.internal_server_error()
+      }
   }
 }
 

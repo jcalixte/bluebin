@@ -1,3 +1,4 @@
+import bluebin/calendar
 import bluebin/demand.{type Demand}
 import gleam/bool
 import gleam/dynamic/decode
@@ -53,7 +54,9 @@ with recursive
     select date(day, '+1 day') from days, span where day < last_day
   ),
   working_day(day) as (
-    select day from days where strftime('%w', day) not in ('0', '6')
+    select day from days where "
+  <> calendar.working_day_sql
+  <> "
   )
 select
   p.id,
@@ -112,7 +115,7 @@ pub fn sequence(waiting: List(Waiting), demands: List(Demand)) -> List(Placed) {
     )
     let slot_hours =
       int.to_float(piece.working_days_before_start)
-      *. demand.working_hours_per_day
+      *. demand.hours_per_day
       +. int.to_float(piece.ordinal)
       *. demand.takt_time_hours(demand)
     Placed(piece:, demand:, slot_hours:)
@@ -225,7 +228,9 @@ with recursive
     select date(day, '-1 day') from days where day > date('now', '-13 day')
   ),
   shown(day) as (
-    select day from days where strftime('%w', day) not in ('0', '6')
+    select day from days where "
+  <> calendar.working_day_sql
+  <> "
     order by day desc limit ?1
   )
 select
@@ -266,7 +271,7 @@ pub fn product_mix(
     list.map(demands, fn(demand) {
       let per_day = case demand.takt_time_hours(demand) {
         0.0 -> 0.0
-        takt -> demand.working_hours_per_day /. takt
+        takt -> demand.hours_per_day /. takt
       }
       MixRow(
         demand:,

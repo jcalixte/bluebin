@@ -31,6 +31,7 @@ fn a_demand(
     pieces_produced:,
     working_days_total:,
     working_days_elapsed:,
+    hours_per_day: 7.0,
   )
 }
 
@@ -326,7 +327,8 @@ pub fn the_assembly_joins_the_sub_pieces_and_sends_each_branch_a_kanban_test() {
   assert kanbans_over_empty_blue_bins(connection) == 0
   assert count(
       connection,
-      "select count(*) from flow_event where kind = 'piece_assembled'",
+      "select count(*) from flow_event
+       where kind = 'piece_assembled' and piece_id = 'p-offline-4'",
     )
     == 1
 }
@@ -393,10 +395,11 @@ pub fn only_the_last_work_station_delivers_to_production_test() {
 
 pub fn every_action_writes_one_flow_event_test() {
   use connection <- with_seeded_database()
-  let before = count(connection, "select count(*) from flow_event")
+  let pieces = "select count(*) from flow_event where kind like 'piece_%'"
+  let before = count(connection, pieces)
   let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
   let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-9-web", None)
-  assert count(connection, "select count(*) from flow_event") == before + 2
+  assert count(connection, pieces) == before + 2
 }
 
 pub fn the_reset_keeps_the_names_of_the_steps_test() {
@@ -406,7 +409,8 @@ pub fn the_reset_keeps_the_names_of_the_steps_test() {
   assert count(connection, "select count(*) from demand") == 3
   assert count(
       connection,
-      "select count(*) from piece where parent_id is not null",
+      "select count(*) from piece
+       where parent_id is not null and state != 'assembled'",
     )
     == 6
   let assert Ok(steps) = value_stream.list_steps(connection)

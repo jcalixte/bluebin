@@ -191,3 +191,82 @@ export type Backlog = {
   sequence: BacklogPiece[]
   mix: MixRow[]
 }
+
+/** Hours, in each view; the whole Duration is null when there is nothing to average. */
+export type Duration = {
+  calendar: number | null
+  working: number | null
+}
+
+export type TimeView = keyof Duration
+
+/** Averages per Piece that reached production in the period. */
+export type PieceMeasures = {
+  count: number
+  leadTime: Duration | null
+  touchTime: Duration | null
+  stagnationTime: Duration | null
+  backlogTime: Duration | null
+}
+
+export type DemandMeasures = {
+  id: string
+  label: string
+  client: string
+  pieces: number
+  leadTime: Duration | null
+  touchTime: Duration | null
+  stagnationTime: Duration | null
+  /** The Demand's own Lead Time: null until its last Piece reached production. */
+  demandLeadTime: Duration | null
+}
+
+/** `stationLeadTime` and `touchTime` are averages per pass; `starvationTime` is a total. */
+export type StationMeasures = {
+  id: string
+  name: string
+  branch: string | null
+  position: number
+  passes: number
+  stationLeadTime: Duration | null
+  touchTime: Duration | null
+  /** A fraction in 0..1. */
+  touchShare: number | null
+  starvationTime: Duration | null
+  pulls: number
+  deviations: number
+}
+
+export type RecordedDeviation = {
+  at: string
+  rule: string
+  station: string
+  stationName: string
+  piece: string | null
+  reason: string
+}
+
+export type Measures = {
+  from: string
+  to: string
+  pieces: PieceMeasures
+  demands: DemandMeasures[]
+  stations: StationMeasures[]
+  deviations: {
+    byRule: { rule: string; count: number }[]
+    list: RecordedDeviation[]
+  }
+}
+
+export type Holiday = {
+  day: string
+  label: string
+}
+
+/** `days` uses 0 for Sunday to 6 for Saturday; `start` and `end` are UTC "HH:MM". */
+export type WorkingCalendar = {
+  days: number[]
+  start: string
+  end: string
+  holidays: Holiday[]
+}

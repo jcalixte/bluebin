@@ -177,6 +177,34 @@ const schema_v7 = "
 alter table piece add column urgent integer;
 "
 
+/// The Working Calendar replaces the Monday to Friday, 7 hour stand-in, and the
+/// log gains what the measures need: when a Piece entered the Backlog, and
+/// one `kanban_sent` for each Kanban already held, for the Starvation Time.
+const schema_v8 = "
+create table if not exists working_calendar (
+  id        integer primary key check (id = 1),
+  days      text not null,
+  day_start text not null,
+  day_end   text not null
+);
+insert or ignore into working_calendar (id, days, day_start, day_end)
+values (1, '12345', '09:00', '16:00');
+
+create table if not exists holiday (
+  day   text primary key,
+  label text not null
+);
+
+alter table piece add column entered_at text;
+update piece
+   set entered_at = (select d.started_on || 'T00:00:00Z' from demand d
+                      where d.id = piece.demand_id);
+
+insert into flow_event (at, kind, payload)
+select created_at, 'kanban_sent', json_object('station', station_id)
+  from kanban order by created_at;
+"
+
 const schema_v3 = "
 create table if not exists stream_step (
   position   integer primary key,
@@ -299,16 +327,80 @@ insert into kanban (id, station_id) values
   ('kb-qa-web-1', 'ws-qa-web'),
   ('kb-uat-1', 'ws-uat');
 
--- Each Piece that already left the Backlog did so on a pull of Analysis, so
--- the Product Mix has history.
+-- Each Piece in the flow left the Backlog on a pull of Analysis, so the
+-- Product Mix has history.
 insert into flow_event (at, kind, piece_id, payload)
-select case when state = 'produced'
-            then strftime('%Y-%m-%dT%H:%M:%SZ', produced_at, '-3 day')
-            else strftime('%Y-%m-%dT%H:%M:%SZ', since, '-1 day') end,
+select strftime('%Y-%m-%dT%H:%M:%SZ', since, '-1 day'),
        'piece_pulled', id, '{\"station\":\"ws-analysis\",\"from\":null}'
   from piece
- where parent_id is null and state != 'backlog'
+ where parent_id is null and state not in ('backlog', 'produced')
  order by 1;
+
+-- Each produced Piece crossed the whole Value Stream: the trunk, one Sub-Piece
+-- per Branch, the Assembly and UAT. Hours count back from its production and
+-- stretch a little from one Piece to the next, so the measures vary.
+insert into piece (id, demand_id, reference, state, parent_id, branch)
+select p.id || '-' || lower(b.branch), p.demand_id,
+       p.reference || ' · ' || b.branch, 'assembled', p.id, b.branch
+  from piece p,
+       (select 'Web' as branch union all select 'iOS' union all select 'Android') b
+ where p.state = 'produced';
+
+with
+  step(hours, kind, station, from_station) as (values
+    (78, 'piece_pulled', 'ws-analysis', null),
+    (74, 'piece_put_in_blue_bin', 'ws-analysis', null),
+    (70, 'piece_pulled', 'ws-conception', 'ws-analysis'),
+    (66, 'piece_put_in_blue_bin', 'ws-conception', null),
+    (46, 'piece_split', 'ws-conception', null),
+    (22, 'piece_assembled', 'ws-uat', null),
+    (20, 'piece_put_in_blue_bin', 'ws-uat', null)),
+  branch_step(branch, hours, kind, station, from_station) as (values
+    ('Web', 64, 'piece_pulled', 'ws-web', 'ws-conception'),
+    ('Web', 52, 'piece_put_in_blue_bin', 'ws-web', null),
+    ('Web', 44, 'piece_pulled', 'ws-qa-web', 'ws-web'),
+    ('Web', 38, 'piece_put_in_blue_bin', 'ws-qa-web', null),
+    ('iOS', 60, 'piece_pulled', 'ws-ios', 'ws-conception'),
+    ('iOS', 45, 'piece_put_in_blue_bin', 'ws-ios', null),
+    ('iOS', 34, 'piece_pulled', 'ws-qa-ios', 'ws-ios'),
+    ('iOS', 28, 'piece_put_in_blue_bin', 'ws-qa-ios', null),
+    ('Android', 46, 'piece_pulled', 'ws-android', 'ws-conception'),
+    ('Android', 36, 'piece_put_in_blue_bin', 'ws-android', null),
+    ('Android', 31, 'piece_pulled', 'ws-qa-android', 'ws-android'),
+    ('Android', 25, 'piece_put_in_blue_bin', 'ws-qa-android', null)),
+  history(at_hours, kind, piece_id, station, from_station, produced_at) as (
+    select s.hours * (1 + (p.rowid % 3) * 0.3), s.kind, p.id, s.station,
+           s.from_station, p.produced_at
+      from piece p, step s
+     where p.state = 'produced'
+    union all
+    select s.hours * (1 + (p.rowid % 3) * 0.3), s.kind, sub.id, s.station,
+           s.from_station, p.produced_at
+      from piece p
+      join piece sub on sub.parent_id = p.id
+      join branch_step s on s.branch = sub.branch
+     where p.state = 'produced')
+insert into flow_event (at, kind, piece_id, payload)
+select strftime('%Y-%m-%dT%H:%M:%SZ', produced_at, '-' || at_hours || ' hours'),
+       kind, piece_id,
+       case when kind = 'piece_pulled'
+            then json_object('station', station, 'from', from_station)
+            else json_object('station', station) end
+  from history
+ order by 1;
+
+-- A Piece entered the Backlog when its Demand started, or at its first event
+-- if that came earlier.
+update piece
+   set entered_at = min(
+         (select d.started_on || 'T00:00:00Z' from demand d where d.id = piece.demand_id),
+         coalesce((select min(e.at) from flow_event e where e.piece_id = piece.id),
+                  '9999'))
+ where parent_id is null;
+
+insert into flow_event (at, kind, payload)
+select created_at, 'kanban_sent', json_object('station', station_id)
+  from kanban;
 
 -- QA iOS found a defect in the iOS part of US-4; the Rework is against the
 -- Work Station that made it.
@@ -337,7 +429,7 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// Each step runs at most once per database, tracked in `pragma user_version`:
 /// never edit an applied step, append a new one and raise this target.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  migrate_to(connection, 7)
+  migrate_to(connection, 8)
 }
 
 pub fn migrate_to(
@@ -353,6 +445,7 @@ pub fn migrate_to(
     #(5, schema_v5),
     #(6, schema_v6 <> seed_passes_sql),
     #(7, schema_v7),
+    #(8, schema_v8),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
@@ -422,7 +515,9 @@ delete from demand;
 delete from work_station;
 delete from person;
 delete from stream_step;
+delete from holiday;
 delete from sqlite_sequence;
+update working_calendar set days = '12345', day_start = '09:00', day_end = '16:00';
 "
 
 fn seed_when_empty(

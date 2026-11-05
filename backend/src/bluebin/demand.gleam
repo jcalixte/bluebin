@@ -1,13 +1,10 @@
+import bluebin/calendar
 import gleam/dynamic/decode
 import gleam/float
 import gleam/int
 import gleam/json
 import gleam/list
 import sqlight
-
-/// Stand-in for the per-Value-Stream Working Calendar (F39): every Value Stream
-/// runs Monday to Friday, seven hours a day.
-pub const working_hours_per_day = 7.0
 
 pub type Demand {
   Demand(
@@ -19,11 +16,12 @@ pub type Demand {
     pieces_produced: Int,
     working_days_total: Int,
     working_days_elapsed: Int,
+    hours_per_day: Float,
   )
 }
 
 /// Working days: every day between the first start and the later of today and
-/// the last due date, minus Saturdays and Sundays.
+/// the last due date that the Working Calendar counts.
 const list_sql = "
 with recursive
   span(day, last_day) as (
@@ -40,7 +38,9 @@ with recursive
     select date(day, '+1 day'), last_day from days where day < last_day
   ),
   working_day(day) as (
-    select day from days where strftime('%w', day) not in ('0', '6')
+    select day from days where "
+  <> calendar.working_day_sql
+  <> "
   )
 select
   d.id,
@@ -50,7 +50,9 @@ select
   d.pieces_asked,
   (select count(*) from piece p where p.demand_id = d.id and p.state = 'produced'),
   (select count(*) from working_day w where w.day >= d.started_on and w.day <= d.due_on),
-  (select count(*) from working_day w where w.day >= d.started_on and w.day <= date('now'))
+  (select count(*) from working_day w where w.day >= d.started_on and w.day <= date('now')),
+  (select (strftime('%s', '2000-01-01 ' || day_end) - strftime('%s', '2000-01-01 ' || day_start)) / 3600.0
+     from working_calendar)
 from demand d
 where d.state = 'active'
 order by d.due_on
@@ -71,6 +73,7 @@ fn decoder() -> decode.Decoder(Demand) {
   use pieces_produced <- decode.field(5, decode.int)
   use working_days_total <- decode.field(6, decode.int)
   use working_days_elapsed <- decode.field(7, decode.int)
+  use hours_per_day <- decode.field(8, decode.float)
   decode.success(Demand(
     id:,
     label:,
@@ -80,6 +83,7 @@ fn decoder() -> decode.Decoder(Demand) {
     pieces_produced:,
     working_days_total:,
     working_days_elapsed:,
+    hours_per_day:,
   ))
 }
 
@@ -88,7 +92,7 @@ pub fn takt_time_hours(demand: Demand) -> Float {
     0 -> 0.0
     asked ->
       int.to_float(demand.working_days_total)
-      *. working_hours_per_day
+      *. demand.hours_per_day
       /. int.to_float(asked)
   }
 }

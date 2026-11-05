@@ -100,7 +100,7 @@ pub fn pull(
     source.id,
     reason,
   ))
-  use _ <- result.try(spend_kanban(connection, kanban))
+  use _ <- result.try(spend_kanban(connection, kanban, station.id))
 
   use #(pulled, sent) <- result.try(case kind {
     FromBacklog | Straight -> take_whole(connection, station, source)
@@ -937,7 +937,19 @@ fn split_off(
   use sent <- result.try(case left {
     Error(_) -> Error(StoreFailed)
     Ok([]) -> Ok([])
-    Ok(_) -> send_kanbans(connection, option.values([source.station_id]))
+    Ok(_) -> {
+      // The Piece leaves the trunk's Blue Bin here, which ends its Station
+      // Lead Time there.
+      use _ <- result.try(record_event(
+        connection,
+        "piece_split",
+        Some(source.id),
+        json.object([
+          #("station", json.nullable(source.station_id, json.string)),
+        ]),
+      ))
+      send_kanbans(connection, option.values([source.station_id]))
+    }
   })
   Ok(#(sub_piece, sent))
 }
@@ -1246,14 +1258,26 @@ fn oldest_kanban(
   }
 }
 
+/// `kanban_sent` and `kanban_spent` date the Kanbans a Work Station holds,
+/// for its Starvation Time.
 fn spend_kanban(
   connection: sqlight.Connection,
   kanban: Option(String),
+  station_id: String,
 ) -> Result(Nil, FlowError) {
   case kanban {
     None -> Ok(Nil)
-    Some(id) ->
-      write(connection, "delete from kanban where id = ?1", [sqlight.text(id)])
+    Some(id) -> {
+      use _ <- result.try(
+        write(connection, "delete from kanban where id = ?1", [sqlight.text(id)]),
+      )
+      record_event(
+        connection,
+        "kanban_spent",
+        None,
+        json.object([#("station", json.string(station_id))]),
+      )
+    }
   }
 }
 
@@ -1367,7 +1391,15 @@ fn send_kanban(
   case sent {
     Error(_) -> Error(StoreFailed)
     Ok([]) -> Ok(None)
-    Ok([station, ..]) -> Ok(Some(station))
+    Ok([station, ..]) -> {
+      use _ <- result.try(record_event(
+        connection,
+        "kanban_sent",
+        None,
+        json.object([#("station", json.string(station))]),
+      ))
+      Ok(Some(station))
+    }
   }
 }
 
