@@ -114,6 +114,25 @@ check "every Priority List puts Rework before Kanbans" assert_json \
 check "an unknown Person has no screen" test \
   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/people/pe-nobody/next")" = 404
 
+measures=$(curl -fsS "$BASE/api/measures")
+check "measures name the period they cover" assert_json \
+  '(.from | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")) and .from <= .to' "$measures"
+check "Lead Time = Touch Time + Stagnation Time, in both views" assert_json \
+  '.pieces | .leadTime == null or (
+     ((.leadTime.calendar - .touchTime.calendar - .stagnationTime.calendar) | fabs) <= 0.02
+     and ((.leadTime.working - .touchTime.working - .stagnationTime.working) | fabs) <= 0.02)' \
+  "$measures"
+check "every Work Station has a Touch share between 0 and 1" assert_json \
+  '.stations | all(.touchShare == null or (.touchShare >= 0 and .touchShare <= 1))' "$measures"
+check "every Deviation of the period carries its reason" assert_json \
+  '.deviations.list | all(.reason != "")' "$measures"
+check "a period ending before it starts is refused" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/measures?from=2026-11-05&to=2026-11-01")" = 400
+
+calendar=$(curl -fsS "$BASE/api/calendar")
+check "the Working Calendar has working days and a day that ends after it starts" \
+  assert_json '(.days | length) > 0 and .start < .end' "$calendar"
+
 # The stream never ends, so curl stops it after 2 s and only its headers count.
 backlog=$(curl -fsS "$BASE/api/backlog")
 check "the Backlog lists its Heijunka Sequence" assert_json \
