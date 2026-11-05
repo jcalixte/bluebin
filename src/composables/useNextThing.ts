@@ -1,6 +1,7 @@
 import { onMounted, ref, watch, type Ref } from "vue"
 import { postAction } from "../api"
 import type { FlowConfirm, Person, PersonView } from "../types"
+import { useLiveUpdates } from "./useLiveUpdates"
 
 export function useNextThing(personId: Ref<string>) {
   const people = ref<Person[]>([])
@@ -60,6 +61,7 @@ export function useNextThing(personId: Ref<string>) {
 
   watch(personId, load)
   onMounted(load)
+  useLiveUpdates(load)
 
   return { people, view, error, loading, load, pull, finish, repair, assign }
 }

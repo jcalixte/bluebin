@@ -17,7 +17,7 @@ watch(personId, (id) => {
   history.replaceState(null, "", url)
 })
 
-const { people, view, error, loading, load, pull, finish, repair, assign } = useNextThing(personId)
+const { people, view, error, loading, pull, finish, repair, assign } = useNextThing(personId)
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 
 const next = computed(() => view.value?.next ?? null)
@@ -83,7 +83,6 @@ function since(at: string) {
             {{ one.name }} · {{ one.stations.join(", ") }}
           </option>
         </select>
-        <button class="btn btn-sm" :disabled="loading" @click="load">Refresh</button>
       </div>
     </header>
 

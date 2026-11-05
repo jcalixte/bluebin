@@ -1,6 +1,7 @@
 import { onMounted, ref } from "vue"
 import { postAction } from "../api"
 import type { FlowConfirm, ValueStream } from "../types"
+import { useLiveUpdates } from "./useLiveUpdates"
 
 export function useValueStream() {
   const valueStream = ref<ValueStream | null>(null)
@@ -65,6 +66,7 @@ export function useValueStream() {
   }
 
   onMounted(load)
+  useLiveUpdates(load)
 
   return {
     valueStream,

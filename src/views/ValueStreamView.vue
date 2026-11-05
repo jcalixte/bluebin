@@ -122,7 +122,6 @@ const taktLabel = computed(() => {
           Takt Time {{ taktLabel }} per Piece, across every active Demand
         </p>
       </div>
-      <button class="btn btn-sm" :disabled="loading" @click="load">Refresh</button>
     </header>
 
     <div v-if="renameError" role="alert" class="alert alert-error mb-4">

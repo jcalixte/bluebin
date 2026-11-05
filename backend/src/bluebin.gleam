@@ -2,10 +2,12 @@ import bluebin/assignment
 import bluebin/db
 import bluebin/demand
 import bluebin/flow
+import bluebin/live
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/http
+import gleam/http/request
 import gleam/int
 import gleam/json
 import gleam/list
@@ -22,10 +24,21 @@ pub fn main() {
 
   let _ = simplifile.create_directory_all("data")
   let assert Ok(Nil) = db.with_connection(db.prepare)
+  let assert Ok(hub) = live.start()
 
-  let assert Ok(_) =
-    handle_request
+  let api =
+    fn(request) { handle_request(request, hub) }
     |> wisp_mist.handler(wisp.random_string(64))
+
+  // The event stream holds its socket open, so it goes to mist directly and
+  // never through wisp, which expects a response it can send and close.
+  let assert Ok(_) =
+    fn(request) {
+      case request.path_segments(request) {
+        ["api", "events"] -> live.stream(request, hub)
+        _ -> api(request)
+      }
+    }
     |> mist.new
     |> mist.bind("0.0.0.0")
     |> mist.port(8000)
@@ -34,9 +47,10 @@ pub fn main() {
   process.sleep_forever()
 }
 
-fn handle_request(request: wisp.Request) -> wisp.Response {
+fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
   use <- wisp.log_request(request)
   use <- wisp.rescue_crashes
+  use <- announce_change(request, hub)
 
   case wisp.path_segments(request) {
     ["api", "health"] -> {
@@ -100,6 +114,26 @@ fn reset() -> wisp.Response {
     Ok(Nil) -> wisp.no_content()
     Error(_) -> wisp.internal_server_error()
   }
+}
+
+/// Every write that succeeds changes what the open screens show, so the rule
+/// lives here once and a new endpoint cannot forget it.
+fn announce_change(
+  request: wisp.Request,
+  hub: live.Hub,
+  next: fn() -> wisp.Response,
+) -> wisp.Response {
+  let response = next()
+  case request.method, response.status {
+    http.Get, _ | http.Head, _ -> Nil
+    _, status if status >= 200 && status < 300 ->
+      case wisp.path_segments(request) {
+        ["api", ..action] -> live.announce(hub, string.join(action, "/"))
+        _ -> Nil
+      }
+    _, _ -> Nil
+  }
+  response
 }
 
 fn demands() -> wisp.Response {

@@ -3,7 +3,7 @@ import { computed } from "vue"
 import DemandRow from "../components/DemandRow.vue"
 import { useDemands } from "../composables/useDemands"
 
-const { demands, error, loading, load } = useDemands()
+const { demands, error, loading } = useDemands()
 
 const behind = computed(() => demands.value.filter((d) => d.andon).length)
 </script>
@@ -15,7 +15,6 @@ const behind = computed(() => demands.value.filter((d) => d.andon).length)
         <h2 class="text-xl font-semibold">Active Demands</h2>
         <p class="text-sm opacity-70">Each Demand against its own Takt Time, for its Client</p>
       </div>
-      <button class="btn btn-sm" :disabled="loading" @click="load">Refresh</button>
     </header>
 
     <div v-if="behind > 0" role="alert" class="alert alert-error mb-6 font-medium">
@@ -27,7 +26,7 @@ const behind = computed(() => demands.value.filter((d) => d.andon).length)
       </span>
     </div>
 
-    <p v-if="loading" class="flex items-center gap-3 opacity-70">
+    <p v-if="loading && demands.length === 0" class="flex items-center gap-3 opacity-70">
       <span class="loading loading-spinner loading-sm" />
       Loading the Demands…
     </p>

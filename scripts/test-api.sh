@@ -114,6 +114,11 @@ check "every Priority List puts Rework before Kanbans" assert_json \
 check "an unknown Person has no screen" test \
   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/people/pe-nobody/next")" = 404
 
+# The stream never ends, so curl stops it after 2 s and only its headers count.
+events=$(curl -s -N --max-time 2 -D - -o /dev/null "$BASE/api/events" || true)
+check "the event stream opens as Server-Sent Events" \
+  sh -c 'printf "%s" "$1" | grep -qi "^content-type: text/event-stream"' _ "$events"
+
 echo
 if [ "$failures" -eq 0 ]; then
   echo "All checks passed."

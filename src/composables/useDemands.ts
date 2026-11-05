@@ -1,5 +1,6 @@
 import { onMounted, ref } from "vue"
 import type { Demand } from "../types"
+import { useLiveUpdates } from "./useLiveUpdates"
 
 export function useDemands() {
   const demands = ref<Demand[]>([])
@@ -23,6 +24,7 @@ export function useDemands() {
   }
 
   onMounted(load)
+  useLiveUpdates(load)
 
   return { demands, error, loading, load }
 }
