@@ -44,6 +44,7 @@ pub type InProgress {
     piece: String,
     demand: String,
     person: Option(String),
+    person_id: Option(String),
     /// Put down for a Rework its Person must repair first (F13, F32).
     paused: Bool,
   )
@@ -62,6 +63,7 @@ pub type Rework {
     /// The Work Station that found the defect, which holds the Piece.
     found_by: String,
     assignee: Option(String),
+    assignee_id: Option(String),
   )
 }
 
@@ -155,6 +157,7 @@ fn station_json(
         #("piece", json.string(piece.piece)),
         #("demand", json.string(piece.demand)),
         #("person", json.nullable(piece.person, json.string)),
+        #("personId", json.nullable(piece.person_id, json.string)),
         #("paused", json.bool(piece.paused)),
       ])
     })
@@ -169,6 +172,7 @@ fn station_json(
         #("description", json.string(item.description)),
         #("foundBy", json.string(item.found_by)),
         #("assignee", json.nullable(item.assignee, json.string)),
+        #("assigneeId", json.nullable(item.assignee_id, json.string)),
       ])
     })
 
@@ -353,19 +357,21 @@ fn query_in_progress(
     use demand <- decode.field(3, decode.string)
     use person <- decode.field(4, decode.optional(decode.string))
     use paused <- decode.field(5, decode.int)
+    use person_id <- decode.field(6, decode.optional(decode.string))
     decode.success(InProgress(
       station_id:,
       id:,
       piece:,
       demand:,
       person:,
+      person_id:,
       paused: paused > 0,
     ))
   }
   sqlight.query(
     "select p.station_id, p.id, p.reference, d.label,
             (select pe.name from person pe where pe.id = p.assignee),
-            p.state = 'paused'
+            p.state = 'paused', p.assignee
      from piece p
      join demand d on d.id = p.demand_id
      where p.station_id is not null and p.state in ('in_flow', 'paused')
@@ -402,6 +408,7 @@ fn query_rework(
     use description <- decode.field(3, decode.string)
     use found_by <- decode.field(4, decode.string)
     use assignee <- decode.field(5, decode.optional(decode.string))
+    use assignee_id <- decode.field(6, decode.optional(decode.string))
     decode.success(Rework(
       station_id:,
       id:,
@@ -409,13 +416,15 @@ fn query_rework(
       description:,
       found_by:,
       assignee:,
+      assignee_id:,
     ))
   }
   sqlight.query(
     "select r.station_id, r.id, p.reference, r.description,
             coalesce((select w.name from work_station w where w.id = r.raised_by),
                      'downstream'),
-            (select pe.name from person pe where pe.id = r.assignee)
+            (select pe.name from person pe where pe.id = r.assignee),
+            r.assignee
      from rework r
      join piece p on p.id = r.piece_id
      where r.closed_at is null

@@ -52,6 +52,7 @@ export type InProgressPiece = {
   piece: string
   demand: string
   person: string | null
+  personId: string | null
   paused: boolean
 }
 
@@ -63,6 +64,7 @@ export type Rework = {
   /** The Work Station that found the defect and holds the Piece. */
   foundBy: string
   assignee: string | null
+  assigneeId: string | null
 }
 
 export type WorkStation = {
@@ -103,4 +105,62 @@ export type ValueStream = {
   steps: Step[]
   taktTimeHours: number
   demandsBehind: number
+}
+
+/** A Person and the Work Stations they belong to, nearest to production first. */
+export type Person = {
+  id: string
+  name: string
+  stations: string[]
+}
+
+/** What a Person holds: a Rework to repair or a Piece to transform. One is
+ *  active; the others wait, paused (F32). */
+export type Assignment =
+  | {
+      kind: "rework"
+      id: string
+      piece: string
+      station: string
+      stationName: string
+      active: boolean
+      foundBy: string
+      description: string
+    }
+  | {
+      kind: "piece"
+      id: string
+      piece: string
+      station: string
+      stationName: string
+      active: boolean
+    }
+
+/** The one next thing a Person does (F19). */
+export type NextThing =
+  | { kind: "continue"; assignment: Assignment }
+  | { kind: "take_rework"; rework: string; piece: string; station: string; stationName: string }
+  | { kind: "take_kanban"; station: string; stationName: string }
+  | { kind: "help_downstream"; station: string; stationName: string; because: string }
+  | { kind: "wait" }
+
+/** One item of a Priority List: Rework first, then the oldest Kanban (F18). */
+export type PriorityItem =
+  | { kind: "rework"; id: string; piece: string; description: string; assignee: string | null }
+  | { kind: "kanban"; id: string; since: string }
+
+export type PriorityList = {
+  station: string
+  name: string
+  people: { id: string; name: string }[]
+  items: PriorityItem[]
+}
+
+/** One Person's screen: the next thing, their Assignments, and the Priority
+ *  List of each of their Work Stations. */
+export type PersonView = {
+  person: { id: string; name: string }
+  next: NextThing
+  assignments: Assignment[]
+  priorityLists: PriorityList[]
 }

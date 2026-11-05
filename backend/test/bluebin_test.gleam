@@ -1,3 +1,4 @@
+import bluebin/assignment
 import bluebin/db
 import bluebin/demand.{type Demand, Demand}
 import bluebin/flow
@@ -413,7 +414,9 @@ pub fn the_reset_keeps_the_names_of_the_steps_test() {
 
 pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
   use connection <- with_seeded_database()
-  // Alice takes US-9's iOS part in hand; she made US-4's iOS part before.
+  // Alice repairs the seeded Rework first, then takes US-9's iOS part in
+  // hand; she made US-4's iOS part before.
+  let assert Ok(_) = flow.repair_rework(connection, "rw-1")
   let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-alice"), None)
   assert state_of(connection, "p-checkout-9-ios") == "in_flow"
 
@@ -598,6 +601,212 @@ pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
   exec(connection, "delete from piece_pass where station_id = 'ws-uat'")
   let assert Ok(empty) = value_stream.load(connection)
   assert string.contains(json.to_string(empty), "\"firstPassYield\":null")
+}
+
+// --- Assignments: one active per Person, the rest paused (F18–F22, F32) ---
+
+fn assignee(
+  connection: sqlight.Connection,
+  table: String,
+  id: String,
+) -> String {
+  let assert Ok([person]) =
+    sqlight.query(
+      "select coalesce(assignee, '') from " <> table <> " where id = ?1",
+      on: connection,
+      with: [sqlight.text(id)],
+      expecting: decode.at([0], decode.string),
+    )
+  person
+}
+
+fn next_of(connection: sqlight.Connection, person: String) -> assignment.Next {
+  let assert Ok(view) = assignment.load(connection, person)
+  view.next
+}
+
+pub fn a_person_repairs_their_rework_before_pulling_test() {
+  use connection <- with_seeded_database()
+  // Alice holds the seeded Rework on US-4's iOS part: it comes first.
+  assert flow.pull(connection, "ws-ios", Some("pe-alice"), None)
+    == Error(flow.ReworkFirst)
+  assert kanbans(connection, "ws-ios") == 1
+  // Karim, of the same Work Station, has free hands and takes the Kanban.
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+  assert kanbans(connection, "ws-ios") == 0
+}
+
+pub fn taking_a_new_piece_puts_the_current_one_down_test() {
+  use connection <- with_seeded_database()
+  // Bob transforms US-8's Web part, then takes US-9's in hand.
+  let assert Ok(_) = flow.pull(connection, "ws-web", Some("pe-bob"), None)
+  assert state_of(connection, "p-checkout-9-web") == "in_flow"
+  assert state_of(connection, "p-checkout-8-web") == "paused"
+
+  // Once US-9 is in a Blue Bin, his hands take US-8 up again on their own.
+  let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-9-web", None)
+  assert state_of(connection, "p-checkout-8-web") == "in_flow"
+  assert count(
+      connection,
+      "select count(*) from flow_event
+       where kind in ('piece_paused', 'piece_resumed')
+         and piece_id = 'p-checkout-8-web'",
+    )
+    == 2
+}
+
+pub fn a_second_rework_waits_behind_the_first_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(raised) =
+    flow.raise_rework(
+      connection,
+      "ws-qa-ios",
+      "p-offline-4-ios",
+      "ws-ios",
+      "The retry banner never goes away",
+    )
+  // Alice already repairs rw-1: the new Rework is hers, and waits.
+  assert raised.assignee == Some("Alice")
+  assert count(
+      connection,
+      "select count(*) from rework where id = '" <> raised.id <> "'
+       and started_at is null",
+    )
+    == 1
+
+  let assert Ok(repaired) = flow.repair_rework(connection, "rw-1")
+  assert repaired.resumed == None
+  assert count(
+      connection,
+      "select count(*) from rework where id = '" <> raised.id <> "'
+       and started_at is not null",
+    )
+    == 1
+}
+
+pub fn a_piece_in_hand_goes_to_another_person_of_the_work_station_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(handed) =
+    flow.reassign(
+      connection,
+      flow.PieceAssignment,
+      "p-checkout-8-web",
+      "pe-lila",
+    )
+  assert handed.person == "Lila"
+  assert assignee(connection, "piece", "p-checkout-8-web") == "pe-lila"
+  // Karim is not of Web: the Piece stays with Lila.
+  assert flow.reassign(
+      connection,
+      flow.PieceAssignment,
+      "p-checkout-8-web",
+      "pe-karim",
+    )
+    == Error(flow.NotOfStation)
+  assert assignee(connection, "piece", "p-checkout-8-web") == "pe-lila"
+  // A Piece in a Blue Bin is in nobody's hands.
+  assert flow.reassign(
+      connection,
+      flow.PieceAssignment,
+      "p-checkout-9",
+      "pe-marc",
+    )
+    == Error(flow.PieceNotHere)
+}
+
+pub fn a_rework_handed_over_pauses_the_taker_and_frees_the_giver_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+
+  // Alice hands her Rework to Karim: his Piece waits, the repair comes first.
+  let assert Ok(_) =
+    flow.reassign(connection, flow.ReworkAssignment, "rw-1", "pe-karim")
+  assert assignee(connection, "rework", "rw-1") == "pe-karim"
+  assert state_of(connection, "p-checkout-9-ios") == "paused"
+  assert flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+    == Error(flow.ReworkFirst)
+
+  // Karim hands his paused Piece to Alice, whose hands are free: she takes
+  // it up at once.
+  let assert Ok(_) =
+    flow.reassign(
+      connection,
+      flow.PieceAssignment,
+      "p-checkout-9-ios",
+      "pe-alice",
+    )
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'assignment_changed'",
+    )
+    == 2
+}
+
+pub fn the_priority_list_puts_rework_before_kanbans_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(items) = assignment.priority_list(connection, "ws-ios")
+  let assert [assignment.ReworkItem(id: "rw-1", ..), assignment.KanbanItem(..)] =
+    items
+}
+
+pub fn the_next_thing_is_the_active_assignment_test() {
+  use connection <- with_seeded_database()
+  let assert assignment.Continue(assignment.Repair(id: "rw-1", active: True, ..)) =
+    next_of(connection, "pe-alice")
+  let assert assignment.Continue(assignment.Transform(
+    id: "p-checkout-8-web",
+    active: True,
+    ..,
+  )) = next_of(connection, "pe-bob")
+}
+
+pub fn free_hands_take_the_top_kanban_test() {
+  use connection <- with_seeded_database()
+  assert next_of(connection, "pe-lila")
+    == assignment.TakeKanban(station_id: "ws-web", station: "Web")
+}
+
+pub fn a_rework_nobody_repairs_comes_before_any_kanban_test() {
+  use connection <- with_seeded_database()
+  exec(connection, "update rework set assignee = null")
+  let assert assignment.TakeRework(id: "rw-1", ..) =
+    next_of(connection, "pe-karim")
+}
+
+pub fn without_a_kanban_a_person_helps_downstream_test() {
+  use connection <- with_seeded_database()
+  // iOS has no Kanban left; QA iOS waits on the Rework it raised.
+  exec(connection, "delete from kanban where station_id = 'ws-ios'")
+  let assert assignment.HelpDownstream(station_id: "ws-qa-ios", ..) =
+    next_of(connection, "pe-karim")
+}
+
+pub fn with_nothing_to_take_or_help_a_person_waits_test() {
+  use connection <- with_seeded_database()
+  // Tom's Kanban at QA Web has no Piece upstream, and nothing downstream of
+  // his Work Stations holds up the flow.
+  assert next_of(connection, "pe-tom") == assignment.Wait
+  assert assignment.load(connection, "pe-nobody")
+    == Error(assignment.UnknownPerson)
+}
+
+pub fn the_person_payload_carries_the_shape_the_screen_reads_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(view) = assignment.load(connection, "pe-alice")
+  let text = json.to_string(assignment.to_json(view))
+  assert string.contains(text, "\"next\":{\"kind\":\"continue\"")
+  assert string.contains(text, "\"kind\":\"rework\",\"id\":\"rw-1\"")
+  assert string.contains(text, "\"priorityLists\":[{\"station\":\"ws-ios\"")
+  let assert Ok(people) = assignment.people(connection)
+  // Marc belongs to two Work Stations, nearest to production first.
+  assert list.contains(
+    people,
+    assignment.Person(id: "pe-marc", name: "Marc", stations: [
+      "Tech Conception", "Analysis",
+    ]),
+  )
 }
 
 // --- The two read endpoints, through their real queries ---

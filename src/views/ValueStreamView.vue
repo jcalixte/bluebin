@@ -2,9 +2,11 @@
 import { computed, ref } from "vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
+import DeviationDialog from "../components/DeviationDialog.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
+import { useFlowRunner } from "../composables/useFlowRunner"
 import { useValueStream } from "../composables/useValueStream"
-import type { FlowConfirm, WorkStation } from "../types"
+import type { WorkStation } from "../types"
 
 const {
   valueStream,
@@ -17,6 +19,7 @@ const {
   deliver,
   raiseRework,
   repairRework,
+  assign,
 } = useValueStream()
 
 /** The longest step name the API accepts; kept in step with the backend. */
@@ -42,40 +45,7 @@ async function rename(position: number, name: string) {
 
 // --- Pull, finish, deliver, and the Deviation a broken rule needs (F6, F9) ---
 
-/** One action waiting for the Person to confirm it and say why. */
-type Pending = { message: string; again: (reason: string) => Promise<FlowConfirm | null> }
-
-const pending = ref<Pending | null>(null)
-const reason = ref("")
-const actionError = ref<string | null>(null)
-const busy = ref(false)
-
-/** Runs one action; a warned rule opens the Deviation dialog instead. */
-async function run(action: (reason?: string) => Promise<FlowConfirm | null>) {
-  actionError.value = null
-  busy.value = true
-  try {
-    const confirm = await action()
-    if (confirm) {
-      reason.value = ""
-      pending.value = { message: confirm.message, again: (why) => action(why) }
-    }
-  } catch (cause) {
-    actionError.value = cause instanceof Error ? cause.message : String(cause)
-  } finally {
-    busy.value = false
-  }
-}
-
-async function recordDeviation() {
-  const why = reason.value.trim()
-  if (!pending.value || why === "") {
-    return
-  }
-  const action = pending.value.again
-  pending.value = null
-  await run(() => action(why))
-}
+const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 
 // --- Jidoka: raise a Rework on the Piece in hand (F12, F13) ---
 
@@ -216,6 +186,7 @@ const taktLabel = computed(() => {
                 @deliver="(piece) => run(() => deliver(piece))"
                 @rework="(piece) => openRework(station, piece)"
                 @repair="(rework) => run(() => repairRework(rework))"
+                @assign="(kind, id, person) => run(() => assign(kind, id, person))"
               />
             </div>
             <p v-if="column.stations.length > 1" class="text-xs italic opacity-50">
@@ -266,31 +237,12 @@ const taktLabel = computed(() => {
       </div>
     </dialog>
 
-    <dialog v-if="pending" class="modal modal-open">
-      <div class="modal-box">
-        <h3 class="text-lg font-semibold">This breaks a pull rule</h3>
-        <p class="py-2 text-sm opacity-80">{{ pending.message }}</p>
-        <label class="form-control">
-          <span class="label-text text-sm">Why do you go on? One line, seen by everyone.</span>
-          <input
-            v-model="reason"
-            class="input input-bordered mt-1 w-full"
-            maxlength="120"
-            placeholder="The Client called: this one ships today"
-            @keyup.enter="recordDeviation"
-          />
-        </label>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="pending = null">Cancel</button>
-          <button
-            class="btn btn-warning"
-            :disabled="busy || reason.trim() === ''"
-            @click="recordDeviation"
-          >
-            Record the Deviation
-          </button>
-        </div>
-      </div>
-    </dialog>
+    <DeviationDialog
+      v-if="pending"
+      :message="pending.message"
+      :busy="busy"
+      @confirm="recordDeviation"
+      @cancel="pending = null"
+    />
   </section>
 </template>

@@ -94,6 +94,28 @@ check "every step of the chain carries a name" assert_json \
 check "every Work Station sits on a named step" assert_json \
   '[.stations[].position] - [.steps[].position] | length == 0' "$stream"
 
+check "every open Rework carries the id of who repairs it" assert_json \
+  '.stations | all(.rework | all((.assignee == null) == (.assigneeId == null)))' "$stream"
+check "every Piece in hand carries the id of who holds it" assert_json \
+  '.stations | all(.inProgress | all((.person == null) == (.personId == null)))' "$stream"
+
+people=$(curl -fsS "$BASE/api/people")
+check "people is a non-empty array, each Person of a Work Station" assert_json \
+  'type == "array" and length > 0 and all((.stations | length) > 0)' "$people"
+
+first=$(printf '%s' "$people" | jq -r '.[0].id')
+next=$(curl -fsS "$BASE/api/people/$first/next")
+check "a Person's screen names one next thing" assert_json \
+  '.next.kind | IN("continue", "take_rework", "take_kanban", "help_downstream", "wait")' \
+  "$next"
+check "a Person holds at most one active Assignment" assert_json \
+  '[.assignments[] | select(.active)] | length <= 1' "$next"
+check "every Priority List puts Rework before Kanbans" assert_json \
+  '.priorityLists | all([.items[].kind] | . == sort_by(if . == "rework" then 0 else 1 end))' \
+  "$next"
+check "an unknown Person has no screen" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/people/pe-nobody/next")" = 404
+
 echo
 if [ "$failures" -eq 0 ]; then
   echo "All checks passed."

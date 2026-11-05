@@ -1,4 +1,5 @@
 import { onMounted, ref } from "vue"
+import { postAction } from "../api"
 import type { FlowConfirm, ValueStream } from "../types"
 
 /** Loads the Value Stream: Work Stations, Blue Bins, Kanbans, People, Rework. */
@@ -23,26 +24,14 @@ export function useValueStream() {
     }
   }
 
-  /** Posts one flow action. A broken pull rule comes back as a confirmation to
-   *  ask for; anything else either reloads the Value Stream or throws. */
+  /** Posts one flow action, then reloads the Value Stream unless a broken
+   *  pull rule asks for a confirmation first. */
   async function act(path: string, body: Record<string, unknown>): Promise<FlowConfirm | null> {
-    const response = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    })
-    if (response.status === 409) {
-      const answer = (await response.json()) as Partial<FlowConfirm> & { message: string }
-      if (answer.confirm) {
-        return { confirm: answer.confirm, message: answer.message }
-      }
-      throw new Error(answer.message)
+    const confirm = await postAction(path, body)
+    if (!confirm) {
+      await load()
     }
-    if (!response.ok) {
-      throw new Error(await response.text())
-    }
-    await load()
-    return null
+    return confirm
   }
 
   /** A Work Station spends a Kanban and takes the first Piece upstream. The
@@ -64,6 +53,10 @@ export function useValueStream() {
 
   /** The defect is repaired: the Rework closes and the paused Piece resumes. */
   const repairRework = (rework: string) => act("/api/rework/repair", { rework })
+
+  /** Hand a Piece in hand or a Rework to another Person of the Work Station. */
+  const assign = (kind: "piece" | "rework", id: string, person: string) =>
+    act("/api/assign", { kind, id, person })
 
   /** Rename one step. The server trims and validates; its answer wins. */
   async function renameStep(position: number, name: string) {
@@ -95,5 +88,6 @@ export function useValueStream() {
     deliver,
     raiseRework,
     repairRework,
+    assign,
   }
 }

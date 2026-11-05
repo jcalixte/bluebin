@@ -1,3 +1,4 @@
+import bluebin/assignment
 import bluebin/db
 import bluebin/demand
 import bluebin/flow
@@ -69,6 +70,18 @@ fn handle_request(request: wisp.Request) -> wisp.Response {
     ["api", "rework", "repair"] -> {
       use <- wisp.require_method(request, http.Post)
       repair_rework(request)
+    }
+    ["api", "assign"] -> {
+      use <- wisp.require_method(request, http.Post)
+      assign(request)
+    }
+    ["api", "people"] -> {
+      use <- wisp.require_method(request, http.Get)
+      people()
+    }
+    ["api", "people", person, "next"] -> {
+      use <- wisp.require_method(request, http.Get)
+      next_thing(person)
     }
     ["api", "steps", position] -> {
       use <- wisp.require_method(request, http.Put)
@@ -291,6 +304,32 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
         ],
         409,
       )
+    Error(flow.ReworkFirst) ->
+      json_body(
+        [
+          #("error", json.string("rework_first")),
+          #(
+            "message",
+            json.string(
+              "This Person repairs a Rework first. Repair it, or hand it to another Person of the Work Station, before pulling a new Piece.",
+            ),
+          ),
+        ],
+        409,
+      )
+    Error(flow.NotOfStation) ->
+      json_body(
+        [
+          #("error", json.string("not_of_station")),
+          #(
+            "message",
+            json.string(
+              "An Assignment goes only to a Person of the same Work Station.",
+            ),
+          ),
+        ],
+        409,
+      )
     Error(flow.UnknownStation) -> wisp.not_found()
     Error(flow.StoreFailed) -> wisp.internal_server_error()
   }
@@ -356,6 +395,67 @@ fn repair_rework(request: wisp.Request) -> wisp.Response {
             [
               #("piece", json.string(repaired.piece)),
               #("resumed", json.nullable(repaired.resumed, json.string)),
+            ],
+            200,
+          )
+        Error(failure) -> flow_response(Error(failure))
+      }
+  }
+}
+
+// --- Assignments and the next thing of each Person (F18–F22) ---
+
+fn people() -> wisp.Response {
+  case db.with_connection(assignment.people) {
+    Ok(people) ->
+      wisp.json_response(json.to_string(assignment.people_json(people)), 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn next_thing(person: String) -> wisp.Response {
+  case
+    db.with_connection(fn(connection) { assignment.load(connection, person) })
+  {
+    Ok(view) ->
+      wisp.json_response(json.to_string(assignment.to_json(view)), 200)
+    Error(assignment.UnknownPerson) -> wisp.not_found()
+    Error(assignment.ReadFailed) -> wisp.internal_server_error()
+  }
+}
+
+/// `{"kind": "piece" | "rework", "id": "…", "person": "pe-karim"}` — hand an
+/// Assignment to another Person of the same Work Station (F21).
+fn assign(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use kind <- decode.field("kind", decode.string)
+    use id <- decode.field("id", decode.string)
+    use person <- decode.field("person", decode.string)
+    decode.success(#(kind, id, person))
+  }
+  let parsed = case decode.run(body, decoder) {
+    Ok(#("piece", id, person)) -> Ok(#(flow.PieceAssignment, id, person))
+    Ok(#("rework", id, person)) -> Ok(#(flow.ReworkAssignment, id, person))
+    _ -> Error(Nil)
+  }
+
+  case parsed {
+    Error(Nil) ->
+      wisp.bad_request(
+        "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"person\": \"pe-lila\"}",
+      )
+    Ok(#(kind, id, person)) ->
+      case
+        db.with_connection(fn(connection) {
+          flow.reassign(connection, kind, id, person)
+        })
+      {
+        Ok(reassigned) ->
+          json_body(
+            [
+              #("piece", json.string(reassigned.piece)),
+              #("person", json.string(reassigned.person)),
             ],
             200,
           )

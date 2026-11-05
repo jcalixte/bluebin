@@ -10,16 +10,25 @@ const props = defineProps<{
   assembly?: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   pull: [person: string | undefined]
   finish: [piece: string]
   deliver: [piece: string]
   rework: [piece: string]
   repair: [rework: string]
+  /** Hand a Piece in hand or a Rework to another Person of this Work Station. */
+  assign: [kind: "piece" | "rework", id: string, person: string]
 }>()
 
 /** The Person who takes the next Piece in hand; none until one is picked. */
 const person = ref("")
+
+function handOver(kind: "piece" | "rework", id: string, event: Event) {
+  const person = (event.target as HTMLSelectElement).value
+  if (person !== "") {
+    emit("assign", kind, id, person)
+  }
+}
 
 const hasRework = computed(() => props.station.rework.length > 0)
 
@@ -134,7 +143,18 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <span class="font-medium" :class="item.paused ? 'opacity-50 line-through' : ''">
               {{ item.piece }}
             </span>
-            <span class="opacity-60">· {{ item.person ?? "unassigned" }}</span>
+            <select
+              class="select select-ghost select-xs w-24 opacity-70"
+              :value="item.personId ?? ''"
+              :disabled="busy"
+              title="Who holds this Piece: pick another Person to hand it over"
+              @change="handOver('piece', item.id, $event)"
+            >
+              <option value="" disabled>unassigned</option>
+              <option v-for="one in station.people" :key="one.id" :value="one.id">
+                {{ one.name }}
+              </option>
+            </select>
             <span
               v-if="item.paused"
               class="badge badge-xs badge-warning"
@@ -170,9 +190,20 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <span>
               <span class="font-medium">{{ item.piece }}</span>
               <span class="opacity-70"> — {{ item.description }}</span>
-              <span class="block text-xs opacity-60">
+              <span class="flex items-center gap-1 text-xs opacity-60">
                 found by {{ item.foundBy }} ·
-                {{ item.assignee ? `${item.assignee} repairs` : "nobody repairs it yet" }}
+                <select
+                  class="select select-ghost select-xs w-28"
+                  :value="item.assigneeId ?? ''"
+                  :disabled="busy"
+                  title="Who repairs it: pick another Person to hand it over"
+                  @change="handOver('rework', item.id, $event)"
+                >
+                  <option value="" disabled>nobody repairs it</option>
+                  <option v-for="one in station.people" :key="one.id" :value="one.id">
+                    {{ one.name }} repairs
+                  </option>
+                </select>
               </span>
             </span>
             <button class="btn btn-xs ml-auto" :disabled="busy" @click="$emit('repair', item.id)">

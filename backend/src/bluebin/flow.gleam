@@ -34,6 +34,10 @@ pub type FlowError {
   EmptyDescription
   /// No open Rework carries that id.
   UnknownRework
+  /// The Person holds an open Rework: it comes first, before any new Piece.
+  ReworkFirst
+  /// An Assignment goes only to a Person of the Work Station it belongs to.
+  NotOfStation
   StoreFailed
 }
 
@@ -86,14 +90,14 @@ pub fn pull(
 ) -> Result(Flowed, FlowError) {
   use <- in_transaction(connection)
   use station <- result.try(load_station(connection, station_id))
+  use repairing <- result.try(case person {
+    None -> Ok(False)
+    Some(person) -> holds_an_open_rework(connection, person, station.id)
+  })
+  use <- bool.guard(repairing, Error(ReworkFirst))
   use kind <- result.try(pull_kind(connection, station))
 
-  use source <- result.try(case kind {
-    FromBacklog -> next_backlog_piece(connection)
-    Straight -> next_upstream_piece(connection, station)
-    AtSplit -> next_unsplit_piece(connection, station)
-    Assembly -> next_complete_piece(connection, station)
-  })
+  use source <- result.try(next_source(connection, station, kind))
 
   use kanban <- result.try(oldest_kanban(connection, station.id))
   use open_rework <- result.try(has_an_open_rework(connection, station.id))
@@ -122,7 +126,17 @@ pub fn pull(
     AtSplit -> split_off(connection, station, source)
     Assembly -> assemble(connection, station, source)
   })
-  use _ <- result.try(take_in_hand(connection, pulled.0, station.id, person))
+  // Taking a new Piece in hand puts the current one down (F32).
+  use holder <- result.try(take_in_hand(
+    connection,
+    pulled.0,
+    station.id,
+    person,
+  ))
+  use _ <- result.try(case holder {
+    None -> Ok([])
+    Some(holder) -> pause_pieces(connection, holder, Some(pulled.0))
+  })
 
   use _ <- result.try(record_event(
     connection,
@@ -178,6 +192,7 @@ pub fn finish(
   // Who transformed the Piece here: the author a Rework goes to (F13), and
   // one more Piece out of this Work Station for its First Pass Yield (F16).
   use _ <- result.try(record_pass(connection, piece.id, station.id))
+  use holder <- result.try(assignee_of(connection, piece.id))
 
   use _ <- result.try(
     write(
@@ -196,6 +211,9 @@ pub fn finish(
     Some(piece.id),
     json.object([#("station", json.string(station.id))]),
   ))
+
+  // Free hands take up the Assignment they had put down (F32).
+  use _ <- result.try(settle_option(connection, holder))
 
   Ok(
     Flowed(
@@ -291,19 +309,12 @@ pub fn raise_rework(
   ))
 
   use author <- result.try(author_of(connection, piece.id, made_by.id))
-  use paused <- result.try(case author {
-    None -> Ok(None)
-    Some(#(person, _)) -> current_piece_of(connection, person, piece.id)
-  })
 
   let opened =
     sqlight.query(
       "insert into rework (id, piece_id, station_id, description, raised_by,
-                           assignee, started_at, paused_piece)
-       values ('rw-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5,
-               case when ?5 is null then null
-                    else strftime('%Y-%m-%dT%H:%M:%SZ', 'now') end,
-               ?6)
+                           assignee)
+       values ('rw-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5)
        returning id",
       on: connection,
       with: [
@@ -312,7 +323,6 @@ pub fn raise_rework(
         sqlight.text(description),
         sqlight.text(found_by.id),
         sqlight.nullable(sqlight.text, option.map(author, fn(one) { one.0 })),
-        sqlight.nullable(sqlight.text, option.map(paused, fn(one) { one.0 })),
       ],
       expecting: decode.at([0], decode.string),
     )
@@ -321,17 +331,12 @@ pub fn raise_rework(
     _ -> Error(StoreFailed)
   })
 
-  use _ <- result.try(case paused {
-    None -> Ok(Nil)
-    Some(#(paused_id, _)) ->
-      write(
-        connection,
-        "update piece set state = 'paused',
-                          since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-          where id = ?1 and state = 'in_flow'",
-        [sqlight.text(paused_id)],
-      )
-  })
+  // The Rework becomes the author's active Assignment, unless another Rework
+  // already is; their Piece in hand is put down either way.
+  use settled <- result.try(settle_option(
+    connection,
+    option.map(author, fn(one) { one.0 }),
+  ))
 
   use _ <- result.try(record_event(
     connection,
@@ -349,43 +354,21 @@ pub fn raise_rework(
     piece: piece.reference,
     demand: piece.demand,
     assignee: option.map(author, fn(one) { one.1 }),
-    paused: option.map(paused, fn(one) { one.1 }),
+    paused: list.first(settled.paused) |> option.from_result,
   ))
 }
 
-/// The defect is repaired: the Rework closes, and the Piece its author put
-/// down goes back in their hands.
+/// The defect is repaired: the Rework closes, and its Person takes up their
+/// next Assignment — another Rework, or the Piece they had put down.
 pub fn repair_rework(
   connection: sqlight.Connection,
   rework_id: String,
 ) -> Result(Repaired, FlowError) {
   use <- in_transaction(connection)
-
-  let decoder = {
-    use piece_id <- decode.field(0, decode.string)
-    use reference <- decode.field(1, decode.string)
-    use paused <- decode.field(2, decode.optional(decode.string))
-    use paused_reference <- decode.field(3, decode.optional(decode.string))
-    decode.success(#(piece_id, reference, paused, paused_reference))
-  }
-  let found =
-    sqlight.query(
-      "select r.piece_id, p.reference, r.paused_piece,
-              (select q.reference from piece q where q.id = r.paused_piece)
-         from rework r
-         join piece p on p.id = r.piece_id
-        where r.id = ?1 and r.closed_at is null",
-      on: connection,
-      with: [sqlight.text(rework_id)],
-      expecting: decoder,
-    )
-  use #(piece_id, reference, paused, paused_reference) <- result.try(
-    case found {
-      Error(_) -> Error(StoreFailed)
-      Ok([]) -> Error(UnknownRework)
-      Ok([rework, ..]) -> Ok(rework)
-    },
-  )
+  use #(piece_id, reference, assignee) <- result.try(load_open_rework(
+    connection,
+    rework_id,
+  ))
 
   use _ <- result.try(
     write(
@@ -397,22 +380,6 @@ pub fn repair_rework(
     ),
   )
 
-  use resumed <- result.try(case paused {
-    None -> Ok(None)
-    Some(paused_id) -> {
-      use _ <- result.try(
-        write(
-          connection,
-          "update piece set state = 'in_flow',
-                            since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-            where id = ?1 and state = 'paused'",
-          [sqlight.text(paused_id)],
-        ),
-      )
-      Ok(paused_reference)
-    }
-  })
-
   use _ <- result.try(record_event(
     connection,
     "rework_repaired",
@@ -420,7 +387,386 @@ pub fn repair_rework(
     json.object([#("rework", json.string(rework_id))]),
   ))
 
-  Ok(Repaired(piece: reference, resumed:))
+  use settled <- result.try(settle_option(connection, assignee))
+  Ok(Repaired(piece: reference, resumed: settled.resumed))
+}
+
+/// The open Rework with that id: its Piece, and who repairs it.
+fn load_open_rework(
+  connection: sqlight.Connection,
+  rework_id: String,
+) -> Result(#(String, String, Option(String)), FlowError) {
+  let decoder = {
+    use piece_id <- decode.field(0, decode.string)
+    use reference <- decode.field(1, decode.string)
+    use assignee <- decode.field(2, decode.optional(decode.string))
+    decode.success(#(piece_id, reference, assignee))
+  }
+  let found =
+    sqlight.query(
+      "select r.piece_id, p.reference, r.assignee
+         from rework r
+         join piece p on p.id = r.piece_id
+        where r.id = ?1 and r.closed_at is null",
+      on: connection,
+      with: [sqlight.text(rework_id)],
+      expecting: decoder,
+    )
+  case found {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Error(UnknownRework)
+    Ok([rework, ..]) -> Ok(rework)
+  }
+}
+
+// --- Assignments: one active per Person, the rest paused (F21, F32) ---
+
+/// What a Person's hands look like after a change.
+pub type Settled {
+  Settled(paused: List(String), resumed: Option(String))
+}
+
+/// What a Rework or a Piece in hand is, as an Assignment.
+pub type AssignmentKind {
+  ReworkAssignment
+  PieceAssignment
+}
+
+/// An Assignment handed over to another Person of the same Work Station.
+pub type Reassigned {
+  Reassigned(piece: String, person: String)
+}
+
+/// Any Person of a Work Station hands one of its Assignments — a Piece in
+/// hand or an open Rework — to another Person of that Work Station (F21). The
+/// one who takes it puts down their current Piece; the one who gave it takes
+/// up their next Assignment (F32).
+pub fn reassign(
+  connection: sqlight.Connection,
+  kind: AssignmentKind,
+  id: String,
+  person_id: String,
+) -> Result(Reassigned, FlowError) {
+  use <- in_transaction(connection)
+  use #(reference, station_id, previous, in_flow) <- result.try(case kind {
+    PieceAssignment -> load_piece_in_hand(connection, id)
+    ReworkAssignment -> {
+      use #(_, reference, previous) <- result.try(load_open_rework(
+        connection,
+        id,
+      ))
+      use station_id <- result.try(rework_station(connection, id))
+      Ok(#(reference, station_id, previous, False))
+    }
+  })
+  use name <- result.try(member_name(connection, station_id, person_id))
+  use <- bool.guard(
+    previous == Some(person_id),
+    Ok(Reassigned(piece: reference, person: name)),
+  )
+
+  use _ <- result.try(
+    write(
+      connection,
+      case kind {
+        PieceAssignment -> "update piece set assignee = ?2 where id = ?1"
+        ReworkAssignment -> "update rework set assignee = ?2 where id = ?1"
+      },
+      [sqlight.text(id), sqlight.text(person_id)],
+    ),
+  )
+  use _ <- result.try(case in_flow {
+    True -> pause_pieces(connection, person_id, Some(id)) |> result.replace(Nil)
+    False -> Ok(Nil)
+  })
+  use _ <- result.try(settle(connection, person_id))
+  use _ <- result.try(settle_option(connection, previous))
+
+  use _ <- result.try(record_event(
+    connection,
+    "assignment_changed",
+    case kind {
+      PieceAssignment -> Some(id)
+      ReworkAssignment -> None
+    },
+    json.object([
+      #(
+        "kind",
+        json.string(case kind {
+          PieceAssignment -> "piece"
+          ReworkAssignment -> "rework"
+        }),
+      ),
+      #("id", json.string(id)),
+      #("from", json.nullable(previous, json.string)),
+      #("to", json.string(person_id)),
+    ]),
+  ))
+  Ok(Reassigned(piece: reference, person: name))
+}
+
+/// Puts a Person's hands in order: an open Rework comes first and is the one
+/// active Assignment — every Piece they hold waits, paused. With no Rework,
+/// free hands take up the paused Piece nearest to production, then the one
+/// put down first (F18, F32).
+fn settle(
+  connection: sqlight.Connection,
+  person_id: String,
+) -> Result(Settled, FlowError) {
+  let open =
+    sqlight.query(
+      "select count(*) from rework where assignee = ?1 and closed_at is null",
+      on: connection,
+      with: [sqlight.text(person_id)],
+      expecting: decode.at([0], decode.int),
+    )
+  case open {
+    Error(_) -> Error(StoreFailed)
+    Ok([count, ..]) if count > 0 -> {
+      use _ <- result.try(start_next_rework(connection, person_id))
+      use paused <- result.try(pause_pieces(connection, person_id, None))
+      Ok(Settled(paused:, resumed: None))
+    }
+    Ok(_) -> {
+      use resumed <- result.try(resume_next_piece(connection, person_id))
+      Ok(Settled(paused: [], resumed:))
+    }
+  }
+}
+
+fn settle_option(
+  connection: sqlight.Connection,
+  person_id: Option(String),
+) -> Result(Settled, FlowError) {
+  case person_id {
+    None -> Ok(Settled(paused: [], resumed: None))
+    Some(person_id) -> settle(connection, person_id)
+  }
+}
+
+/// The oldest open Rework of the Person starts, unless one already runs: the
+/// Rework Time counts from that moment (F16).
+fn start_next_rework(
+  connection: sqlight.Connection,
+  person_id: String,
+) -> Result(Nil, FlowError) {
+  write(
+    connection,
+    "update rework set started_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id = (select id from rework
+                   where assignee = ?1 and closed_at is null
+                   order by opened_at, rowid limit 1)
+        and not exists (select 1 from rework
+                         where assignee = ?1 and closed_at is null
+                           and started_at is not null)",
+    [sqlight.text(person_id)],
+  )
+}
+
+/// Every Piece the Person transforms, but `except`, is put down. Answers the
+/// references of the Pieces paused.
+fn pause_pieces(
+  connection: sqlight.Connection,
+  person_id: String,
+  except: Option(String),
+) -> Result(List(String), FlowError) {
+  let paused =
+    sqlight.query(
+      "update piece set state = 'paused',
+                        since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        where assignee = ?1 and state = 'in_flow' and id is not ?2
+        returning id, reference",
+      on: connection,
+      with: [
+        sqlight.text(person_id),
+        sqlight.nullable(sqlight.text, except),
+      ],
+      expecting: {
+        use id <- decode.field(0, decode.string)
+        use reference <- decode.field(1, decode.string)
+        decode.success(#(id, reference))
+      },
+    )
+  use paused <- result.try(result.replace_error(paused, StoreFailed))
+  list.try_map(paused, fn(piece) {
+    use _ <- result.try(record_event(
+      connection,
+      "piece_paused",
+      Some(piece.0),
+      json.object([#("person", json.string(person_id))]),
+    ))
+    Ok(piece.1)
+  })
+}
+
+/// With empty hands, the Person takes up the paused Piece nearest to
+/// production, then the one put down first.
+fn resume_next_piece(
+  connection: sqlight.Connection,
+  person_id: String,
+) -> Result(Option(String), FlowError) {
+  let resumed =
+    sqlight.query(
+      "update piece set state = 'in_flow',
+                        since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        where id = (select p.id from piece p
+                      join work_station w on w.id = p.station_id
+                     where p.assignee = ?1 and p.state = 'paused'
+                     order by w.position desc, p.since, p.rowid limit 1)
+          and not exists (select 1 from piece
+                           where assignee = ?1 and state = 'in_flow')
+        returning id, reference",
+      on: connection,
+      with: [sqlight.text(person_id)],
+      expecting: {
+        use id <- decode.field(0, decode.string)
+        use reference <- decode.field(1, decode.string)
+        decode.success(#(id, reference))
+      },
+    )
+  case resumed {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Ok(None)
+    Ok([#(id, reference), ..]) -> {
+      use _ <- result.try(record_event(
+        connection,
+        "piece_resumed",
+        Some(id),
+        json.object([#("person", json.string(person_id))]),
+      ))
+      Ok(Some(reference))
+    }
+  }
+}
+
+/// Whether the Person, being of this Work Station, still has a Rework to
+/// repair: it comes before any new Piece (F18).
+fn holds_an_open_rework(
+  connection: sqlight.Connection,
+  person_id: String,
+  station_id: String,
+) -> Result(Bool, FlowError) {
+  let found =
+    sqlight.query(
+      "select count(*) from rework r
+        where r.assignee = ?1 and r.closed_at is null
+          and exists (select 1 from station_person sp
+                       where sp.station_id = ?2 and sp.person_id = ?1)",
+      on: connection,
+      with: [sqlight.text(person_id), sqlight.text(station_id)],
+      expecting: decode.at([0], decode.int),
+    )
+  case found {
+    Ok([count, ..]) -> Ok(count > 0)
+    Ok([]) -> Ok(False)
+    Error(_) -> Error(StoreFailed)
+  }
+}
+
+fn assignee_of(
+  connection: sqlight.Connection,
+  piece_id: String,
+) -> Result(Option(String), FlowError) {
+  let found =
+    sqlight.query(
+      "select assignee from piece where id = ?1",
+      on: connection,
+      with: [sqlight.text(piece_id)],
+      expecting: decode.at([0], decode.optional(decode.string)),
+    )
+  case found {
+    Ok([assignee, ..]) -> Ok(assignee)
+    Ok([]) -> Ok(None)
+    Error(_) -> Error(StoreFailed)
+  }
+}
+
+/// A Piece in the hands of a Work Station, transformed or put down: its
+/// reference, its Work Station, who holds it, and whether it is in flow.
+fn load_piece_in_hand(
+  connection: sqlight.Connection,
+  piece_id: String,
+) -> Result(#(String, String, Option(String), Bool), FlowError) {
+  let decoder = {
+    use reference <- decode.field(0, decode.string)
+    use station_id <- decode.field(1, decode.string)
+    use assignee <- decode.field(2, decode.optional(decode.string))
+    use in_flow <- decode.field(3, decode.int)
+    decode.success(#(reference, station_id, assignee, in_flow > 0))
+  }
+  let found =
+    sqlight.query(
+      "select reference, station_id, assignee, state = 'in_flow' from piece
+        where id = ?1 and station_id is not null
+          and state in ('in_flow', 'paused')",
+      on: connection,
+      with: [sqlight.text(piece_id)],
+      expecting: decoder,
+    )
+  case found {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Error(PieceNotHere)
+    Ok([piece, ..]) -> Ok(piece)
+  }
+}
+
+/// The Work Station a Rework stands against: its People repair it.
+fn rework_station(
+  connection: sqlight.Connection,
+  rework_id: String,
+) -> Result(String, FlowError) {
+  let found =
+    sqlight.query(
+      "select station_id from rework where id = ?1",
+      on: connection,
+      with: [sqlight.text(rework_id)],
+      expecting: decode.at([0], decode.string),
+    )
+  case found {
+    Ok([station_id, ..]) -> Ok(station_id)
+    Ok([]) -> Error(UnknownRework)
+    Error(_) -> Error(StoreFailed)
+  }
+}
+
+fn member_name(
+  connection: sqlight.Connection,
+  station_id: String,
+  person_id: String,
+) -> Result(String, FlowError) {
+  let found =
+    sqlight.query(
+      "select pe.name from station_person sp
+         join person pe on pe.id = sp.person_id
+        where sp.station_id = ?1 and sp.person_id = ?2",
+      on: connection,
+      with: [sqlight.text(station_id), sqlight.text(person_id)],
+      expecting: decode.at([0], decode.string),
+    )
+  case found {
+    Ok([name, ..]) -> Ok(name)
+    Ok([]) -> Error(NotOfStation)
+    Error(_) -> Error(StoreFailed)
+  }
+}
+
+/// Whether a Person of the Work Station can take its top Kanban now, with no
+/// Deviation: a Kanban waits, no Rework it raised is open, and a Piece waits
+/// upstream (F20).
+pub fn can_pull(
+  connection: sqlight.Connection,
+  station_id: String,
+) -> Result(Bool, FlowError) {
+  use station <- result.try(load_station(connection, station_id))
+  use kanban <- result.try(oldest_kanban(connection, station.id))
+  use open_rework <- result.try(has_an_open_rework(connection, station.id))
+  use <- bool.guard(kanban == None || open_rework, Ok(False))
+  use kind <- result.try(pull_kind(connection, station))
+  case next_source(connection, station, kind) {
+    Ok(_) -> Ok(True)
+    Error(NothingToPull) | Error(NothingToAssemble) -> Ok(False)
+    Error(failure) -> Error(failure)
+  }
 }
 
 /// A defect is named against a Work Station the Piece already crossed: an
@@ -467,33 +813,6 @@ fn author_of(
   }
 }
 
-/// The Piece that Person is transforming right now, which the Rework pauses.
-fn current_piece_of(
-  connection: sqlight.Connection,
-  person_id: String,
-  except: String,
-) -> Result(Option(#(String, String)), FlowError) {
-  let decoder = {
-    use id <- decode.field(0, decode.string)
-    use reference <- decode.field(1, decode.string)
-    decode.success(#(id, reference))
-  }
-  let found =
-    sqlight.query(
-      "select id, reference from piece
-        where assignee = ?1 and state = 'in_flow' and id <> ?2
-        order by since limit 1",
-      on: connection,
-      with: [sqlight.text(person_id), sqlight.text(except)],
-      expecting: decoder,
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok(None)
-    Ok([piece, ..]) -> Ok(Some(piece))
-  }
-}
-
 // --- How a pull moves its Piece ---
 
 /// Where a pull takes its Piece from, read from the shape of the chain.
@@ -531,6 +850,19 @@ fn pull_kind(
         None, True -> Ok(Assembly)
         _, _ -> Ok(Straight)
       }
+  }
+}
+
+fn next_source(
+  connection: sqlight.Connection,
+  station: Station,
+  kind: Kind,
+) -> Result(Source, FlowError) {
+  case kind {
+    FromBacklog -> next_backlog_piece(connection)
+    Straight -> next_upstream_piece(connection, station)
+    AtSplit -> next_unsplit_piece(connection, station)
+    Assembly -> next_complete_piece(connection, station)
   }
 }
 
@@ -958,29 +1290,38 @@ fn has_an_open_rework(
   }
 }
 
-/// The Person of the Work Station who takes the Piece in hand. A name that is
-/// not of this Work Station leaves the Piece unassigned.
+/// The Person of the Work Station who takes the Piece in hand, answered back.
+/// A name that is not of this Work Station leaves the Piece unassigned.
 fn take_in_hand(
   connection: sqlight.Connection,
   piece_id: String,
   station_id: String,
   person: Option(String),
-) -> Result(Nil, FlowError) {
+) -> Result(Option(String), FlowError) {
   case person {
-    None -> Ok(Nil)
-    Some(person) ->
-      write(
-        connection,
-        "update piece
-            set assignee = (select sp.person_id from station_person sp
-                             where sp.station_id = ?2 and sp.person_id = ?3)
-          where id = ?1",
-        [
-          sqlight.text(piece_id),
-          sqlight.text(station_id),
-          sqlight.text(person),
-        ],
-      )
+    None -> Ok(None)
+    Some(person) -> {
+      let taken =
+        sqlight.query(
+          "update piece
+              set assignee = (select sp.person_id from station_person sp
+                               where sp.station_id = ?2 and sp.person_id = ?3)
+            where id = ?1
+            returning assignee",
+          on: connection,
+          with: [
+            sqlight.text(piece_id),
+            sqlight.text(station_id),
+            sqlight.text(person),
+          ],
+          expecting: decode.at([0], decode.optional(decode.string)),
+        )
+      case taken {
+        Ok([holder, ..]) -> Ok(holder)
+        Ok([]) -> Ok(None)
+        Error(_) -> Error(StoreFailed)
+      }
+    }
   }
 }
 
