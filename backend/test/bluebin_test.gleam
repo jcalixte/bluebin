@@ -629,22 +629,80 @@ pub fn a_person_repairs_their_rework_before_pulling_test() {
   assert kanbans(connection, "ws-ios") == 0
 }
 
-pub fn taking_a_new_piece_puts_the_current_one_down_test() {
+pub fn a_new_piece_waits_behind_the_one_in_hand_test() {
   use connection <- with_seeded_database()
-  // In the seed, Bob holds US-8's Web part.
+  // In the seed, Bob holds US-8's Web part: finishing beats starting.
   let assert Ok(_) = flow.pull(connection, "ws-web", Some("pe-bob"), None)
-  assert state_of(connection, "p-checkout-9-web") == "in_flow"
-  assert state_of(connection, "p-checkout-8-web") == "paused"
-
-  let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-9-web", None)
   assert state_of(connection, "p-checkout-8-web") == "in_flow"
+  assert state_of(connection, "p-checkout-9-web") == "paused"
+
+  let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-8-web", None)
+  assert state_of(connection, "p-checkout-9-web") == "in_flow"
   assert count(
       connection,
       "select count(*) from flow_event
        where kind in ('piece_paused', 'piece_resumed')
-         and piece_id = 'p-checkout-8-web'",
+         and piece_id = 'p-checkout-9-web'",
     )
     == 2
+  assert count(
+      connection,
+      "select count(*) from flow_event
+       where kind = 'piece_paused' and piece_id = 'p-checkout-8-web'",
+    )
+    == 0
+}
+
+fn pieces_of(
+  connection: sqlight.Connection,
+  person: String,
+  station: String,
+  state: String,
+) -> Int {
+  count(
+    connection,
+    "select count(*) from piece where assignee = '" <> person <> "'
+       and station_id = '" <> station <> "' and state = '" <> state <> "'",
+  )
+}
+
+pub fn a_new_piece_upstream_waits_behind_the_one_downstream_test() {
+  use connection <- with_seeded_database()
+  // Marc takes US-2 from Analysis into Tech Conception, downstream.
+  let assert Ok(_) = flow.finish(connection, "ws-analysis", "p-billing-2", None)
+  let assert Ok(_) =
+    flow.pull(connection, "ws-conception", Some("pe-marc"), None)
+  assert state_of(connection, "p-billing-2") == "in_flow"
+
+  let assert Ok(_) = flow.pull(connection, "ws-analysis", Some("pe-marc"), None)
+  assert state_of(connection, "p-billing-2") == "in_flow"
+  assert pieces_of(connection, "pe-marc", "ws-analysis", "paused") == 1
+
+  let assert Ok(_) =
+    flow.finish(connection, "ws-conception", "p-billing-2", None)
+  assert pieces_of(connection, "pe-marc", "ws-analysis", "in_flow") == 1
+}
+
+pub fn a_new_piece_downstream_goes_before_the_one_upstream_test() {
+  use connection <- with_seeded_database()
+  // A Piece for Tech Conception, while Marc still holds US-2 in Analysis.
+  let assert Ok(_) = flow.pull(connection, "ws-analysis", None, None)
+  let assert Ok([ready]) =
+    sqlight.query(
+      "select id from piece
+        where station_id = 'ws-analysis' and state = 'in_flow'
+          and assignee is null",
+      on: connection,
+      with: [],
+      expecting: decode.at([0], decode.string),
+    )
+  let assert Ok(_) = flow.finish(connection, "ws-analysis", ready, None)
+  assert state_of(connection, "p-billing-2") == "in_flow"
+
+  let assert Ok(_) =
+    flow.pull(connection, "ws-conception", Some("pe-marc"), None)
+  assert pieces_of(connection, "pe-marc", "ws-conception", "in_flow") == 1
+  assert state_of(connection, "p-billing-2") == "paused"
 }
 
 pub fn a_second_rework_waits_behind_the_first_test() {

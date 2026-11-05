@@ -4,6 +4,8 @@ import type { WorkStation } from "../types"
 
 const props = defineProps<{
   station: WorkStation
+  /** The Piece each Person transforms now, by Person id. */
+  activePieces: Map<string, { piece: string; position: number }>
   last?: boolean
   busy?: boolean
   /** The Work Station after the Branches pulls by Assembly. */
@@ -27,6 +29,14 @@ function handOver(kind: "piece" | "rework", id: string, event: Event) {
     emit("assign", kind, id, person)
   }
 }
+
+/** Finishing beats starting: a Piece nearer to production keeps the Person's hands. */
+const keptFirst = computed(() => {
+  const active = props.activePieces.get(person.value)
+  if (!active || active.position < props.station.position) return null
+  const name = props.station.people.find((one) => one.id === person.value)?.name
+  return `${name} finishes ${active.piece} first: the new Piece starts paused`
+})
 
 const hasRework = computed(() => props.station.rework.length > 0)
 
@@ -83,6 +93,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           </option>
         </select>
       </div>
+      <p v-if="keptFirst" class="-mt-2 text-xs text-warning">{{ keptFirst }}</p>
 
       <div>
         <p class="text-xs uppercase tracking-wide opacity-60">Blue Bins</p>
@@ -153,7 +164,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <span
               v-if="item.paused"
               class="badge badge-xs badge-warning"
-              title="Paused: its Person repairs a Rework first"
+              title="Paused: its Person finishes a Rework or a Piece nearer to production first"
             >
               paused
             </span>
