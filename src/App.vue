@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue"
+import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
 import NextThingView from "./views/NextThingView.vue"
 import ValueStreamView from "./views/ValueStreamView.vue"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
+  { id: "backlog", label: "Backlog", path: "/backlog" },
   { id: "value-stream", label: "Value Stream", path: "/value-stream" },
   { id: "next", label: "My next thing", path: "/next" },
 ] as const
@@ -90,6 +92,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
 
     <main class="mx-auto max-w-[110rem] px-6 py-8">
       <DemandsView v-if="current.id === 'demands'" />
+      <BacklogView v-else-if="current.id === 'backlog'" />
       <ValueStreamView v-else-if="current.id === 'value-stream'" />
       <NextThingView v-else />
     </main>

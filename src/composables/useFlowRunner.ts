@@ -1,8 +1,9 @@
 import { ref } from "vue"
-import type { FlowConfirm } from "../types"
+import type { FlowConfirm, ReorderEffect } from "../types"
 
 export type Pending = {
   message: string
+  effects?: ReorderEffect[]
   again: (reason: string) => Promise<FlowConfirm | null>
 }
 
@@ -17,7 +18,11 @@ export function useFlowRunner() {
     try {
       const confirm = await action()
       if (confirm) {
-        pending.value = { message: confirm.message, again: (why) => action(why) }
+        pending.value = {
+          message: confirm.message,
+          effects: confirm.effects,
+          again: (why) => action(why),
+        }
       }
     } catch (cause) {
       actionError.value = cause instanceof Error ? cause.message : String(cause)

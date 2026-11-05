@@ -78,9 +78,20 @@ export type WorkStation = {
   kanbans: number
 }
 
+/** What a reorder of the Heijunka Sequence costs one Demand. */
+export type ReorderEffect = {
+  demand: string
+  label: string
+  /** Places its next Piece moves: positive is later. */
+  places: number
+  hours: number
+  taktGap: number
+}
+
 export type FlowConfirm = {
   confirm: string
   message: string
+  effects?: ReorderEffect[]
 }
 
 export type Step = {
@@ -147,4 +158,36 @@ export type PersonView = {
   next: NextThing
   assignments: Assignment[]
   priorityLists: PriorityList[]
+}
+
+export type BacklogPiece = {
+  id: string
+  reference: string
+  demand: string
+  demandLabel: string
+  client: string
+  dueOn: string
+  slotHours: number
+  urgent: boolean
+  canBeUrgent: boolean
+}
+
+export type MixCell = {
+  day: string
+  planned: number
+  real: number
+  onPlan: boolean
+}
+
+export type MixRow = {
+  demand: string
+  label: string
+  cells: MixCell[]
+}
+
+/** `sequence` is the Heijunka Sequence: its first Piece leaves the Backlog next. */
+export type Backlog = {
+  taktTimeHours: number
+  sequence: BacklogPiece[]
+  mix: MixRow[]
 }

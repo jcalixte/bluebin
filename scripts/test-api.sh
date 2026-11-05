@@ -115,6 +115,18 @@ check "an unknown Person has no screen" test \
   "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/people/pe-nobody/next")" = 404
 
 # The stream never ends, so curl stops it after 2 s and only its headers count.
+backlog=$(curl -fsS "$BASE/api/backlog")
+check "the Backlog lists its Heijunka Sequence" assert_json \
+  '.sequence | type == "array"' "$backlog"
+check "urgent Pieces lead the Heijunka Sequence" assert_json \
+  '[.sequence[].urgent] | . == (sort | reverse)' "$backlog"
+check "only Pieces not yet urgent can be made urgent" assert_json \
+  '.sequence | all(if .urgent then .canBeUrgent == false else true end)' "$backlog"
+check "the Product Mix has one row per active Demand" assert_json \
+  "(.mix | length) == $(printf '%s' "$demands" | jq length)" "$backlog"
+check "a Product Mix cell is on plan within one Piece" assert_json \
+  '[.mix[].cells[]] | all(.onPlan == (((.real - .planned) | fabs) <= 1))' "$backlog"
+
 events=$(curl -s -N --max-time 2 -D - -o /dev/null "$BASE/api/events" || true)
 check "the event stream opens as Server-Sent Events" \
   sh -c 'printf "%s" "$1" | grep -qi "^content-type: text/event-stream"' _ "$events"

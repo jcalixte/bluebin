@@ -1,3 +1,5 @@
+import bluebin/demand
+import bluebin/heijunka
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/json
@@ -11,6 +13,7 @@ pub type Rule {
   PullWithoutKanban
   SecondPieceInABlueBin
   PullWithAnOpenRework
+  ReorderHeijunkaSequence
 }
 
 pub type FlowError {
@@ -24,6 +27,8 @@ pub type FlowError {
   UnknownRework
   ReworkFirst
   NotOfStation
+  NotNextOfDemand
+  ReorderNeedsConfirmation(List(heijunka.Effect))
   StoreFailed
 }
 
@@ -41,6 +46,7 @@ pub fn rule_name(rule: Rule) -> String {
     PullWithoutKanban -> "pull_without_kanban"
     SecondPieceInABlueBin -> "second_piece_in_a_blue_bin"
     PullWithAnOpenRework -> "pull_with_an_open_rework"
+    ReorderHeijunkaSequence -> "reorder_heijunka_sequence"
   }
 }
 
@@ -52,6 +58,8 @@ pub fn rule_warning(rule: Rule) -> String {
       "Every Blue Bin of this Work Station is full. Putting a second Piece in one is a Deviation."
     PullWithAnOpenRework ->
       "This Work Station found a defect and its Rework is still open. Starting another Piece before it is repaired is a Deviation."
+    ReorderHeijunkaSequence ->
+      "Releasing this Piece before its turn breaks the Heijunka Sequence and the levelled Product Mix. It is a Deviation."
   }
 }
 
@@ -228,6 +236,85 @@ pub fn deliver(
     deviations: [],
     kanbans_sent_to: sent,
   ))
+}
+
+/// Moves the next Piece of a Demand to the top of the Backlog, behind the
+/// Pieces already urgent (F25). It breaks the Heijunka Sequence, so it asks
+/// for a reason first and shows what each Demand loses.
+pub fn make_urgent(
+  connection: sqlight.Connection,
+  piece_id: String,
+  reason: Option(String),
+) -> Result(Flowed, FlowError) {
+  use <- in_transaction(connection)
+  use backlog <- result.try(
+    heijunka.load(connection) |> result.replace_error(StoreFailed),
+  )
+  use placed <- result.try(
+    list.find(backlog.sequence, fn(placed) { placed.piece.id == piece_id })
+    |> result.replace_error(PieceNotHere),
+  )
+  let done =
+    Flowed(
+      piece: placed.piece.reference,
+      demand: placed.demand.label,
+      deviations: [],
+      kanbans_sent_to: [],
+    )
+  use <- bool.guard(placed.piece.urgent != None, Ok(done))
+  use <- bool.guard(
+    !heijunka.next_of_its_demand(backlog.sequence, placed),
+    Error(NotNextOfDemand),
+  )
+  let after = heijunka.make_urgent(backlog.sequence, piece_id)
+  use <- bool.guard(after == backlog.sequence, Ok(done))
+
+  case option.map(reason, string.trim) {
+    None | Some("") ->
+      Error(
+        ReorderNeedsConfirmation(heijunka.effects(
+          backlog.sequence,
+          after,
+          demand.value_stream_takt_hours(backlog.demands),
+        )),
+      )
+    Some(reason) -> {
+      use first <- result.try(first_station(connection))
+      use _ <- result.try(
+        write(
+          connection,
+          "update piece
+            set urgent = (select coalesce(max(urgent), 0) + 1 from piece)
+          where id = ?1",
+          [sqlight.text(piece_id)],
+        ),
+      )
+      use _ <- result.try(record_deviation(
+        connection,
+        ReorderHeijunkaSequence,
+        first,
+        piece_id,
+        reason,
+      ))
+      Ok(Flowed(..done, deviations: [ReorderHeijunkaSequence]))
+    }
+  }
+}
+
+/// The Work Station the Backlog feeds; a reorder is its Deviation.
+fn first_station(connection: sqlight.Connection) -> Result(String, FlowError) {
+  case
+    sqlight.query(
+      "select id from work_station order by position, id limit 1",
+      on: connection,
+      with: [],
+      expecting: decode.at([0], decode.string),
+    )
+  {
+    Ok([id, ..]) -> Ok(id)
+    Ok([]) -> Error(UnknownStation)
+    Error(_) -> Error(StoreFailed)
+  }
 }
 
 pub type Raised {
@@ -970,21 +1057,20 @@ fn edge_position(
   }
 }
 
-/// Insertion order until the Heijunka Sequence exists (F23).
 fn next_backlog_piece(
   connection: sqlight.Connection,
 ) -> Result(Source, FlowError) {
-  find_source(
-    connection,
-    "select p.id, p.reference, d.label, null
-     from piece p
-     join demand d on d.id = p.demand_id
-     where p.state = 'backlog' and p.parent_id is null
-     order by p.rowid
-     limit 1",
-    [],
-    NothingToPull,
-  )
+  case heijunka.load(connection) {
+    Error(_) -> Error(StoreFailed)
+    Ok(heijunka.Backlog(sequence: [], ..)) -> Error(NothingToPull)
+    Ok(heijunka.Backlog(sequence: [next, ..], ..)) ->
+      Ok(Source(
+        id: next.piece.id,
+        reference: next.piece.reference,
+        demand: next.demand.label,
+        station_id: None,
+      ))
+  }
 }
 
 fn next_upstream_piece(

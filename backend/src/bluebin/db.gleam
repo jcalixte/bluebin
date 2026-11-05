@@ -172,6 +172,11 @@ update rework
  where closed_at is null;
 "
 
+/// `urgent` ranks the Pieces made urgent by hand; null for the others.
+const schema_v7 = "
+alter table piece add column urgent integer;
+"
+
 const schema_v3 = "
 create table if not exists stream_step (
   position   integer primary key,
@@ -294,6 +299,17 @@ insert into kanban (id, station_id) values
   ('kb-qa-web-1', 'ws-qa-web'),
   ('kb-uat-1', 'ws-uat');
 
+-- Each Piece that already left the Backlog did so on a pull of Analysis, so
+-- the Product Mix has history.
+insert into flow_event (at, kind, piece_id, payload)
+select case when state = 'produced'
+            then strftime('%Y-%m-%dT%H:%M:%SZ', produced_at, '-3 day')
+            else strftime('%Y-%m-%dT%H:%M:%SZ', since, '-1 day') end,
+       'piece_pulled', id, '{\"station\":\"ws-analysis\",\"from\":null}'
+  from piece
+ where parent_id is null and state != 'backlog'
+ order by 1;
+
 -- QA iOS found a defect in the iOS part of US-4; the Rework is against the
 -- Work Station that made it.
 insert into rework (id, piece_id, station_id, description, opened_at)
@@ -321,7 +337,7 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// Each step runs at most once per database, tracked in `pragma user_version`:
 /// never edit an applied step, append a new one and raise this target.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  migrate_to(connection, 6)
+  migrate_to(connection, 7)
 }
 
 pub fn migrate_to(
@@ -336,6 +352,7 @@ pub fn migrate_to(
     #(4, schema_v4),
     #(5, schema_v5),
     #(6, schema_v6 <> seed_passes_sql),
+    #(7, schema_v7),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step

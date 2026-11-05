@@ -7,7 +7,7 @@ import sqlight
 
 /// Stand-in for the per-Value-Stream Working Calendar (F39): every Value Stream
 /// runs Monday to Friday, seven hours a day.
-const working_hours_per_day = 7.0
+pub const working_hours_per_day = 7.0
 
 pub type Demand {
   Demand(
@@ -109,7 +109,7 @@ pub fn andon(demand: Demand) -> Bool {
   takt_gap(demand) <=. -1.0
 }
 
-fn round_to_tenth(value: Float) -> Float {
+pub fn round_to_tenth(value: Float) -> Float {
   int.to_float(float.round(value *. 10.0)) /. 10.0
 }
 

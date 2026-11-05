@@ -12,7 +12,7 @@ export async function postAction(
   if (response.status === 409) {
     const answer = (await response.json()) as Partial<FlowConfirm> & { message: string }
     if (answer.confirm) {
-      return { confirm: answer.confirm, message: answer.message }
+      return { confirm: answer.confirm, message: answer.message, effects: answer.effects }
     }
     throw new Error(answer.message)
   }

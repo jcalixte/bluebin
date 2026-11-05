@@ -169,6 +169,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - In the **Heijunka Sequence**, each **Piece** has an ideal slot at a multiple of its **Demand**'s **Takt Time**; the earliest slot goes first, then the earliest due date, then first-in, first-out
 - Inside one **Demand**, **Pieces** keep first-in, first-out order
 - A **Person** can reorder the **Heijunka Sequence** by hand for urgent work, only as a **Deviation**
+- A manual reorder moves the next **Piece** of one **Demand** to the top of the **Backlog**, behind the **Pieces** already moved there; **Pieces** further back in the same **Demand** keep their order
 - A **Split** opens one **Branch** per **Sub-Piece**; each **Branch** ends at the same **Assembly**
 - A **Branch** can hold several **Work Stations**, for example iOS then QA iOS
 - A **Piece** is complete only when all its **Sub-Pieces** pass the **Assembly**

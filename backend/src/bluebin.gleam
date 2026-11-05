@@ -2,6 +2,7 @@ import bluebin/assignment
 import bluebin/db
 import bluebin/demand
 import bluebin/flow
+import bluebin/heijunka
 import bluebin/live
 import bluebin/value_stream
 import gleam/dynamic/decode
@@ -64,6 +65,14 @@ fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
     ["api", "value-stream"] -> {
       use <- wisp.require_method(request, http.Get)
       value_stream()
+    }
+    ["api", "backlog"] -> {
+      use <- wisp.require_method(request, http.Get)
+      backlog()
+    }
+    ["api", "backlog", "urgent"] -> {
+      use <- wisp.require_method(request, http.Post)
+      make_urgent(request)
     }
     ["api", "pull"] -> {
       use <- wisp.require_method(request, http.Post)
@@ -172,6 +181,44 @@ fn value_stream() -> wisp.Response {
         200,
       )
     Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn backlog() -> wisp.Response {
+  let result =
+    db.with_connection(fn(connection) {
+      use backlog <- result.try(heijunka.load(connection))
+      use mix <- result.try(heijunka.product_mix(connection, backlog.demands))
+      Ok(heijunka.to_json(backlog, mix))
+    })
+
+  case result {
+    Ok(body) -> wisp.json_response(json.to_string(body), 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn make_urgent(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use piece <- decode.field("piece", decode.string)
+    use reason <- decode.optional_field(
+      "reason",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(#(piece, reason))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request("expected a body like {\"piece\": \"p-billing-3\"}")
+    Ok(#(piece, reason)) ->
+      flow_response(
+        db.with_connection(fn(connection) {
+          flow.make_urgent(connection, piece, reason)
+        }),
+      )
   }
 }
 
@@ -361,6 +408,34 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
             "message",
             json.string(
               "An Assignment goes only to a Person of the same Work Station.",
+            ),
+          ),
+        ],
+        409,
+      )
+    Error(flow.ReorderNeedsConfirmation(effects)) ->
+      json_body(
+        [
+          #(
+            "confirm",
+            json.string(flow.rule_name(flow.ReorderHeijunkaSequence)),
+          ),
+          #(
+            "message",
+            json.string(flow.rule_warning(flow.ReorderHeijunkaSequence)),
+          ),
+          #("effects", heijunka.effects_json(effects)),
+        ],
+        409,
+      )
+    Error(flow.NotNextOfDemand) ->
+      json_body(
+        [
+          #("error", json.string("not_next_of_demand")),
+          #(
+            "message",
+            json.string(
+              "Inside one Demand, Pieces leave the Backlog first-in, first-out. Only the next Piece of this Demand can be made urgent.",
             ),
           ),
         ],

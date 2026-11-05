@@ -2,6 +2,7 @@ import bluebin/assignment
 import bluebin/db
 import bluebin/demand.{type Demand, Demand}
 import bluebin/flow
+import bluebin/heijunka
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/json
@@ -874,4 +875,202 @@ pub fn a_quote_in_a_name_is_stored_as_typed_test() {
   use connection <- with_seeded_database()
   let assert Ok(step) = value_stream.rename_step(connection, 2, "Dev's turn")
   assert step.name == "Dev's turn"
+}
+
+fn heijunka_demand(id: String, due_on: String, pieces_asked: Int) -> Demand {
+  // Ten working days of 7 hours: 10 Pieces is a Takt Time of 7 h, 20 of 3.5 h.
+  Demand(..a_demand(pieces_asked, 0, 10, 0), id:, label: id, due_on:)
+}
+
+fn waiting(
+  id: String,
+  demand: String,
+  arrived: Int,
+  ordinal: Int,
+  urgent: option.Option(Int),
+) -> heijunka.Waiting {
+  heijunka.Waiting(
+    id:,
+    reference: id,
+    demand:,
+    arrived:,
+    ordinal:,
+    working_days_before_start: 0,
+    urgent:,
+  )
+}
+
+fn ids(sequence: List(heijunka.Placed)) -> List(String) {
+  list.map(sequence, fn(placed) { placed.piece.id })
+}
+
+pub fn the_heijunka_sequence_takes_the_earliest_slot_first_test() {
+  let demands = [
+    heijunka_demand("a", "2026-12-01", 10),
+    heijunka_demand("b", "2026-12-31", 20),
+  ]
+  // Slots: a1 7 h, a2 14 h; b1 3.5 h, b2 7 h, b3 10.5 h. a1 and b2 tie on
+  // the slot, and a is due first.
+  let sequence =
+    heijunka.sequence(
+      [
+        waiting("a1", "a", 1, 1, None),
+        waiting("a2", "a", 2, 2, None),
+        waiting("b1", "b", 3, 1, None),
+        waiting("b2", "b", 4, 2, None),
+        waiting("b3", "b", 5, 3, None),
+      ],
+      demands,
+    )
+  assert ids(sequence) == ["b1", "a1", "b2", "b3", "a2"]
+}
+
+pub fn the_heijunka_sequence_ends_a_tie_first_in_first_out_test() {
+  let demands = [
+    heijunka_demand("a", "2026-12-01", 10),
+    heijunka_demand("b", "2026-12-01", 10),
+  ]
+  let sequence =
+    heijunka.sequence(
+      [waiting("b1", "b", 2, 1, None), waiting("a1", "a", 1, 1, None)],
+      demands,
+    )
+  assert ids(sequence) == ["a1", "b1"]
+}
+
+pub fn urgent_pieces_lead_the_heijunka_sequence_in_their_order_test() {
+  let demands = [heijunka_demand("a", "2026-12-01", 10)]
+  let sequence =
+    heijunka.sequence(
+      [
+        waiting("a1", "a", 1, 1, None),
+        waiting("a2", "a", 2, 2, Some(2)),
+        waiting("a3", "a", 3, 3, Some(1)),
+      ],
+      demands,
+    )
+  assert ids(sequence) == ["a3", "a2", "a1"]
+}
+
+pub fn a_reorder_shows_what_each_demand_gains_and_loses_test() {
+  let demands = [
+    heijunka_demand("a", "2026-12-01", 10),
+    heijunka_demand("b", "2026-12-31", 20),
+  ]
+  let before =
+    heijunka.sequence(
+      [waiting("a1", "a", 1, 1, None), waiting("b2", "b", 2, 2, None)],
+      demands,
+    )
+  let after = heijunka.make_urgent(before, "b2")
+  assert ids(after) == ["b2", "a1"]
+  let effects =
+    heijunka.effects(before, after, 2.0)
+    |> list.map(fn(effect) {
+      #(effect.demand.id, effect.places, effect.hours, effect.takt_gap)
+    })
+  assert effects == [#("a", 1, 2.0, -0.3), #("b", -1, -2.0, 0.6)]
+}
+
+fn backlog_sequence(connection: sqlight.Connection) -> List(heijunka.Placed) {
+  let assert Ok(backlog) = heijunka.load(connection)
+  backlog.sequence
+}
+
+pub fn the_backlog_releases_the_head_of_the_heijunka_sequence_test() {
+  use connection <- with_seeded_database()
+  let assert [head, ..] = backlog_sequence(connection)
+  let assert Ok(flowed) = flow.pull(connection, "ws-analysis", None, None)
+  assert flowed.deviations == []
+  assert state_of(connection, head.piece.id) == "in_flow"
+}
+
+/// The next Piece of the Demand whose next Piece comes last in the sequence.
+fn last_demand_next_piece(sequence: List(heijunka.Placed)) -> heijunka.Placed {
+  let assert Ok(last) = list.last(sequence)
+  let assert Ok(placed) =
+    list.find(sequence, fn(placed) { placed.demand.id == last.demand.id })
+  placed
+}
+
+pub fn making_a_piece_urgent_is_warned_then_recorded_test() {
+  use connection <- with_seeded_database()
+  let sequence = backlog_sequence(connection)
+  let target = last_demand_next_piece(sequence)
+
+  let assert Error(flow.ReorderNeedsConfirmation(effects)) =
+    flow.make_urgent(connection, target.piece.id, None)
+  assert list.any(effects, fn(effect) {
+    effect.demand.id == target.demand.id && effect.places < 0
+  })
+  assert list.any(effects, fn(effect) { effect.places > 0 })
+  assert count(connection, "select count(*) from deviation") == 0
+
+  let assert Ok(flowed) =
+    flow.make_urgent(connection, target.piece.id, Some("Client demo today"))
+  assert flowed.deviations == [flow.ReorderHeijunkaSequence]
+  assert count(
+      connection,
+      "select count(*) from deviation
+       where rule = 'reorder_heijunka_sequence' and station_id = 'ws-analysis'",
+    )
+    == 1
+  let assert [head, ..] = backlog_sequence(connection)
+  assert head.piece.id == target.piece.id
+
+  let assert Ok(_) = flow.pull(connection, "ws-analysis", None, None)
+  assert state_of(connection, target.piece.id) == "in_flow"
+}
+
+pub fn only_the_next_piece_of_a_demand_can_be_made_urgent_test() {
+  use connection <- with_seeded_database()
+  let sequence = backlog_sequence(connection)
+  let target = last_demand_next_piece(sequence)
+  let assert Ok(second) =
+    sequence
+    |> list.filter(fn(placed) {
+      placed.demand.id == target.demand.id && placed.piece.id != target.piece.id
+    })
+    |> list.first
+  assert flow.make_urgent(connection, second.piece.id, Some("why"))
+    == Error(flow.NotNextOfDemand)
+  assert flow.make_urgent(connection, "p-checkout-1", Some("why"))
+    == Error(flow.PieceNotHere)
+}
+
+pub fn the_head_of_the_sequence_is_not_a_reorder_test() {
+  use connection <- with_seeded_database()
+  let assert [head, ..] = backlog_sequence(connection)
+  let assert Ok(flowed) = flow.make_urgent(connection, head.piece.id, None)
+  assert flowed.deviations == []
+  assert !list.contains(
+    heijunka.can_be_urgent(backlog_sequence(connection)),
+    head.piece.id,
+  )
+}
+
+fn released_today(connection: sqlight.Connection) -> Int {
+  let assert Ok(backlog) = heijunka.load(connection)
+  let assert Ok(mix) = heijunka.product_mix(connection, backlog.demands)
+  mix
+  |> list.flat_map(fn(row) { row.cells })
+  |> list.map(fn(cell) { cell.real })
+  |> list.fold(0, fn(total, real) { total + real })
+}
+
+pub fn the_product_mix_counts_each_piece_that_leaves_the_backlog_test() {
+  use connection <- with_seeded_database()
+  let before = released_today(connection)
+  let weekday =
+    count(connection, "select strftime('%w', 'now') not in ('0', '6')")
+  let assert Ok(_) = flow.pull(connection, "ws-analysis", None, None)
+  // A pull further down the Value Stream is no release.
+  let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
+  assert released_today(connection) == before + weekday
+}
+
+pub fn a_day_is_on_plan_within_one_piece_of_gap_test() {
+  let cell = heijunka.MixCell(day: "2026-11-02", planned: 0.0, real: 2)
+  assert heijunka.on_plan(cell) == False
+  assert heijunka.on_plan(heijunka.MixCell(..cell, planned: 1.2)) == True
 }
