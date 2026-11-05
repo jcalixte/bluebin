@@ -115,7 +115,7 @@ pub fn pull(
   ))
   use _ <- result.try(case holder {
     None -> Ok([])
-    Some(holder) -> pause_pieces(connection, holder, Some(pulled.0))
+    Some(holder) -> keep_nearest_active(connection, holder, pulled.0)
   })
 
   use _ <- result.try(record_event(
@@ -506,7 +506,8 @@ pub fn reassign(
     ),
   )
   use _ <- result.try(case in_flow {
-    True -> pause_pieces(connection, person_id, Some(id)) |> result.replace(Nil)
+    True ->
+      keep_nearest_active(connection, person_id, id) |> result.replace(Nil)
     False -> Ok(Nil)
   })
   use _ <- result.try(settle(connection, person_id))
@@ -585,6 +586,31 @@ fn start_next_rework(
                            and started_at is not null)",
     [sqlight.text(person_id)],
   )
+}
+
+/// A Person transforms one Piece at a time. When a Piece comes into their
+/// hands, the one nearest to production stays active and the others pause; on
+/// a tie the newcomer waits. Finishing beats starting.
+fn keep_nearest_active(
+  connection: sqlight.Connection,
+  person_id: String,
+  newcomer: String,
+) -> Result(List(String), FlowError) {
+  let nearest =
+    sqlight.query(
+      "select p.id from piece p
+         join work_station w on w.id = p.station_id
+        where p.assignee = ?1 and p.state = 'in_flow'
+        order by w.position desc, p.id = ?2, p.since, p.rowid limit 1",
+      on: connection,
+      with: [sqlight.text(person_id), sqlight.text(newcomer)],
+      expecting: decode.at([0], decode.string),
+    )
+  case nearest {
+    Error(_) -> Error(StoreFailed)
+    Ok(kept) ->
+      pause_pieces(connection, person_id, option.from_result(list.first(kept)))
+  }
 }
 
 /// Answers the references of the Pieces paused.

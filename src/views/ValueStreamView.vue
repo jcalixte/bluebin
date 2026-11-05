@@ -87,6 +87,19 @@ const lastPosition = computed(() =>
   ),
 )
 
+/** The Piece each Person transforms now, with the position of its Work Station. */
+const activePieces = computed(() => {
+  const active = new Map<string, { piece: string; position: number }>()
+  for (const station of valueStream.value?.stations ?? []) {
+    for (const item of station.inProgress) {
+      if (item.personId && !item.paused) {
+        active.set(item.personId, { piece: item.piece, position: station.position })
+      }
+    }
+  }
+  return active
+})
+
 const streamEl = ref<HTMLElement | null>(null)
 
 const columns = computed<{ position: number; stations: WorkStation[]; kanbans: number }[]>(() => {
@@ -163,6 +176,7 @@ const taktLabel = computed(() => {
             >
               <WorkStationCard
                 :station="station"
+                :active-pieces="activePieces"
                 :last="station.position === lastPosition"
                 :assembly="
                   station.branch === null && (columns[index - 1]?.stations.length ?? 0) > 1

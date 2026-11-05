@@ -193,7 +193,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - A **Team Leader** answers **Andons** and never pushes **Assignments**
 - A **Value Stream** has exactly one **Working Calendar**
 - **Starvation Time** belongs to a **Work Station**, never to a **Piece**, and is not part of the **Lead Time**
-- A **Person** transforms at most one **Piece** at a time; pulling another **Piece** pauses the current one, and the paused time is **Stagnation Time**
+- A **Person** transforms at most one **Piece** at a time; when another **Piece** comes into their hands, the one nearest to production stays active and the other pauses, and the paused time is **Stagnation Time**. On a tie, the new **Piece** waits: finishing beats starting
 - A **Work Station** transforms as many **Pieces** at the same time as it has **People** working
 - Priority works in two stages: first which **Work Station** must work, then which **Person** of that **Work Station** does it (**Assignment**)
 - Stage 1: across the **Value Stream**, the **Work Station** nearest to production comes first
@@ -238,7 +238,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - Feature / User Story vs **Demand** / **Piece** / **Sub-Piece** — resolved: a Feature is a **Demand**, a User Story is a **Piece**, a platform part (web, iOS, Android) is a **Sub-Piece**. "Feature" and "User Story" are the software team's names, not domain terms.
 - "the Demand is one piece" — resolved: a **Demand** is decomposed into **Pieces**, so that **Heijunka** can mix **Pieces** of different **Demands**.
 - **Stagnation Time** between two **Work Stations** — resolved: the wait from "Kanban sent" to "pulled in" is the **Starvation Time** of the **Work Station**, not the **Stagnation Time** of the **Piece**. This stops the same wait being counted twice.
-- Pauses during **Touch Time** — resolved: a **Person** transforms one **Piece** at a time, so a switch pauses the current **Piece**. **Touch Time** is net time; the paused time is **Stagnation Time**.
+- Pauses during **Touch Time** — resolved: a **Person** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to production; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
 - Time measures and the working calendar — resolved: measures show **Calendar Time** by default and **Working Time** as a second view; **Takt Time** uses **Working Time** only.
 - **Takt Time** of a **Demand** vs of the **Value Stream** — resolved: one term, two scopes. The **Takt Time** of the **Value Stream** is computed from all active **Demands**.
 - **Heijunka** order — resolved: computed as the **Heijunka Sequence**, released only on a **Kanban** (pull, not a timed pitch), with manual reorder allowed.
@@ -249,7 +249,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - "Final Inspection" of a whole **Demand** — rejected: with **Heijunka**, the **Pieces** of one **Demand** arrive mixed with others, so waiting for the last one adds **Stagnation Time** and breaks the **Takt Time**. It also blocks the upstream **Blue Bins**. Like a car on a Toyota line, each **Piece** goes to production alone.
 - UAT of a whole Feature — deferred: the software analogy for Feature-level acceptance comes later.
 - **Kanbans** at a **Split** and an **Assembly** — resolved: a **Branch** gets a new **Kanban** only from an **Assembly** of a complete **Piece**, never when its own **Blue Bin** empties alone. A fast **Branch** runs ahead only as a **Deviation**; normally its **People** **Help Downstream**.
-- Order of a **Person**'s **Kanbans** — resolved: **Rework** first, then downstream first, then the oldest **Kanban**. Finishing beats starting.
+- Order of a **Person**'s **Kanbans** — resolved: **Rework** first, then downstream first, then the oldest **Kanban**. Finishing beats starting, also when a **Person** pulls a new **Piece** upstream while they hold one downstream.
 - Where **Rework** happens — resolved: the **Piece** stays downstream and the **Person** goes to it. Moving it back ("reopen") would break the **Blue Bin** limits and the **Kanban** counts.
 - "her kanban" (the list a **Person** sees) — resolved: a **Kanban** is one signal. The **Priority List** belongs to a **Work Station** and holds its **Kanbans** and **Rework**; a **Person** sees their **Assignments**.
 - "affectation" — resolved: **Assignment**.
