@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import AndonAlert from "../components/AndonAlert.vue"
+import AppModal from "../components/AppModal.vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
@@ -235,44 +236,42 @@ const taktLabel = computed(() => {
       </div>
     </div>
 
-    <dialog v-if="raising" class="modal modal-open">
-      <div class="modal-box">
-        <h3 class="text-lg font-semibold">A defect in {{ raising.reference }}</h3>
-        <p class="py-2 text-sm opacity-80">
-          The Piece stays here: name the Work Station that made the defect, and one of its People
-          comes to repair it.
-        </p>
-        <label class="form-control">
-          <span class="label-text text-sm">Made by</span>
-          <select v-model="madeBy" class="select select-bordered mt-1 w-full">
-            <option value="" disabled>Pick a Work Station</option>
-            <option v-for="one in madeByChoices" :key="one.id" :value="one.id">
-              {{ one.name }}
-            </option>
-          </select>
-        </label>
-        <label class="form-control mt-2">
-          <span class="label-text text-sm">What is wrong? One line.</span>
-          <input
-            v-model="defect"
-            class="input input-bordered mt-1 w-full"
-            maxlength="120"
-            placeholder="Sync retries lose the last edit"
-            @keyup.enter="recordRework"
-          />
-        </label>
-        <div class="modal-action">
-          <button class="btn btn-ghost" @click="raising = null">Cancel</button>
-          <button
-            class="btn btn-error"
-            :disabled="busy || madeBy === '' || defect.trim() === ''"
-            @click="recordRework"
-          >
-            Raise the Rework
-          </button>
-        </div>
+    <AppModal v-if="raising" @close="raising = null">
+      <h3 class="text-lg font-semibold">A defect in {{ raising.reference }}</h3>
+      <p class="py-2 text-sm opacity-80">
+        The Piece stays here: name the Work Station that made the defect, and one of its People
+        comes to repair it.
+      </p>
+      <label class="form-control">
+        <span class="label-text text-sm">Made by</span>
+        <select v-model="madeBy" class="select select-bordered mt-1 w-full">
+          <option value="" disabled>Pick a Work Station</option>
+          <option v-for="one in madeByChoices" :key="one.id" :value="one.id">
+            {{ one.name }}
+          </option>
+        </select>
+      </label>
+      <label class="form-control mt-2">
+        <span class="label-text text-sm">What is wrong? One line.</span>
+        <input
+          v-model="defect"
+          class="input input-bordered mt-1 w-full"
+          maxlength="120"
+          placeholder="Sync retries lose the last edit"
+          @keyup.enter="recordRework"
+        />
+      </label>
+      <div class="modal-action">
+        <button class="btn btn-ghost" @click="raising = null">Cancel</button>
+        <button
+          class="btn btn-error"
+          :disabled="busy || madeBy === '' || defect.trim() === ''"
+          @click="recordRework"
+        >
+          Raise the Rework
+        </button>
       </div>
-    </dialog>
+    </AppModal>
 
     <DeviationDialog
       v-if="pending"

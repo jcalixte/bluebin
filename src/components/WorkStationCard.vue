@@ -57,19 +57,21 @@ function reworkWaits(rework: string) {
   return found?.kind === "rework_waits" ? found.waitingHours : null
 }
 
-const bottleneckReason = computed(() => {
+const oneDecimal = (value: number) => Math.round(value * 10) / 10
+
+const bottleneck = computed(() => {
   const found = props.bottleneck
   if (!found) return null
-  const reasons = []
-  if (found.slower && found.capacityHours !== null) {
-    reasons.push(
-      `${found.capacityHours} h per Piece, slower than the Takt Time of ${Math.round(props.taktHours * 10) / 10} h`,
-    )
-  }
-  if (found.fullInFront) {
-    reasons.push("the Blue Bins in front of it are full")
-  }
-  return reasons.join("; ")
+  const slow =
+    found.slower && found.capacityHours !== null
+      ? {
+          pieceHours: oneDecimal(found.capacityHours),
+          taktHours: oneDecimal(props.taktHours),
+          times: props.taktHours > 0 ? oneDecimal(found.capacityHours / props.taktHours) : null,
+        }
+      : null
+  if (!slow && !found.fullInFront) return null
+  return { slow, fullInFront: found.fullInFront }
 })
 
 function raisedAt(at: string) {
@@ -142,10 +144,31 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           </button>
         </span>
       </header>
-      <p v-if="bottleneckReason" class="-mt-1 text-xs">
-        <span class="badge badge-sm badge-warning">Bottleneck</span>
-        <span class="opacity-70"> {{ bottleneckReason }}</span>
-      </p>
+      <section
+        v-if="bottleneck"
+        aria-label="Bottleneck"
+        class="-mt-1 rounded-r-box border-l-4 border-warning bg-warning/10 px-3 py-2 text-xs"
+      >
+        <p class="flex items-baseline justify-between gap-2">
+          <span class="text-sm font-semibold">Bottleneck</span>
+          <span
+            v-if="bottleneck.slow?.times"
+            class="font-medium tabular-nums opacity-70"
+            title="Touch Time per Piece divided by the Takt Time"
+          >
+            {{ bottleneck.slow.times }} × Takt Time
+          </span>
+        </p>
+        <p v-if="bottleneck.slow" class="mt-1 opacity-80">
+          Each Piece takes
+          <strong class="font-semibold tabular-nums">{{ bottleneck.slow.pieceHours }} h</strong>
+          here. The Takt Time is
+          <strong class="font-semibold tabular-nums">{{ bottleneck.slow.taktHours }} h</strong>.
+        </p>
+        <p v-if="bottleneck.fullInFront" class="mt-1 opacity-80">
+          The Blue Bins in front of it are full.
+        </p>
+      </section>
 
       <div class="flex gap-1">
         <button
