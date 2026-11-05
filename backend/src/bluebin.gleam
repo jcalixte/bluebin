@@ -1,3 +1,4 @@
+import bluebin/andon
 import bluebin/assignment
 import bluebin/calendar
 import bluebin/db
@@ -96,6 +97,18 @@ fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
     ["api", "rework", "repair"] -> {
       use <- wisp.require_method(request, http.Post)
       repair_rework(request)
+    }
+    ["api", "andons"] -> {
+      use <- wisp.require_method(request, http.Get)
+      andons()
+    }
+    ["api", "andon"] -> {
+      use <- wisp.require_method(request, http.Post)
+      raise_andon(request)
+    }
+    ["api", "andon", "close"] -> {
+      use <- wisp.require_method(request, http.Post)
+      close_andon(request)
     }
     ["api", "assign"] -> {
       use <- wisp.require_method(request, http.Post)
@@ -245,26 +258,97 @@ fn value_stream() -> wisp.Response {
       use stations <- result.try(value_stream.load(connection))
       use steps <- result.try(value_stream.list_steps(connection))
       use demands <- result.try(demand.list_active(connection))
-      Ok(#(stations, steps, demands))
+      use calendar <- result.try(calendar.load(connection))
+      use now <- result.try(andon.now(connection))
+      use andons <- result.try(andon.andons(connection, calendar, now))
+      use #(stale, active) <- result.try(andon.stale(connection, calendar, now))
+      let takt = demand.value_stream_takt_hours(demands)
+      use bottlenecks <- result.try(andon.bottlenecks(connection, takt))
+      Ok(
+        json.object([
+          #("stations", stations),
+          #("steps", value_stream.steps_json(steps)),
+          #("taktTimeHours", json.float(takt)),
+          #("demandsBehind", json.int(demand.behind_count(demands))),
+          #("andons", andon.andons_json(andons)),
+          #("stale", andon.stale_json(stale)),
+          #("activeAssignments", json.int(active)),
+          #("bottlenecks", andon.bottlenecks_json(bottlenecks)),
+        ]),
+      )
     })
 
   case result {
-    Ok(#(stations, steps, demands)) ->
-      wisp.json_response(
-        json.to_string(
-          json.object([
-            #("stations", stations),
-            #("steps", value_stream.steps_json(steps)),
-            #(
-              "taktTimeHours",
-              json.float(demand.value_stream_takt_hours(demands)),
-            ),
-            #("demandsBehind", json.int(demand.behind_count(demands))),
-          ]),
-        ),
-        200,
-      )
+    Ok(body) -> wisp.json_response(json.to_string(body), 200)
     Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn andons() -> wisp.Response {
+  let result =
+    db.with_connection(fn(connection) {
+      use calendar <- result.try(calendar.load(connection))
+      use now <- result.try(andon.now(connection))
+      andon.andons(connection, calendar, now)
+    })
+
+  case result {
+    Ok(found) ->
+      wisp.json_response(json.to_string(andon.andons_json(found)), 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn raise_andon(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use station <- decode.field("station", decode.string)
+    use person <- decode.optional_field(
+      "person",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(#(station, person))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
+    Ok(#(station, person)) ->
+      andon_response(
+        db.with_connection(fn(connection) {
+          flow.raise_andon(connection, station, person)
+        }),
+      )
+  }
+}
+
+fn close_andon(request: wisp.Request) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use station <- decode.field("station", decode.string)
+    use person <- decode.field("person", decode.string)
+    decode.success(#(station, person))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request(
+        "expected a body like {\"station\": \"ws-web\", \"person\": \"pe-bob\"}",
+      )
+    Ok(#(station, person)) ->
+      andon_response(
+        db.with_connection(fn(connection) {
+          flow.close_andon(connection, station, person)
+        }),
+      )
+  }
+}
+
+fn andon_response(result: Result(Nil, flow.FlowError)) -> wisp.Response {
+  case result {
+    Ok(Nil) -> wisp.no_content()
+    Error(failure) -> flow_response(Error(failure))
   }
 }
 
@@ -525,6 +609,27 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
         ],
         409,
       )
+    Error(flow.NoAndon) ->
+      json_body(
+        [
+          #("error", json.string("no_andon")),
+          #("message", json.string("No Andon stops this Work Station.")),
+        ],
+        409,
+      )
+    Error(flow.NotTeamLeader) ->
+      json_body(
+        [
+          #("error", json.string("not_team_leader")),
+          #(
+            "message",
+            json.string(
+              "Only the Team Leader of the Work Station closes its Andon.",
+            ),
+          ),
+        ],
+        409,
+      )
     Error(flow.UnknownStation) -> wisp.not_found()
     Error(flow.StoreFailed) -> wisp.internal_server_error()
   }
@@ -602,10 +707,25 @@ fn people() -> wisp.Response {
 
 fn next_thing(person: String) -> wisp.Response {
   case
-    db.with_connection(fn(connection) { assignment.load(connection, person) })
+    db.with_connection(fn(connection) {
+      use view <- result.try(assignment.load(connection, person))
+      use andons <- result.try(
+        {
+          use calendar <- result.try(calendar.load(connection))
+          use now <- result.try(andon.now(connection))
+          andon.andons(connection, calendar, now)
+        }
+        |> result.replace_error(assignment.ReadFailed),
+      )
+      let mine =
+        andon.of_stations(
+          andons,
+          list.map(view.lists, fn(one) { one.station_id }),
+        )
+      Ok(assignment.to_json(view, andon.andons_json(mine)))
+    })
   {
-    Ok(view) ->
-      wisp.json_response(json.to_string(assignment.to_json(view)), 200)
+    Ok(body) -> wisp.json_response(json.to_string(body), 200)
     Error(assignment.UnknownPerson) -> wisp.not_found()
     Error(assignment.ReadFailed) -> wisp.internal_server_error()
   }

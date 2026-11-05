@@ -273,7 +273,8 @@ fn same_line(one: Station, other: Station) -> Bool {
   }
 }
 
-fn in_front_full(station: Station, all: List(Station)) -> Bool {
+/// The Blue Bins of the step just upstream are all full.
+pub fn in_front_full(station: Station, all: List(Station)) -> Bool {
   let upstream =
     list.filter(all, fn(other) {
       other.position < station.position && same_line(other, station)
@@ -493,8 +494,10 @@ fn assignments(
   Ok(list.append(repairs, pieces))
 }
 
-pub fn to_json(view: View) -> Json {
+/// `andons` are those of the Person's Work Stations (DESIGN.md R2).
+pub fn to_json(view: View, andons: Json) -> Json {
   json.object([
+    #("andons", andons),
     #(
       "person",
       json.object([

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
@@ -17,7 +18,12 @@ watch(personId, (id) => {
   history.replaceState(null, "", url)
 })
 
-const { people, view, error, loading, pull, finish, repair, assign } = useNextThing(personId)
+const { people, view, error, loading, pull, finish, repair, assign, raiseAndon, closeAndon } =
+  useNextThing(personId)
+
+function stopped(station: string) {
+  return (view.value?.andons ?? []).some((one) => one.kind === "stop" && one.station === station)
+}
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 
 const next = computed(() => view.value?.next ?? null)
@@ -102,6 +108,13 @@ function since(at: string) {
     <p v-else-if="personId === ''" class="opacity-70">Pick your name to see your next thing.</p>
 
     <template v-else-if="view && next">
+      <AndonAlert
+        :andons="view.andons"
+        :person-id="personId"
+        :busy="busy"
+        @close="(station) => run(() => closeAndon(station))"
+      />
+
       <article class="card border-2 border-primary bg-base-100 shadow-sm">
         <div class="card-body gap-3">
           <template v-if="next.kind === 'continue' && next.assignment.kind === 'rework'">
@@ -221,7 +234,18 @@ function since(at: string) {
           :key="list.station"
           class="rounded border border-base-300 bg-base-100 p-3"
         >
-          <h3 class="font-semibold">{{ list.name }}</h3>
+          <div class="flex items-start justify-between gap-2">
+            <h3 class="font-semibold">{{ list.name }}</h3>
+            <button
+              v-if="!stopped(list.station)"
+              class="btn btn-xs btn-outline btn-error"
+              :disabled="busy"
+              title="Stop this Work Station and call its Team Leader"
+              @click="run(() => raiseAndon(list.station))"
+            >
+              Andon
+            </button>
+          </div>
           <p class="text-xs uppercase tracking-wide opacity-60">Priority List</p>
           <ol v-if="list.items.length > 0" class="mt-2 list-decimal space-y-1 pl-5 text-sm">
             <li v-for="item in list.items" :key="item.id">

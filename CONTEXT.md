@@ -187,6 +187,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - **Takt Time** always uses **Working Time**
 - The **Takt Gap** of a **Demand** = its **Pieces** in production − the elapsed **Working Time** ÷ its **Takt Time**
 - A **Demand** with a **Takt Gap** of −1 or less raises an **Andon**
+- A **Rework** that waits one hour of **Working Time** with no active **Assignment** raises an **Andon** on the **Work Station** that made the defect
 - Any **Person** can raise an **Andon** on their **Work Station**; it stops that **Work Station** until its **Team Leader** closes it
 - While an **Andon** stops a **Work Station**, its **People** pull a new **Piece** only as a **Deviation**; pull spreads the stop upstream and downstream by itself
 - A **Work Station** has exactly one **Team Leader**; a **Person** can be **Team Leader** of several **Work Stations**

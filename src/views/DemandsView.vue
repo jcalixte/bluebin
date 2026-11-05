@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from "vue"
+import AndonAlert from "../components/AndonAlert.vue"
 import DemandRow from "../components/DemandRow.vue"
 import { useDemands } from "../composables/useDemands"
 
-const { demands, error, loading } = useDemands()
+const { demands, andons, error, loading } = useDemands()
 
 const behind = computed(() => demands.value.filter((d) => d.andon).length)
 </script>
@@ -16,6 +17,8 @@ const behind = computed(() => demands.value.filter((d) => d.andon).length)
         <p class="text-sm opacity-70">Each Demand against its own Takt Time, for its Client</p>
       </div>
     </header>
+
+    <AndonAlert :andons="andons" />
 
     <div v-if="behind > 0" role="alert" class="alert alert-error mb-6 font-medium">
       <span class="inline-block size-3 rounded-full bg-current" />

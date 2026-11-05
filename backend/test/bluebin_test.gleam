@@ -1,8 +1,11 @@
+import bluebin/andon
 import bluebin/assignment
+import bluebin/calendar
 import bluebin/db
 import bluebin/demand.{type Demand, Demand}
 import bluebin/flow
 import bluebin/heijunka
+import bluebin/measures
 import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/json
@@ -842,7 +845,8 @@ pub fn with_nothing_to_take_or_help_a_person_waits_test() {
 pub fn the_person_payload_carries_the_shape_the_screen_reads_test() {
   use connection <- with_seeded_database()
   let assert Ok(view) = assignment.load(connection, "pe-alice")
-  let text = json.to_string(assignment.to_json(view))
+  let text =
+    json.to_string(assignment.to_json(view, json.preprocessed_array([])))
   assert string.contains(text, "\"next\":{\"kind\":\"continue\"")
   assert string.contains(text, "\"kind\":\"rework\",\"id\":\"rw-1\"")
   assert string.contains(text, "\"priorityLists\":[{\"station\":\"ws-ios\"")
@@ -1135,4 +1139,202 @@ pub fn a_day_is_on_plan_within_one_piece_of_gap_test() {
   let cell = heijunka.MixCell(day: "2026-11-02", planned: 0.0, real: 2)
   assert heijunka.on_plan(cell) == False
   assert heijunka.on_plan(heijunka.MixCell(..cell, planned: 1.2)) == True
+}
+
+/// Every hour of every day is Working Time, so a test never depends on the
+/// clock it runs at.
+const always_working = calendar.Calendar(
+  days: [0, 1, 2, 3, 4, 5, 6],
+  start: 0,
+  end: 1440,
+  holidays: [],
+)
+
+fn andons_now(connection: sqlight.Connection) -> List(andon.Andon) {
+  let assert Ok(now) = andon.now(connection)
+  let assert Ok(found) = andon.andons(connection, always_working, now)
+  found
+}
+
+pub fn an_andon_stops_the_work_station_until_its_team_leader_closes_it_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", Some("pe-lila"))
+  let assert [andon.Stop(station_id: "ws-web", raised_by: Some("Lila"), ..)] =
+    andons_now(connection)
+
+  assert flow.close_andon(connection, "ws-web", "pe-lila")
+    == Error(flow.NotTeamLeader)
+  let assert Ok(Nil) = flow.close_andon(connection, "ws-web", "pe-bob")
+  assert andons_now(connection) == []
+  assert flow.close_andon(connection, "ws-web", "pe-bob") == Error(flow.NoAndon)
+  assert count(
+      connection,
+      "select count(*) from flow_event
+        where kind in ('andon_raised', 'andon_closed')",
+    )
+    == 2
+}
+
+pub fn a_stopped_work_station_holds_one_andon_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", Some("pe-bob"))
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", None)
+  assert count(connection, "select count(*) from andon") == 1
+}
+
+pub fn a_person_not_of_the_work_station_is_not_recorded_as_raising_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", Some("pe-tom"))
+  let assert [andon.Stop(raised_by: None, ..)] = andons_now(connection)
+}
+
+pub fn a_pull_during_an_andon_is_a_deviation_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(True) = flow.can_pull(connection, "ws-web")
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", None)
+  let assert Ok(False) = flow.can_pull(connection, "ws-web")
+
+  assert flow.pull(connection, "ws-web", None, None)
+    == Error(flow.NeedsConfirmation([flow.PullDuringAndon]))
+  let assert Ok(flowed) =
+    flow.pull(connection, "ws-web", None, Some("the build is green again"))
+  assert flowed.deviations == [flow.PullDuringAndon]
+  assert count(
+      connection,
+      "select count(*) from deviation where rule = 'pull_during_andon'",
+    )
+    == 1
+}
+
+pub fn a_rework_waiting_an_hour_with_nobody_raises_an_andon_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "update rework set assignee = null, started_at = null,
+       opened_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-30 minutes')",
+  )
+  assert andons_now(connection) == []
+
+  exec(
+    connection,
+    "update rework
+        set opened_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hours')",
+  )
+  let assert [andon.ReworkWaits(rework_id: "rw-1", station_id: "ws-ios", ..)] =
+    andons_now(connection)
+}
+
+pub fn a_rework_in_repair_raises_no_andon_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "update rework
+        set opened_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days')",
+  )
+  // The seed gives rw-1 to Alice, who repairs it now.
+  assert andons_now(connection) == []
+}
+
+pub fn the_wait_of_a_rework_counts_only_working_time_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "update rework set assignee = null, started_at = null,
+       opened_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hours')",
+  )
+  let assert Ok(now) = andon.now(connection)
+  let no_working_day =
+    calendar.Calendar(days: [], start: 540, end: 960, holidays: [])
+  assert andon.andons(connection, no_working_day, now) == Ok([])
+}
+
+pub fn an_assignment_with_no_event_for_a_working_day_is_stale_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(now) = andon.now(connection)
+  let assert Ok(#(stale, active)) = andon.stale(connection, always_working, now)
+  assert stale == []
+  // Bob, Nina, Yasmine and Marc hold a Piece; Alice repairs rw-1.
+  assert active == 5
+
+  exec(
+    connection,
+    "update piece
+        set since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days')
+      where id = 'p-checkout-8-web';
+     update rework
+        set started_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days')",
+  )
+  let assert Ok(#(stale, _)) = andon.stale(connection, always_working, now)
+  assert stale
+    == [andon.Stale("piece", "p-checkout-8-web"), andon.Stale("rework", "rw-1")]
+}
+
+pub fn a_new_event_freshens_a_stale_assignment_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "update piece
+        set since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 days')
+      where id = 'p-checkout-8-web';
+     insert into flow_event (kind, piece_id) values ('assignment_changed',
+       'p-checkout-8-web')",
+  )
+  let assert Ok(now) = andon.now(connection)
+  let assert Ok(#([], _)) = andon.stale(connection, always_working, now)
+}
+
+pub fn capacity_is_the_average_touch_time_shared_by_the_people_test() {
+  let station =
+    measures.StationMeasure(
+      id: "ws-web",
+      name: "Web",
+      branch: Some("Web"),
+      position: 3,
+      passes: [
+        measures.Span(touch: 7200, stagnation: 0, stagnation_working: 0),
+        measures.Span(touch: 14_400, stagnation: 0, stagnation_working: 0),
+      ],
+      starvation: 0,
+      starvation_working: 0,
+      pulls: 2,
+      deviations: 0,
+    )
+  // 3 hours a Piece on average, shared by 2 People.
+  assert andon.capacity_hours(station, 2) == Ok(1.5)
+  assert andon.capacity_hours(station, 0) == Error(Nil)
+  assert andon.capacity_hours(measures.StationMeasure(..station, passes: []), 2)
+    == Error(Nil)
+}
+
+pub fn a_full_blue_bin_in_front_makes_a_bottleneck_test() {
+  use connection <- with_seeded_database()
+  // A Takt Time this long makes no Work Station slower than it.
+  let assert Ok(found) = andon.bottlenecks(connection, 10_000.0)
+  assert found == []
+
+  exec(
+    connection,
+    "update piece set state = 'in_bin', station_id = 'ws-analysis',
+       since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id in ('p-billing-3', 'p-billing-4')",
+  )
+  let assert Ok(found) = andon.bottlenecks(connection, 10_000.0)
+  assert list.map(found, fn(one) { #(one.station_id, one.full_in_front) })
+    == [#("ws-conception", True)]
+}
+
+pub fn a_work_station_slower_than_the_takt_time_is_a_bottleneck_test() {
+  use connection <- with_seeded_database()
+  // The seed history gives every Work Station some Touch Time per Piece.
+  let assert Ok(found) = andon.bottlenecks(connection, 0.01)
+  assert found != []
+  assert list.all(found, fn(one) { one.slower })
+}
+
+pub fn the_next_thing_shows_only_the_andons_of_my_work_stations_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", None)
+  let assert Ok(Nil) = flow.raise_andon(connection, "ws-ios", None)
+  let mine = andon.of_stations(andons_now(connection), ["ws-web"])
+  let assert [andon.Stop(station_id: "ws-web", ..)] = mine
 }

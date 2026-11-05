@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
-import type { WorkStation } from "../types"
+import type { Andon, Bottleneck, WorkStation } from "../types"
 
 const props = defineProps<{
   station: WorkStation
@@ -10,6 +10,11 @@ const props = defineProps<{
   busy?: boolean
   /** The Work Station after the Branches pulls by Assembly. */
   assembly?: boolean
+  andons: Andon[]
+  /** Keys `piece:<id>` and `rework:<id>` of the stale Assignments. */
+  stale: Set<string>
+  bottleneck?: Bottleneck
+  taktHours: number
 }>()
 
 const emit = defineEmits<{
@@ -19,6 +24,8 @@ const emit = defineEmits<{
   rework: [piece: string]
   repair: [rework: string]
   assign: [kind: "piece" | "rework", id: string, person: string]
+  andon: [person: string | undefined]
+  closeAndon: [person: string]
 }>()
 
 const person = ref("")
@@ -40,6 +47,35 @@ const keptFirst = computed(() => {
 
 const hasRework = computed(() => props.station.rework.length > 0)
 
+const stop = computed(() => {
+  const found = props.andons.find((one) => one.kind === "stop" && one.station === props.station.id)
+  return found?.kind === "stop" ? found : null
+})
+
+function reworkWaits(rework: string) {
+  const found = props.andons.find((one) => one.kind === "rework_waits" && one.rework === rework)
+  return found?.kind === "rework_waits" ? found.waitingHours : null
+}
+
+const bottleneckReason = computed(() => {
+  const found = props.bottleneck
+  if (!found) return null
+  const reasons = []
+  if (found.slower && found.capacityHours !== null) {
+    reasons.push(
+      `${found.capacityHours} h per Piece, slower than the Takt Time of ${Math.round(props.taktHours * 10) / 10} h`,
+    )
+  }
+  if (found.fullInFront) {
+    reasons.push("the Blue Bins in front of it are full")
+  }
+  return reasons.join("; ")
+})
+
+function raisedAt(at: string) {
+  return new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+}
+
 const binsFull = computed(
   () =>
     props.station.blueBins.length > 0 && props.station.blueBins.every((bin) => bin.piece !== null),
@@ -55,9 +91,31 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
 <template>
   <article
     class="card border bg-base-100 shadow-sm"
-    :class="hasRework ? 'border-error border-2' : 'border-base-300'"
+    :class="stop || hasRework ? 'border-error border-2' : 'border-base-300'"
   >
     <div class="card-body gap-3 p-4">
+      <div
+        v-if="stop"
+        role="alert"
+        class="alert alert-error flex-col items-stretch gap-1 p-2 text-sm"
+      >
+        <p class="font-semibold">
+          Andon: stopped at {{ raisedAt(stop.raisedAt) }}
+          <template v-if="stop.raisedBy"> by {{ stop.raisedBy }}</template>
+        </p>
+        <p v-if="stop.teamLeader">
+          Team Leader {{ stop.teamLeader }} is called. A pull is a Deviation until it is closed.
+        </p>
+        <button
+          v-if="stop.teamLeaderId"
+          class="btn btn-xs self-start"
+          :disabled="busy"
+          @click="$emit('closeAndon', stop.teamLeaderId)"
+        >
+          {{ stop.teamLeader }} closes the Andon
+        </button>
+      </div>
+
       <header class="flex items-start justify-between gap-2">
         <div>
           <h3 class="font-semibold leading-tight">{{ station.name }}</h3>
@@ -65,14 +123,29 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             Team Leader {{ station.teamLeader }}
           </p>
         </div>
-        <span
-          class="badge badge-sm shrink-0"
-          :class="station.kanbans > 0 ? 'badge-primary' : 'badge-ghost'"
-          :title="`${station.kanbans} Kanban(s)`"
-        >
-          {{ station.kanbans }} Kanban
+        <span class="flex shrink-0 flex-col items-end gap-1">
+          <span
+            class="badge badge-sm"
+            :class="station.kanbans > 0 ? 'badge-primary' : 'badge-ghost'"
+            :title="`${station.kanbans} Kanban(s)`"
+          >
+            {{ station.kanbans }} Kanban
+          </span>
+          <button
+            v-if="!stop"
+            class="btn btn-xs btn-outline btn-error"
+            :disabled="busy"
+            title="Stop this Work Station and call its Team Leader"
+            @click="$emit('andon', person === '' ? undefined : person)"
+          >
+            Andon
+          </button>
         </span>
       </header>
+      <p v-if="bottleneckReason" class="-mt-1 text-xs">
+        <span class="badge badge-sm badge-warning">Bottleneck</span>
+        <span class="opacity-70"> {{ bottleneckReason }}</span>
+      </p>
 
       <div class="flex gap-1">
         <button
@@ -168,6 +241,13 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             >
               paused
             </span>
+            <span
+              v-if="stale.has(`piece:${item.id}`)"
+              class="badge badge-xs badge-warning"
+              title="No event for more than one working day: is it still in hand?"
+            >
+              stale
+            </span>
             <span class="ml-auto flex gap-1">
               <button
                 class="btn btn-xs"
@@ -210,6 +290,20 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                     {{ one.name }} repairs
                   </option>
                 </select>
+                <span
+                  v-if="stale.has(`rework:${item.id}`)"
+                  class="badge badge-xs badge-warning"
+                  title="No event for more than one working day: is it still in repair?"
+                >
+                  stale
+                </span>
+              </span>
+              <span
+                v-if="reworkWaits(item.id) !== null"
+                class="badge badge-xs badge-error mt-1"
+                title="A Rework that waits with no active Assignment raises an Andon after 1 h of Working Time"
+              >
+                Andon · waits {{ reworkWaits(item.id) }} h
               </span>
             </span>
             <button class="btn btn-xs ml-auto" :disabled="busy" @click="$emit('repair', item.id)">

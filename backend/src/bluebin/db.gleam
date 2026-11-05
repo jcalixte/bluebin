@@ -205,6 +205,21 @@ select created_at, 'kanban_sent', json_object('station', station_id)
   from kanban order by created_at;
 "
 
+/// An Andon stops one Work Station until its Team Leader closes it; at most
+/// one is open per Work Station.
+const schema_v9 = "
+create table if not exists andon (
+  id         integer primary key autoincrement,
+  station_id text not null references work_station(id),
+  raised_by  text references person(id),
+  raised_at  text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  closed_by  text references person(id),
+  closed_at  text
+);
+create unique index if not exists andon_open on andon(station_id)
+  where closed_at is null;
+"
+
 const schema_v3 = "
 create table if not exists stream_step (
   position   integer primary key,
@@ -429,7 +444,7 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// Each step runs at most once per database, tracked in `pragma user_version`:
 /// never edit an applied step, append a new one and raise this target.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  migrate_to(connection, 8)
+  migrate_to(connection, 9)
 }
 
 pub fn migrate_to(
@@ -446,6 +461,7 @@ pub fn migrate_to(
     #(6, schema_v6 <> seed_passes_sql),
     #(7, schema_v7),
     #(8, schema_v8),
+    #(9, schema_v9),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
@@ -504,6 +520,7 @@ pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 
 /// Children before parents, for `pragma foreign_keys = on`.
 const empty_sql = "
+delete from andon;
 delete from deviation;
 delete from rework;
 delete from kanban;

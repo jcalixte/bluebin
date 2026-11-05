@@ -13,6 +13,7 @@ pub type Rule {
   PullWithoutKanban
   SecondPieceInABlueBin
   PullWithAnOpenRework
+  PullDuringAndon
   ReorderHeijunkaSequence
 }
 
@@ -28,6 +29,8 @@ pub type FlowError {
   ReworkFirst
   NotOfStation
   NotNextOfDemand
+  NoAndon
+  NotTeamLeader
   ReorderNeedsConfirmation(List(heijunka.Effect))
   StoreFailed
 }
@@ -46,6 +49,7 @@ pub fn rule_name(rule: Rule) -> String {
     PullWithoutKanban -> "pull_without_kanban"
     SecondPieceInABlueBin -> "second_piece_in_a_blue_bin"
     PullWithAnOpenRework -> "pull_with_an_open_rework"
+    PullDuringAndon -> "pull_during_andon"
     ReorderHeijunkaSequence -> "reorder_heijunka_sequence"
   }
 }
@@ -58,6 +62,8 @@ pub fn rule_warning(rule: Rule) -> String {
       "Every Blue Bin of this Work Station is full. Putting a second Piece in one is a Deviation."
     PullWithAnOpenRework ->
       "This Work Station found a defect and its Rework is still open. Starting another Piece before it is repaired is a Deviation."
+    PullDuringAndon ->
+      "An Andon stops this Work Station until its Team Leader closes it. Pulling a new Piece now is a Deviation."
     ReorderHeijunkaSequence ->
       "Releasing this Piece before its turn breaks the Heijunka Sequence and the levelled Product Mix. It is a Deviation."
   }
@@ -82,17 +88,19 @@ pub fn pull(
 
   use kanban <- result.try(oldest_kanban(connection, station.id))
   use open_rework <- result.try(raised_an_open_rework(connection, station.id))
+  use stopped <- result.try(stopped_by_andon(connection, station.id))
   let broken =
-    list.append(
-      case open_rework {
-        True -> [PullWithAnOpenRework]
-        False -> []
-      },
-      case kanban {
-        None -> [PullWithoutKanban]
-        Some(_) -> []
-      },
-    )
+    [
+      #(stopped, PullDuringAndon),
+      #(open_rework, PullWithAnOpenRework),
+      #(kanban == None, PullWithoutKanban),
+    ]
+    |> list.filter_map(fn(check) {
+      case check.0 {
+        True -> Ok(check.1)
+        False -> Error(Nil)
+      }
+    })
   use deviations <- result.try(record_deviations(
     connection,
     broken,
@@ -801,12 +809,108 @@ pub fn can_pull(
   use station <- result.try(load_station(connection, station_id))
   use kanban <- result.try(oldest_kanban(connection, station.id))
   use open_rework <- result.try(raised_an_open_rework(connection, station.id))
-  use <- bool.guard(kanban == None || open_rework, Ok(False))
+  use stopped <- result.try(stopped_by_andon(connection, station.id))
+  use <- bool.guard(kanban == None || open_rework || stopped, Ok(False))
   use kind <- result.try(pull_kind(connection, station))
   case next_source(connection, station, kind) {
     Ok(_) -> Ok(True)
     Error(NothingToPull) | Error(NothingToAssemble) -> Ok(False)
     Error(failure) -> Error(failure)
+  }
+}
+
+/// Any Person stops their Work Station with one click (F42). A second Andon
+/// on a stopped Work Station changes nothing. A Person who is not of the Work
+/// Station still stops it, but is not recorded as who raised it.
+pub fn raise_andon(
+  connection: sqlight.Connection,
+  station_id: String,
+  person: Option(String),
+) -> Result(Nil, FlowError) {
+  use <- in_transaction(connection)
+  use station <- result.try(load_station(connection, station_id))
+  use stopped <- result.try(stopped_by_andon(connection, station.id))
+  use <- bool.guard(stopped, Ok(Nil))
+  let raised =
+    sqlight.query(
+      "insert into andon (station_id, raised_by)
+       values (?1, (select sp.person_id from station_person sp
+                     where sp.station_id = ?1 and sp.person_id = ?2))
+       returning raised_by",
+      on: connection,
+      with: [
+        sqlight.text(station.id),
+        sqlight.nullable(sqlight.text, person),
+      ],
+      expecting: decode.at([0], decode.optional(decode.string)),
+    )
+  use raised_by <- result.try(case raised {
+    Ok([raised_by, ..]) -> Ok(raised_by)
+    _ -> Error(StoreFailed)
+  })
+  record_event(
+    connection,
+    "andon_raised",
+    None,
+    json.object([
+      #("station", json.string(station.id)),
+      #("person", json.nullable(raised_by, json.string)),
+    ]),
+  )
+}
+
+/// Only the Team Leader of the Work Station closes its Andon.
+pub fn close_andon(
+  connection: sqlight.Connection,
+  station_id: String,
+  person: String,
+) -> Result(Nil, FlowError) {
+  use <- in_transaction(connection)
+  use station <- result.try(load_station(connection, station_id))
+  let closed =
+    sqlight.query(
+      "update andon
+          set closed_by = ?2, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+        where station_id = ?1 and closed_at is null
+          and ?2 = (select team_leader from work_station where id = ?1)
+        returning id",
+      on: connection,
+      with: [sqlight.text(station.id), sqlight.text(person)],
+      expecting: decode.at([0], decode.int),
+    )
+  use stopped <- result.try(stopped_by_andon(connection, station.id))
+  case closed, stopped {
+    Error(_), _ -> Error(StoreFailed)
+    Ok([]), True -> Error(NotTeamLeader)
+    Ok([]), False -> Error(NoAndon)
+    Ok(_), _ ->
+      record_event(
+        connection,
+        "andon_closed",
+        None,
+        json.object([
+          #("station", json.string(station.id)),
+          #("person", json.string(person)),
+        ]),
+      )
+  }
+}
+
+fn stopped_by_andon(
+  connection: sqlight.Connection,
+  station_id: String,
+) -> Result(Bool, FlowError) {
+  let open =
+    sqlight.query(
+      "select count(*) from andon where station_id = ?1 and closed_at is null",
+      on: connection,
+      with: [sqlight.text(station_id)],
+      expecting: decode.at([0], decode.int),
+    )
+  case open {
+    Ok([count, ..]) -> Ok(count > 0)
+    Ok([]) -> Ok(False)
+    Error(_) -> Error(StoreFailed)
   }
 }
 

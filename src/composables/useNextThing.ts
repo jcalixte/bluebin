@@ -59,9 +59,26 @@ export function useNextThing(personId: Ref<string>) {
   const assign = (kind: "piece" | "rework", id: string, person: string) =>
     act("/api/assign", { kind, id, person })
 
+  const raiseAndon = (station: string) => act("/api/andon", { station, person: personId.value })
+
+  const closeAndon = (station: string) =>
+    act("/api/andon/close", { station, person: personId.value })
+
   watch(personId, load)
   onMounted(load)
   useLiveUpdates(load)
 
-  return { people, view, error, loading, load, pull, finish, repair, assign }
+  return {
+    people,
+    view,
+    error,
+    loading,
+    load,
+    pull,
+    finish,
+    repair,
+    assign,
+    raiseAndon,
+    closeAndon,
+  }
 }

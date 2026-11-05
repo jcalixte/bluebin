@@ -27,6 +27,11 @@ pub type Hub =
 /// write fails, so each stream sends a `ping` event this often.
 const heartbeat_ms = 25_000
 
+/// Time alone raises some Andons (a Rework that waits, a Takt Gap that grows),
+/// so every minute the open screens reload as if the state changed
+/// (DESIGN.md R6).
+const tick_ms = 60_000
+
 pub fn start() -> Result(Hub, actor.StartError) {
   actor.new_with_initialiser(1000, fn(subject) {
     let selector =
@@ -41,7 +46,16 @@ pub fn start() -> Result(Hub, actor.StartError) {
   })
   |> actor.on_message(handle)
   |> actor.start
-  |> result.map(fn(started) { started.data })
+  |> result.map(fn(started) {
+    process.spawn(fn() { tick(started.data) })
+    started.data
+  })
+}
+
+fn tick(hub: Hub) -> Nil {
+  process.sleep(tick_ms)
+  announce(hub, "tick")
+  tick(hub)
 }
 
 fn handle(
@@ -58,6 +72,7 @@ fn handle(
       list.each(streams, fn(one) { process.send(one.1, Changed(action)) })
       actor.continue(streams)
     }
+
     StreamDown(monitor) ->
       actor.continue(list.filter(streams, fn(one) { one.0 != monitor }))
   }

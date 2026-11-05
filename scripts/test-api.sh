@@ -133,6 +133,21 @@ calendar=$(curl -fsS "$BASE/api/calendar")
 check "the Working Calendar has working days and a day that ends after it starts" \
   assert_json '(.days | length) > 0 and .start < .end' "$calendar"
 
+andons=$(curl -fsS "$BASE/api/andons")
+check "every Andon is a stop or a Rework that waits, on a named Work Station" assert_json \
+  'all((.kind == "stop" or .kind == "rework_waits") and .stationName != "")' "$andons"
+check "a Rework raises an Andon only after an hour of Working Time" assert_json \
+  'map(select(.kind == "rework_waits")) | all(.waitingHours >= 1)' "$andons"
+check "the Value Stream shows the same Andons" assert_json \
+  "(.andons | length) == $(printf '%s' "$andons" | jq length)" "$stream"
+check "stale Assignments are a part of the active ones" assert_json \
+  '(.stale | length) <= .activeAssignments' "$stream"
+check "every bottleneck is slower than the Takt Time or has full Blue Bins in front" \
+  assert_json '.bottlenecks | all(.slower or .fullInFront)' "$stream"
+check "closing an Andon nobody raised is refused" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
+     -d '{"station": "ws-nowhere", "person": "pe-nobody"}' "$BASE/api/andon/close")" = 404
+
 # The stream never ends, so curl stops it after 2 s and only its headers count.
 backlog=$(curl -fsS "$BASE/api/backlog")
 check "the Backlog lists its Heijunka Sequence" assert_json \

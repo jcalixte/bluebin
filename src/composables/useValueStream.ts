@@ -48,6 +48,11 @@ export function useValueStream() {
   const assign = (kind: "piece" | "rework", id: string, person: string) =>
     act("/api/assign", { kind, id, person })
 
+  const raiseAndon = (station: string, person?: string) => act("/api/andon", { station, person })
+
+  const closeAndon = (station: string, person: string) =>
+    act("/api/andon/close", { station, person })
+
   /** The server trims the name, so its answer wins over ours. */
   async function renameStep(position: number, name: string) {
     const response = await fetch(`/api/steps/${position}`, {
@@ -80,5 +85,7 @@ export function useValueStream() {
     raiseRework,
     repairRework,
     assign,
+    raiseAndon,
+    closeAndon,
   }
 }

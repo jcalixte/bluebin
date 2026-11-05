@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import AndonAlert from "../components/AndonAlert.vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
@@ -20,7 +21,22 @@ const {
   raiseRework,
   repairRework,
   assign,
+  raiseAndon,
+  closeAndon,
 } = useValueStream()
+
+const stale = computed(
+  () => new Set((valueStream.value?.stale ?? []).map((one) => `${one.kind}:${one.id}`)),
+)
+
+const staleShare = computed(() => {
+  const active = valueStream.value?.activeAssignments ?? 0
+  return active === 0 ? 0 : Math.round((stale.value.size / active) * 100)
+})
+
+function bottleneckOf(station: string) {
+  return valueStream.value?.bottlenecks.find((one) => one.station === station)
+}
 
 /** Must match max_name_length in backend/src/bluebin/value_stream.gleam. */
 const maxNameLength = 40
@@ -135,7 +151,21 @@ const taktLabel = computed(() => {
           Takt Time {{ taktLabel }} per Piece, across every active Demand
         </p>
       </div>
+      <p
+        v-if="valueStream && valueStream.activeAssignments > 0"
+        class="text-sm"
+        title="Active Assignments with no event for more than one working day. Target: 5 % or less."
+      >
+        <span :class="staleShare > 5 ? 'font-medium text-warning' : 'opacity-70'">
+          {{ stale.size }} of {{ valueStream.activeAssignments }} active Assignments stale ({{
+            staleShare
+          }}
+          %)
+        </span>
+      </p>
     </header>
+
+    <AndonAlert v-if="valueStream" :andons="valueStream.andons" />
 
     <div v-if="renameError" role="alert" class="alert alert-error mb-4">
       <span>The step was not renamed: {{ renameError }}</span>
@@ -182,6 +212,12 @@ const taktLabel = computed(() => {
                   station.branch === null && (columns[index - 1]?.stations.length ?? 0) > 1
                 "
                 :busy="busy"
+                :andons="valueStream?.andons ?? []"
+                :stale="stale"
+                :bottleneck="bottleneckOf(station.id)"
+                :takt-hours="valueStream?.taktTimeHours ?? 0"
+                @andon="(who) => run(() => raiseAndon(station.id, who))"
+                @close-andon="(who) => run(() => closeAndon(station.id, who))"
                 @pull="(who) => run((why) => pull(station.id, who, why))"
                 @finish="(piece) => run((why) => finish(station.id, piece, why))"
                 @deliver="(piece) => run(() => deliver(piece))"

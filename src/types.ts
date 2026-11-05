@@ -99,11 +99,49 @@ export type Step = {
   name: string
 }
 
+/** A stop raised by hand (F42), or a Rework that waits with nobody on it (F15). */
+export type Andon =
+  | {
+      kind: "stop"
+      station: string
+      stationName: string
+      raisedBy: string | null
+      raisedAt: string
+      teamLeaderId: string | null
+      teamLeader: string | null
+    }
+  | {
+      kind: "rework_waits"
+      station: string
+      stationName: string
+      rework: string
+      piece: string
+      waitingHours: number
+    }
+
+/** An active Assignment with no event for more than one working day. */
+export type StaleAssignment = {
+  kind: "piece" | "rework"
+  id: string
+}
+
+/** `capacityHours` is the average Touch Time per Piece over the last 7 days, divided by its People. */
+export type Bottleneck = {
+  station: string
+  capacityHours: number | null
+  slower: boolean
+  fullInFront: boolean
+}
+
 export type ValueStream = {
   stations: WorkStation[]
   steps: Step[]
   taktTimeHours: number
   demandsBehind: number
+  andons: Andon[]
+  stale: StaleAssignment[]
+  activeAssignments: number
+  bottlenecks: Bottleneck[]
 }
 
 /** `stations` is ordered nearest to production first. */
@@ -155,6 +193,8 @@ export type PriorityList = {
 
 export type PersonView = {
   person: { id: string; name: string }
+  /** The Andons of the Person's Work Stations only. */
+  andons: Andon[]
   next: NextThing
   assignments: Assignment[]
   priorityLists: PriorityList[]
