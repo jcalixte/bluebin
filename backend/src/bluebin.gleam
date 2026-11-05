@@ -130,10 +130,6 @@ fn value_stream() -> wisp.Response {
   }
 }
 
-// --- The three flow actions: pull, finish, deliver (F7, F24, F6, F9, F30) ---
-
-/// `{"station": "ws-web", "reason": "…"}` — the reason is given only to
-/// confirm a warned pull, and makes it a Deviation.
 fn pull(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
@@ -163,7 +159,6 @@ fn pull(request: wisp.Request) -> wisp.Response {
   }
 }
 
-/// `{"station": "ws-web", "piece": "p-checkout-8", "reason": "…"}`
 fn finish(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
@@ -191,8 +186,6 @@ fn finish(request: wisp.Request) -> wisp.Response {
   }
 }
 
-/// `{"piece": "p-checkout-9"}` — production pulls the Piece out of the last
-/// Blue Bin of the chain.
 fn deliver(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = decode.field("piece", decode.string, decode.success)
@@ -207,8 +200,6 @@ fn deliver(request: wisp.Request) -> wisp.Response {
   }
 }
 
-/// One shape for the three actions: what moved, or what the Person must
-/// confirm first with a reason (F6, F9, F31).
 fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
   case result {
     Ok(flowed) ->
@@ -335,11 +326,6 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
   }
 }
 
-// --- Jidoka: raise a Rework, repair it (F12, F13) ---
-
-/// `{"station": "ws-qa-ios", "piece": "p-offline-4-ios",
-///   "madeBy": "ws-ios", "description": "…"}` — the Work Station that found
-/// the defect names the one that made it.
 fn raise_rework(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
@@ -377,7 +363,6 @@ fn raise_rework(request: wisp.Request) -> wisp.Response {
   }
 }
 
-/// `{"rework": "rw-…"}` — the defect is repaired and the Rework closes.
 fn repair_rework(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = decode.field("rework", decode.string, decode.success)
@@ -403,8 +388,6 @@ fn repair_rework(request: wisp.Request) -> wisp.Response {
   }
 }
 
-// --- Assignments and the next thing of each Person (F18–F22) ---
-
 fn people() -> wisp.Response {
   case db.with_connection(assignment.people) {
     Ok(people) ->
@@ -424,8 +407,6 @@ fn next_thing(person: String) -> wisp.Response {
   }
 }
 
-/// `{"kind": "piece" | "rework", "id": "…", "person": "pe-karim"}` — hand an
-/// Assignment to another Person of the same Work Station (F21).
 fn assign(request: wisp.Request) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
@@ -468,7 +449,6 @@ fn json_body(fields: List(#(String, json.Json)), status: Int) -> wisp.Response {
   wisp.json_response(json.to_string(json.object(fields)), status)
 }
 
-/// Rename one step of the chain. The body is `{"name": "…"}`.
 fn rename_step(request: wisp.Request, position: String) -> wisp.Response {
   use body <- wisp.require_json(request)
 

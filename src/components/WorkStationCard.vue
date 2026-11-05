@@ -16,11 +16,9 @@ const emit = defineEmits<{
   deliver: [piece: string]
   rework: [piece: string]
   repair: [rework: string]
-  /** Hand a Piece in hand or a Rework to another Person of this Work Station. */
   assign: [kind: "piece" | "rework", id: string, person: string]
 }>()
 
-/** The Person who takes the next Piece in hand; none until one is picked. */
 const person = ref("")
 
 function handOver(kind: "piece" | "rework", id: string, event: Event) {
@@ -32,14 +30,11 @@ function handOver(kind: "piece" | "rework", id: string, event: Event) {
 
 const hasRework = computed(() => props.station.rework.length > 0)
 
-/** A Work Station with every Blue Bin full holds the flow up: it can finish
- *  nothing more until the downstream Work Station pulls. */
 const binsFull = computed(
   () =>
     props.station.blueBins.length > 0 && props.station.blueBins.every((bin) => bin.piece !== null),
 )
 
-/** First Pass Yield as a whole percentage, or null until a Piece has left. */
 const yieldPercent = computed(() =>
   props.station.firstPassYield === null ? null : Math.round(props.station.firstPassYield * 100),
 )

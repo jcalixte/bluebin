@@ -1,11 +1,10 @@
 #!/usr/bin/env sh
-# Smoke-test a running Bluebin API: the endpoints answer, the payloads carry
-# the Takt numbers, and the pull rules of the glossary hold in the data.
+# Smoke-test a running Bluebin API.
 #
 #   scripts/test-api.sh                      against https://bluebin.app
 #   scripts/test-api.sh http://localhost:8000  against a local backend
 #
-# Needs curl and jq only, so it runs anywhere, including where no Erlang is.
+# Needs curl and jq only, no Erlang.
 set -eu
 
 BASE="${1:-https://bluebin.app}"
@@ -22,8 +21,7 @@ check() {
   fi
 }
 
-# `jq -e` exits non-zero when the expression is false or null, which is the
-# assertion: every check below is one jq expression over a real payload.
+# `jq -e` exits non-zero when the expression is false or null: that is the assertion.
 assert_json() {
   printf '%s' "$2" | jq -e "$1"
 }

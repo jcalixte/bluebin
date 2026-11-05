@@ -7,42 +7,26 @@ import gleam/result
 import gleam/string
 import sqlight
 
-/// A pull rule a Person is warned about, and breaks only as a Deviation with
-/// its reason (F6, F9, F31).
 pub type Rule {
   PullWithoutKanban
   SecondPieceInABlueBin
-  /// Jidoka: while the Rework this Work Station raised is open, it repairs or
-  /// helps downstream — it does not start another Piece (F14).
   PullWithAnOpenRework
 }
 
 pub type FlowError {
   UnknownStation
   NothingToPull
-  /// The Work Station after the Branches finds no Piece whose Sub-Pieces all
-  /// wait in the last Blue Bin of their Branch (F8).
   NothingToAssemble
   PieceNotHere
-  /// The action breaks one or more rules: the Person must confirm it with a
-  /// reason, which records one Deviation per rule broken.
   NeedsConfirmation(List(Rule))
-  /// A defect is named against a Work Station that is not upstream of the one
-  /// that found it; a Piece never moves backward.
   NotUpstream
-  /// A Rework says in one line what the defect is.
   EmptyDescription
-  /// No open Rework carries that id.
   UnknownRework
-  /// The Person holds an open Rework: it comes first, before any new Piece.
   ReworkFirst
-  /// An Assignment goes only to a Person of the Work Station it belongs to.
   NotOfStation
   StoreFailed
 }
 
-/// What one action changed: enough for the answer, and for the screens to say
-/// what happened before they reload.
 pub type Flowed {
   Flowed(
     piece: String,
@@ -60,7 +44,6 @@ pub fn rule_name(rule: Rule) -> String {
   }
 }
 
-/// The warning a Person reads before they decide (F6, F9).
 pub fn rule_warning(rule: Rule) -> String {
   case rule {
     PullWithoutKanban ->
@@ -72,16 +55,6 @@ pub fn rule_warning(rule: Rule) -> String {
   }
 }
 
-// --- The three actions ---
-
-/// A Work Station spends one Kanban and takes the first Piece waiting in the
-/// Blue Bins upstream — or in the Backlog, for the first Work Station (F24).
-/// Emptying an upstream Blue Bin sends one Kanban back to it (F7).
-///
-/// Around a Split the pull changes shape. Each Branch pulls its own Sub-Piece,
-/// and the Piece leaves the trunk's Blue Bin only once every Branch has pulled
-/// its part. The Work Station after the Branches pulls by Assembly: all the
-/// Sub-Pieces of one Piece at once, each from the last Blue Bin of its Branch.
 pub fn pull(
   connection: sqlight.Connection,
   station_id: String,
@@ -100,7 +73,7 @@ pub fn pull(
   use source <- result.try(next_source(connection, station, kind))
 
   use kanban <- result.try(oldest_kanban(connection, station.id))
-  use open_rework <- result.try(has_an_open_rework(connection, station.id))
+  use open_rework <- result.try(raised_an_open_rework(connection, station.id))
   let broken =
     list.append(
       case open_rework {
@@ -126,7 +99,6 @@ pub fn pull(
     AtSplit -> split_off(connection, station, source)
     Assembly -> assemble(connection, station, source)
   })
-  // Taking a new Piece in hand puts the current one down (F32).
   use holder <- result.try(take_in_hand(
     connection,
     pulled.0,
@@ -159,9 +131,6 @@ pub fn pull(
   ))
 }
 
-/// A Work Station finishes a Piece and puts it in one of its Blue Bins, where
-/// it waits for the downstream pull. A second Piece in one Blue Bin is a
-/// Deviation (F9).
 pub fn finish(
   connection: sqlight.Connection,
   station_id: String,
@@ -189,8 +158,8 @@ pub fn finish(
     reason,
   ))
 
-  // Who transformed the Piece here: the author a Rework goes to (F13), and
-  // one more Piece out of this Work Station for its First Pass Yield (F16).
+  // Before the assignee is cleared below: piece_pass records who transformed
+  // the Piece, for the Rework author (F13) and First Pass Yield (F16).
   use _ <- result.try(record_pass(connection, piece.id, station.id))
   use holder <- result.try(assignee_of(connection, piece.id))
 
@@ -212,7 +181,6 @@ pub fn finish(
     json.object([#("station", json.string(station.id))]),
   ))
 
-  // Free hands take up the Assignment they had put down (F32).
   use _ <- result.try(settle_option(connection, holder))
 
   Ok(
@@ -225,8 +193,6 @@ pub fn finish(
   )
 }
 
-/// Production pulls a Piece out of the Blue Bin of the last Work Station: the
-/// Piece reaches production, and the Work Station gets one Kanban back (F2).
 pub fn deliver(
   connection: sqlight.Connection,
   piece_id: String,
@@ -264,9 +230,6 @@ pub fn deliver(
   ))
 }
 
-// --- Jidoka: a defect stops where it is found (F12, F13, F14, F32) ---
-
-/// A Rework just raised: who repairs it, and what that Person put down.
 pub type Raised {
   Raised(
     id: String,
@@ -277,16 +240,10 @@ pub type Raised {
   )
 }
 
-/// A Rework just closed, and the Piece its author takes up again.
 pub type Repaired {
   Repaired(piece: String, resumed: Option(String))
 }
 
-/// A Work Station finds a defect in the Piece it holds and names the Work
-/// Station that made it (F12). The Piece never moves backward: it stays in
-/// these hands, and the repair goes by default to its author — the Person who
-/// transformed it at that Work Station — whose current Piece is paused so the
-/// repair comes first (F13, F32).
 pub fn raise_rework(
   connection: sqlight.Connection,
   station_id: String,
@@ -331,8 +288,6 @@ pub fn raise_rework(
     _ -> Error(StoreFailed)
   })
 
-  // The Rework becomes the author's active Assignment, unless another Rework
-  // already is; their Piece in hand is put down either way.
   use settled <- result.try(settle_option(
     connection,
     option.map(author, fn(one) { one.0 }),
@@ -358,8 +313,6 @@ pub fn raise_rework(
   ))
 }
 
-/// The defect is repaired: the Rework closes, and its Person takes up their
-/// next Assignment — another Rework, or the Piece they had put down.
 pub fn repair_rework(
   connection: sqlight.Connection,
   rework_id: String,
@@ -391,7 +344,6 @@ pub fn repair_rework(
   Ok(Repaired(piece: reference, resumed: settled.resumed))
 }
 
-/// The open Rework with that id: its Piece, and who repairs it.
 fn load_open_rework(
   connection: sqlight.Connection,
   rework_id: String,
@@ -419,28 +371,19 @@ fn load_open_rework(
   }
 }
 
-// --- Assignments: one active per Person, the rest paused (F21, F32) ---
-
-/// What a Person's hands look like after a change.
 pub type Settled {
   Settled(paused: List(String), resumed: Option(String))
 }
 
-/// What a Rework or a Piece in hand is, as an Assignment.
 pub type AssignmentKind {
   ReworkAssignment
   PieceAssignment
 }
 
-/// An Assignment handed over to another Person of the same Work Station.
 pub type Reassigned {
   Reassigned(piece: String, person: String)
 }
 
-/// Any Person of a Work Station hands one of its Assignments — a Piece in
-/// hand or an open Rework — to another Person of that Work Station (F21). The
-/// one who takes it puts down their current Piece; the one who gave it takes
-/// up their next Assignment (F32).
 pub fn reassign(
   connection: sqlight.Connection,
   kind: AssignmentKind,
@@ -505,10 +448,6 @@ pub fn reassign(
   Ok(Reassigned(piece: reference, person: name))
 }
 
-/// Puts a Person's hands in order: an open Rework comes first and is the one
-/// active Assignment — every Piece they hold waits, paused. With no Rework,
-/// free hands take up the paused Piece nearest to production, then the one
-/// put down first (F18, F32).
 fn settle(
   connection: sqlight.Connection,
   person_id: String,
@@ -544,8 +483,6 @@ fn settle_option(
   }
 }
 
-/// The oldest open Rework of the Person starts, unless one already runs: the
-/// Rework Time counts from that moment (F16).
 fn start_next_rework(
   connection: sqlight.Connection,
   person_id: String,
@@ -563,8 +500,7 @@ fn start_next_rework(
   )
 }
 
-/// Every Piece the Person transforms, but `except`, is put down. Answers the
-/// references of the Pieces paused.
+/// Answers the references of the Pieces paused.
 fn pause_pieces(
   connection: sqlight.Connection,
   person_id: String,
@@ -599,8 +535,6 @@ fn pause_pieces(
   })
 }
 
-/// With empty hands, the Person takes up the paused Piece nearest to
-/// production, then the one put down first.
 fn resume_next_piece(
   connection: sqlight.Connection,
   person_id: String,
@@ -639,8 +573,6 @@ fn resume_next_piece(
   }
 }
 
-/// Whether the Person, being of this Work Station, still has a Rework to
-/// repair: it comes before any new Piece (F18).
 fn holds_an_open_rework(
   connection: sqlight.Connection,
   person_id: String,
@@ -681,8 +613,6 @@ fn assignee_of(
   }
 }
 
-/// A Piece in the hands of a Work Station, transformed or put down: its
-/// reference, its Work Station, who holds it, and whether it is in flow.
 fn load_piece_in_hand(
   connection: sqlight.Connection,
   piece_id: String,
@@ -710,7 +640,7 @@ fn load_piece_in_hand(
   }
 }
 
-/// The Work Station a Rework stands against: its People repair it.
+/// The Work Station that made the defect, not the one that raised it.
 fn rework_station(
   connection: sqlight.Connection,
   rework_id: String,
@@ -750,16 +680,14 @@ fn member_name(
   }
 }
 
-/// Whether a Person of the Work Station can take its top Kanban now, with no
-/// Deviation: a Kanban waits, no Rework it raised is open, and a Piece waits
-/// upstream (F20).
+/// Whether the Work Station can pull now without a Deviation (F20).
 pub fn can_pull(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Bool, FlowError) {
   use station <- result.try(load_station(connection, station_id))
   use kanban <- result.try(oldest_kanban(connection, station.id))
-  use open_rework <- result.try(has_an_open_rework(connection, station.id))
+  use open_rework <- result.try(raised_an_open_rework(connection, station.id))
   use <- bool.guard(kanban == None || open_rework, Ok(False))
   use kind <- result.try(pull_kind(connection, station))
   case next_source(connection, station, kind) {
@@ -769,8 +697,6 @@ pub fn can_pull(
   }
 }
 
-/// A defect is named against a Work Station the Piece already crossed: an
-/// earlier position, in the trunk or in the same Branch.
 fn upstream_of(made_by: Station, found_by: Station) -> Bool {
   made_by.position < found_by.position
   && case made_by.branch, found_by.branch {
@@ -779,8 +705,6 @@ fn upstream_of(made_by: Station, found_by: Station) -> Bool {
   }
 }
 
-/// The Person who transformed this Piece at that Work Station — of the Piece
-/// itself, or of one of its Sub-Pieces when the defect was made in a Branch.
 fn author_of(
   connection: sqlight.Connection,
   piece_id: String,
@@ -813,16 +737,10 @@ fn author_of(
   }
 }
 
-// --- How a pull moves its Piece ---
-
-/// Where a pull takes its Piece from, read from the shape of the chain.
 type Kind {
   FromBacklog
-  /// Inside the trunk, or inside one Branch.
   Straight
-  /// A Branch pulls from the trunk: only its own Sub-Piece.
   AtSplit
-  /// The Work Station after the Branches pulls every Sub-Piece of one Piece.
   Assembly
 }
 
@@ -866,8 +784,8 @@ fn next_source(
   }
 }
 
-/// The whole Piece moves into the hands of the Work Station. Answers the id
-/// and reference of what moved, and the Work Stations that got a Kanban back.
+/// Answers the id and reference of what moved, and the Work Stations that got
+/// a Kanban back.
 fn take_whole(
   connection: sqlight.Connection,
   station: Station,
@@ -881,9 +799,8 @@ fn take_whole(
   Ok(#(#(source.id, source.reference), sent))
 }
 
-/// The Branch takes its own Sub-Piece. The Piece stays in the trunk's Blue
-/// Bin, holding it, until the last Branch has taken its part; only then the
-/// Blue Bin is empty and its Work Station gets a Kanban back.
+/// The Piece holds the trunk's Blue Bin until the last Branch has taken its
+/// Sub-Piece; only then does its Work Station get a Kanban back.
 fn split_off(
   connection: sqlight.Connection,
   station: Station,
@@ -938,9 +855,6 @@ fn split_off(
   Ok(#(sub_piece, sent))
 }
 
-/// The Sub-Pieces join again: each leaves the last Blue Bin of its Branch,
-/// which sends that Work Station one Kanban, and the complete Piece goes into
-/// the hands of the Work Station after the Branches.
 fn assemble(
   connection: sqlight.Connection,
   station: Station,
@@ -993,14 +907,12 @@ fn send_kanbans(
   |> result.map(option.values)
 }
 
-// --- The pieces the actions move ---
-
 type Station {
   Station(id: String, position: Int, branch: Option(String), blue_bins: Int)
 }
 
-/// A Piece about to be pulled. `station_id` is the Work Station whose Blue Bin
-/// it leaves, and is none when it leaves the Backlog.
+/// `station_id` is the Work Station whose Blue Bin the Piece leaves; None from
+/// the Backlog and at the Assembly.
 type Source {
   Source(
     id: String,
@@ -1039,7 +951,7 @@ fn load_station(
   }
 }
 
-/// The first or the last position of the chain, `"min"` or `"max"`.
+/// `edge` is spliced into the SQL: only `"min"` or `"max"`.
 fn edge_position(
   connection: sqlight.Connection,
   edge: String,
@@ -1058,9 +970,7 @@ fn edge_position(
   }
 }
 
-/// The Piece the Backlog releases: only a Kanban of the first Work Station
-/// takes it out (F24). Until the Heijunka Sequence exists (F23), the Backlog
-/// keeps the order the Pieces were written in.
+/// Insertion order until the Heijunka Sequence exists (F23).
 fn next_backlog_piece(
   connection: sqlight.Connection,
 ) -> Result(Source, FlowError) {
@@ -1077,8 +987,6 @@ fn next_backlog_piece(
   )
 }
 
-/// The Piece that has waited longest in a Blue Bin of the step just upstream,
-/// in the trunk or in the same Branch.
 fn next_upstream_piece(
   connection: sqlight.Connection,
   station: Station,
@@ -1103,8 +1011,6 @@ fn next_upstream_piece(
   )
 }
 
-/// At the Split: the Piece that has waited longest in the trunk's Blue Bins
-/// and whose Sub-Piece for this Branch is not pulled yet.
 fn next_unsplit_piece(
   connection: sqlight.Connection,
   station: Station,
@@ -1130,8 +1036,8 @@ fn next_unsplit_piece(
   )
 }
 
-/// At the Assembly: the Piece whose Sub-Pieces all wait in the last Blue Bin
-/// of their Branch, the one complete for the longest time first.
+/// Every Sub-Piece waits in the last Blue Bin of its Branch; the Piece complete
+/// the longest comes first.
 fn next_complete_piece(
   connection: sqlight.Connection,
   station: Station,
@@ -1235,10 +1141,6 @@ fn held_decoder() -> decode.Decoder(Held) {
   decode.success(Held(id:, reference:, demand:, station_id:))
 }
 
-// --- Kanbans, Blue Bins and Deviations ---
-
-/// The oldest Kanban of the Work Station, the one a pull spends. None means
-/// nothing downstream asked for a Piece: pulling anyway is a Deviation (F6).
 fn oldest_kanban(
   connection: sqlight.Connection,
   station_id: String,
@@ -1269,9 +1171,7 @@ fn spend_kanban(
   }
 }
 
-/// Whether the Work Station is waiting on a defect it found itself: until the
-/// repair is done, it does not start another Piece (F14).
-fn has_an_open_rework(
+fn raised_an_open_rework(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Bool, FlowError) {
@@ -1290,8 +1190,7 @@ fn has_an_open_rework(
   }
 }
 
-/// The Person of the Work Station who takes the Piece in hand, answered back.
-/// A name that is not of this Work Station leaves the Piece unassigned.
+/// A Person not of this Work Station leaves the Piece unassigned.
 fn take_in_hand(
   connection: sqlight.Connection,
   piece_id: String,
@@ -1325,7 +1224,6 @@ fn take_in_hand(
   }
 }
 
-/// One Piece more out of this Work Station, by the Person who transformed it.
 fn record_pass(
   connection: sqlight.Connection,
   piece_id: String,
@@ -1339,8 +1237,7 @@ fn record_pass(
   )
 }
 
-/// How many Blue Bins of the Work Station hold no Piece. Negative is possible:
-/// a Deviation already put a Piece over the count.
+/// Negative when a Deviation already put a Piece over the count.
 fn free_blue_bins(
   connection: sqlight.Connection,
   station_id: String,
@@ -1361,9 +1258,8 @@ fn free_blue_bins(
   }
 }
 
-/// One more Kanban for the Work Station whose Blue Bin just emptied — never
-/// more Kanbans than its empty Blue Bins, so the insert checks the count
-/// itself and answers nothing when the limit is already reached (F7).
+/// Never more Kanbans than empty Blue Bins: at the limit the insert writes
+/// nothing and answers None (F7).
 fn send_kanban(
   connection: sqlight.Connection,
   station_id: String,
@@ -1389,9 +1285,6 @@ fn send_kanban(
   }
 }
 
-/// Record every rule the action breaks, with the one-line reason the Person
-/// gave (F31). With no reason, nothing is written and the caller is asked to
-/// confirm first; an action that breaks no rule asks for nothing.
 fn record_deviations(
   connection: sqlight.Connection,
   rules: List(Rule),
@@ -1475,9 +1368,8 @@ fn write(
   }
 }
 
-/// The current state, the flow event and the Deviation of one action are
-/// written together or not at all (ADR-0002). A rule that needs confirming
-/// rolls back too, so a warning never leaves a half-written action behind.
+/// One action's state, flow event and Deviations commit together or not at
+/// all (ADR-0002); a NeedsConfirmation rolls back too.
 fn in_transaction(
   connection: sqlight.Connection,
   run: fn() -> Result(a, FlowError),

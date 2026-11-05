@@ -19,16 +19,13 @@ pub type Station {
   )
 }
 
-/// A Piece parked in a Blue Bin of its Work Station, waiting for the
-/// downstream pull. The Work Station's Blue Bin count says how many fit; the
-/// ones beyond it are the overflow a Deviation put there (F9).
 pub type Parked {
   Parked(
     station_id: String,
     id: String,
     reference: String,
     demand: String,
-    /// At a Split, the Branches that already took their Sub-Piece.
+    /// Comma-separated Branches that already took their Sub-Piece at a Split.
     pulled_by: Option(String),
   )
 }
@@ -45,7 +42,6 @@ pub type InProgress {
     demand: String,
     person: Option(String),
     person_id: Option(String),
-    /// Put down for a Rework its Person must repair first (F13, F32).
     paused: Bool,
   )
 }
@@ -60,20 +56,16 @@ pub type Rework {
     id: String,
     piece: String,
     description: String,
-    /// The Work Station that found the defect, which holds the Piece.
     found_by: String,
     assignee: Option(String),
     assignee_id: Option(String),
   )
 }
 
-/// What the defects of one Work Station cost: the share of its Pieces that
-/// needed no Rework, and the time spent repairing them (F16).
 pub type Quality {
   Quality(station_id: String, passes: Int, defects: Int, rework_hours: Float)
 }
 
-/// A pull rule broken on purpose, with the reason the Person gave (F6, F31).
 pub type Deviation {
   Deviation(
     station_id: String,
@@ -84,8 +76,6 @@ pub type Deviation {
   )
 }
 
-/// The whole Value Stream, read in six small queries and assembled here. The
-/// shape stays flat so a screen can be rebuilt from one payload (F27).
 pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
   use stations <- result.try(query_stations(connection))
   use parked <- result.try(query_parked(connection))
@@ -192,8 +182,6 @@ fn station_json(
   let station_quality =
     quality |> list.find(fn(item) { item.station_id == station.id })
 
-  // No Piece has left this Work Station yet: it has no First Pass Yield, and
-  // an empty share would read as 0 % (F16).
   let first_pass_yield = case station_quality {
     Ok(Quality(passes: passes, defects: defects, ..)) if passes > 0 ->
       Some(int.to_float(int.max(passes - defects, 0)) /. int.to_float(passes))
@@ -229,7 +217,6 @@ fn station_json(
   ])
 }
 
-/// One row per declared Blue Bin, filled in the order the Pieces arrived.
 fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(Json) {
   case slot > last {
     True -> []
@@ -435,9 +422,6 @@ fn query_rework(
   )
 }
 
-/// First Pass Yield and Rework Time, per Work Station (F16). A pass is one
-/// Piece that left the Work Station; a defect is one of those Pieces a
-/// Rework came back on. A Rework still open counts the time spent so far.
 fn query_quality(
   connection: sqlight.Connection,
 ) -> Result(List(Quality), sqlight.Error) {
@@ -490,8 +474,6 @@ fn query_deviations(
   )
 }
 
-// --- Steps: the named positions of the chain (F41) ---
-
 pub type Step {
   Step(position: Int, name: String)
 }
@@ -503,8 +485,7 @@ pub type RenameError {
   StoreFailed
 }
 
-/// A name a team can read on a wall TV: trimmed, never empty, never a wall of
-/// text that breaks the column layout.
+/// The longest step name the wall-TV column layout holds without breaking.
 pub const max_name_length = 40
 
 pub fn list_steps(
@@ -532,8 +513,6 @@ pub fn steps_json(steps: List(Step)) -> Json {
   })
 }
 
-/// Rename one step. Renaming is a Value Stream change, so it is dated and
-/// appended to the flow event log like any other (F40, ADR-0002).
 pub fn rename_step(
   connection: sqlight.Connection,
   position: Int,

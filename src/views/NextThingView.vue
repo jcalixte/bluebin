@@ -5,8 +5,6 @@ import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
 import type { Assignment, FlowConfirm, NextThing } from "../types"
 
-/** The Person this screen is for: from the link first, so a shared link opens
- *  the same screen, then from the last choice on this device. */
 const storageKey = "bluebin.person"
 const personId = ref(
   new URLSearchParams(location.search).get("person") ?? localStorage.getItem(storageKey) ?? "",
@@ -24,10 +22,8 @@ const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 
 const next = computed(() => view.value?.next ?? null)
 
-/** The Assignments that wait behind the active one. */
 const waiting = computed(() => (view.value?.assignments ?? []).filter((one) => !one.active))
 
-/** The other People of the Work Station an Assignment belongs to (F21). */
 function handOverTo(assignment: Assignment) {
   return (
     view.value?.priorityLists
@@ -43,8 +39,8 @@ function handOver(assignment: Assignment, event: Event) {
   }
 }
 
-/** The one action of the next thing, bound to the thing shown when clicked,
- *  so a Deviation confirmed later runs the same action again. */
+/** Captures `now` so a Deviation confirmed later reruns this action, not
+ *  whatever is next by then. */
 function doing(now: NextThing): (reason?: string) => Promise<FlowConfirm | null> {
   return (reason) => {
     switch (now.kind) {

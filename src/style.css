@@ -1,8 +1,5 @@
-/* The font @import MUST come first — before @import "tailwindcss" — because
-   Tailwind inlines its import into real CSS rules, and the CSS spec requires
-   @import to precede all other rules. If it comes second, the production build
-   warns ("@import must precede all rules…") and browsers silently DROP the
-   font import, so the custom font never loads. */
+/* The font @import must precede @import "tailwindcss": Tailwind inlines into
+   real CSS rules, and browsers silently drop an @import that follows a rule. */
 @import url("https://api.fonts.coollabs.io/css2?family=Inter:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 @plugin "daisyui";

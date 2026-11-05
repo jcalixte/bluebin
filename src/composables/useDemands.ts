@@ -1,7 +1,6 @@
 import { onMounted, ref } from "vue"
 import type { Demand } from "../types"
 
-/** Loads the active Demands from the API. */
 export function useDemands() {
   const demands = ref<Demand[]>([])
   const error = ref<string | null>(null)

@@ -5,8 +5,7 @@ FROM ${GLEAM_IMAGE} AS build
 RUN apk add --no-cache build-base sqlite-dev
 WORKDIR /build
 COPY . .
-# The test suite is the deploy gate: no Erlang is needed on the machine that
-# pushes, and a red suite fails the build before anything reaches production.
+# The test suite is the deploy gate: a red suite fails the build before production.
 ARG SKIP_TESTS=0
 RUN [ "$SKIP_TESTS" = "1" ] || gleam test
 RUN gleam export erlang-shipment

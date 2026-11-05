@@ -2,8 +2,6 @@ import { onMounted, ref, watch, type Ref } from "vue"
 import { postAction } from "../api"
 import type { FlowConfirm, Person, PersonView } from "../types"
 
-/** Loads one Person's screen: their next thing, their Assignments, and the
- *  Priority Lists of their Work Stations. */
 export function useNextThing(personId: Ref<string>) {
   const people = ref<Person[]>([])
   const view = ref<PersonView | null>(null)
@@ -49,7 +47,6 @@ export function useNextThing(personId: Ref<string>) {
     return confirm
   }
 
-  /** Take the top Kanban of a Work Station: one click (F20). */
   const pull = (station: string, reason?: string) =>
     act("/api/pull", { station, person: personId.value, reason })
 
@@ -58,7 +55,6 @@ export function useNextThing(personId: Ref<string>) {
 
   const repair = (rework: string) => act("/api/rework/repair", { rework })
 
-  /** Take an Assignment, or hand it to another Person of its Work Station (F21). */
   const assign = (kind: "piece" | "rework", id: string, person: string) =>
     act("/api/assign", { kind, id, person })
 

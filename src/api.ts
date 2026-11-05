@@ -1,7 +1,5 @@
 import type { FlowConfirm } from "./types"
 
-/** Posts one flow action. A broken pull rule comes back as a confirmation to
- *  ask for; any other refusal throws with the message the API gave. */
 export async function postAction(
   path: string,
   body: Record<string, unknown>,

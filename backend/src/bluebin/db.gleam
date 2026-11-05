@@ -4,11 +4,10 @@ import gleam/list
 import gleam/result
 import sqlight
 
-/// Path of the SQLite file. The Coolify volume mounts `data/` (see
-/// docker-compose.yml), so the file survives redeploys.
+/// Must stay under `data/`, the volume docker-compose.yml mounts, or the
+/// database is lost on redeploy.
 pub const path = "data/app.db"
 
-/// Flow event log plus the current-state tables, per ADR-0002.
 const schema_v1 = "
 pragma journal_mode = wal;
 pragma foreign_keys = on;
@@ -40,8 +39,6 @@ create table if not exists flow_event (
 );
 "
 
-/// The Value Stream itself: Work Stations in order, their Blue Bins, their
-/// People, their Kanbans and the open Rework.
 const schema_v2 = "
 create table if not exists person (
   id   text primary key,
@@ -89,10 +86,6 @@ alter table piece add column station_id text references work_station(id);
 alter table piece add column assignee text references person(id);
 "
 
-/// A Piece waiting in a Blue Bin is the Piece itself, parked at its Work
-/// Station: `state = 'in_bin'`, dated by `since`. The `blue_bin` rows only
-/// repeated `work_station.blue_bins`, so the count alone is kept and a Blue
-/// Bin over its count shows as overflow — the Deviation F9 warns about.
 const schema_v4 = "
 alter table piece add column since text;
 
@@ -114,10 +107,9 @@ create table if not exists deviation (
 );
 "
 
-/// Sub-Pieces: past a Split a Piece flows as one Sub-Piece per Branch, a
-/// `piece` row with `parent_id` and `branch`. The Pieces already in a Branch
-/// were whole, which the pull rules no longer allow, so the demo data is
-/// reset: the seed runs again on the emptied tables. Step names stay.
+/// Pieces already in a Branch were whole, which the pull rules no longer
+/// allow, so the demo data is emptied for `seed` to refill. `stream_step` is
+/// kept so renamed steps survive.
 const schema_v5 = "
 alter table piece add column parent_id text references piece(id);
 alter table piece add column branch text;
@@ -133,11 +125,6 @@ delete from work_station;
 delete from person;
 "
 
-/// Jidoka: a Rework now says who found the defect, who repairs it and what
-/// that Person put down to do it, so the repair can be timed and given back.
-/// `piece_pass` records which Person transformed a Piece at a Work Station —
-/// the author a Rework goes to by default (F13), and the denominator of the
-/// First Pass Yield (F16).
 const schema_v6 = "
 alter table rework add column raised_by text references work_station(id);
 alter table rework add column assignee text references person(id);
@@ -153,10 +140,8 @@ create table if not exists piece_pass (
 );
 "
 
-/// The passes a running instance never recorded: every Work Station a Piece
-/// already crossed, with the first Person of that Work Station. Demo data, so
-/// the First Pass Yield shows numbers from the first screen. Written with
-/// `insert or ignore`, which makes it safe to replay.
+/// Runs both as migration 6 and after the seed, so it must stay idempotent
+/// (`insert or ignore`, `coalesce`).
 const seed_passes_sql = "
 insert or ignore into piece_pass (piece_id, station_id, person_id, at)
 select p.id, w.id,
@@ -187,9 +172,6 @@ update rework
  where closed_at is null;
 "
 
-/// The name of each step of the chain — the position a Piece crosses, which
-/// may hold several Work Stations when the Value Stream splits into Branches.
-/// A team renames them to its own words (F41).
 const schema_v3 = "
 create table if not exists stream_step (
   position   integer primary key,
@@ -198,8 +180,6 @@ create table if not exists stream_step (
 );
 "
 
-/// One row per position already in use, named after where the Pieces come from
-/// and then by rank, until the team renames them.
 const seed_steps_sql = "
 insert into stream_step (position, name)
 select w.position,
@@ -210,8 +190,6 @@ from work_station w
 group by w.position;
 "
 
-/// One Value Stream's worth of Demands and Pieces, so a fresh instance shows
-/// real numbers instead of an empty screen.
 const seed_demands_sql = "
 insert into demand (id, label, client, started_on, due_on, pieces_asked, state) values
   ('d-checkout', 'Checkout redesign', 'Retail',    date('now', '-10 day'), date('now', '+11 day'), 12, 'active'),
@@ -244,8 +222,6 @@ select produced_at, 'piece_reached_production', id, null
 from piece where state = 'produced' order by produced_at;
 "
 
-/// The software team's Value Stream: a trunk, a Split into three Branches, and
-/// an Assembly at UAT. Every Work Station has two Blue Bins except UAT.
 const seed_value_stream_sql = "
 insert into person (id, name) values
   ('pe-ines', 'Inès'), ('pe-marc', 'Marc'), ('pe-sofia', 'Sofia'),
@@ -330,8 +306,6 @@ pub fn with_connection(run: fn(sqlight.Connection) -> a) -> a {
   with_connection_at(path, run)
 }
 
-/// Open any database file. Tests pass `":memory:"` to get a fresh, throwaway
-/// database that still exercises the real schema and the real queries.
 pub fn with_connection_at(
   database: String,
   run: fn(sqlight.Connection) -> a,
@@ -339,21 +313,17 @@ pub fn with_connection_at(
   sqlight.with_connection(database, run)
 }
 
-/// Migrate and seed one connection — what boot does, and what a test needs
-/// before it can query anything.
 pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use _ <- result.try(migrate(connection))
   seed(connection)
 }
 
-/// Apply the schema steps the database has not seen yet, tracked in
-/// `pragma user_version`. Every step runs at most once, in order.
+/// Each step runs at most once per database, tracked in `pragma user_version`:
+/// never edit an applied step, append a new one and raise this target.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   migrate_to(connection, 6)
 }
 
-/// Apply the schema steps up to `target` only, so a test can rebuild a
-/// database as an older deploy left it and check what the next step does.
 pub fn migrate_to(
   connection: sqlight.Connection,
   target: Int,
@@ -400,7 +370,6 @@ fn user_version(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
   }
 }
 
-/// Seed only what is still empty, so a running instance is never overwritten.
 pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use _ <- result.try(seed_when_empty(connection, "demand", seed_demands_sql))
   use _ <- result.try(seed_when_empty(

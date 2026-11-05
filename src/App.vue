@@ -12,8 +12,6 @@ const views = [
 
 type View = (typeof views)[number]
 
-/** The view lives in the URL, so a reload, a bookmark or a shared link opens
- *  the same screen. Any other path, `/` included, shows the Demands. */
 function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
 }
@@ -27,7 +25,6 @@ function open(view: View) {
   current.value = view
 }
 
-/** Back and forward move between the views like any other page. */
 const onPopState = () => (current.value = viewAt(location.pathname))
 addEventListener("popstate", onPopState)
 onBeforeUnmount(() => removeEventListener("popstate", onPopState))

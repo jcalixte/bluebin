@@ -22,7 +22,7 @@ const {
   assign,
 } = useValueStream()
 
-/** The longest step name the API accepts; kept in step with the backend. */
+/** Must match max_name_length in backend/src/bluebin/value_stream.gleam. */
 const maxNameLength = 40
 
 const renameError = ref<string | null>(null)
@@ -43,14 +43,8 @@ async function rename(position: number, name: string) {
   }
 }
 
-// --- Pull, finish, deliver, and the Deviation a broken rule needs (F6, F9) ---
-
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 
-// --- Jidoka: raise a Rework on the Piece in hand (F12, F13) ---
-
-/** The Piece a Work Station found a defect in, waiting for the defect to be
- *  named and described. */
 const raising = ref<{ station: WorkStation; piece: string; reference: string } | null>(null)
 const madeBy = ref("")
 const defect = ref("")
@@ -65,8 +59,6 @@ function openRework(station: WorkStation, piece: string) {
   defect.value = ""
 }
 
-/** The Work Stations the Piece already crossed: an earlier position, in the
- *  trunk or in the same Branch. A Piece never moves backward. */
 const madeByChoices = computed(() => {
   const found = raising.value?.station
   if (!found) {
@@ -88,7 +80,6 @@ async function recordRework() {
   await run(() => raiseRework(asked.station.id, asked.piece, madeBy.value, defect.value.trim()))
 }
 
-/** The last step of the chain: production pulls out of its Blue Bins. */
 const lastPosition = computed(() =>
   (valueStream.value?.stations ?? []).reduce(
     (last, station) => Math.max(last, station.position),
@@ -96,11 +87,8 @@ const lastPosition = computed(() =>
   ),
 )
 
-/** The element the connectors measure the cards against. */
 const streamEl = ref<HTMLElement | null>(null)
 
-/** One column per position in the chain; a Split shows as several Work
- *  Stations stacked in the same column, one per Branch. */
 const columns = computed<{ position: number; stations: WorkStation[]; kanbans: number }[]>(() => {
   const byPosition = new Map<number, WorkStation[]>()
   for (const station of valueStream.value?.stations ?? []) {
@@ -113,8 +101,8 @@ const columns = computed<{ position: number; stations: WorkStation[]; kanbans: n
     .map(([position, stations]) => ({
       position,
       stations,
-      // The Kanbans this step holds are the signals it has already sent back
-      // upstream, so they belong to the link coming into it.
+      // A step's Kanbans are signals it already sent upstream, so they label
+      // the link coming into it.
       kanbans: stations.reduce((total, station) => total + station.kanbans, 0),
     }))
 })

@@ -1,14 +1,11 @@
 import { ref } from "vue"
 import type { FlowConfirm } from "../types"
 
-/** One action waiting for the Person to confirm it and say why. */
 export type Pending = {
   message: string
   again: (reason: string) => Promise<FlowConfirm | null>
 }
 
-/** Runs flow actions one at a time. A warned pull rule opens the Deviation
- *  dialog instead; confirming it with a reason runs the action again (F6, F9). */
 export function useFlowRunner() {
   const pending = ref<Pending | null>(null)
   const actionError = ref<string | null>(null)

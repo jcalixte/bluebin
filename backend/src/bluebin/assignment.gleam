@@ -9,8 +9,6 @@ import gleam/result
 import gleam/string
 import sqlight
 
-/// One item of a Work Station's Priority List: an open Rework, which comes
-/// first, or a Kanban, oldest first (F18).
 pub type Item {
   ReworkItem(
     id: String,
@@ -21,12 +19,10 @@ pub type Item {
   KanbanItem(id: String, since: String)
 }
 
-/// A Person of a Work Station, to hand an Assignment to (F21).
 pub type Member {
   Member(id: String, name: String)
 }
 
-/// The Priority List of one Work Station, with its People.
 pub type PriorityList {
   PriorityList(
     station_id: String,
@@ -36,8 +32,6 @@ pub type PriorityList {
   )
 }
 
-/// What a Person holds: a Rework to repair or a Piece to transform. One is
-/// active; the others wait, paused (F32).
 pub type Assignment {
   Repair(
     id: String,
@@ -57,21 +51,14 @@ pub type Assignment {
   )
 }
 
-/// The one next thing a Person does (F19).
 pub type Next {
-  /// Go on with the active Assignment.
   Continue(Assignment)
-  /// A Rework of their Work Station waits with nobody on it.
   TakeRework(id: String, piece: String, station_id: String, station: String)
-  /// The top Kanban of their Work Station nearest to production (F20).
   TakeKanban(station_id: String, station: String)
-  /// No Kanban: help the nearest downstream Work Station that holds up the
-  /// flow (F22).
   HelpDownstream(station_id: String, station: String, because: String)
   Wait
 }
 
-/// Everything one Person's screen shows.
 pub type View {
   View(
     person_id: String,
@@ -91,8 +78,6 @@ pub type Person {
   Person(id: String, name: String, stations: List(String))
 }
 
-/// Every Person, with the Work Stations they belong to, nearest to
-/// production first.
 pub fn people(
   connection: sqlight.Connection,
 ) -> Result(List(Person), sqlight.Error) {
@@ -134,8 +119,6 @@ pub fn people_json(people: List(Person)) -> Json {
   })
 }
 
-/// One Person's screen: their one next thing, their Assignments, and the
-/// Priority List of each of their Work Stations, nearest to production first.
 pub fn load(
   connection: sqlight.Connection,
   person_id: String,
@@ -170,9 +153,6 @@ pub fn load(
   Ok(View(person_id:, name:, next:, assignments:, lists:))
 }
 
-/// F19: the active Assignment; else a Rework nobody repairs, then the top
-/// Kanban a Piece waits for, in the Work Station nearest to production; else
-/// Help Downstream; else wait.
 fn next_thing(
   connection: sqlight.Connection,
   assignments: List(Assignment),
@@ -242,10 +222,6 @@ fn first_kanban_to_take(
   }
 }
 
-// --- Help Downstream (F22) ---
-
-/// A Work Station as Help Downstream sees it: where it sits, its People, how
-/// many Blue Bins are still free, and whether it waits on a Rework it raised.
 pub type Station {
   Station(
     id: String,
@@ -258,9 +234,6 @@ pub type Station {
   )
 }
 
-/// The nearest Work Station downstream of the Person's own that holds up the
-/// flow: it found a defect and waits for its Rework, or the Blue Bins in front
-/// of it are full. None when nothing downstream is held up.
 pub fn help_downstream(
   mine: List(Station),
   all: List(Station),
@@ -289,7 +262,6 @@ pub fn help_downstream(
   })
 }
 
-/// A later position in the trunk or in the same Branch.
 fn downstream_of(other: Station, own: Station) -> Bool {
   other.position > own.position && same_line(other, own)
 }
@@ -301,8 +273,6 @@ fn same_line(one: Station, other: Station) -> Bool {
   }
 }
 
-/// The Blue Bins in front of a Work Station are those of the step just
-/// upstream on its line; any one of them full holds it up.
 fn in_front_full(station: Station, all: List(Station)) -> Bool {
   let upstream =
     list.filter(all, fn(other) {
@@ -320,7 +290,6 @@ fn in_front_full(station: Station, all: List(Station)) -> Bool {
   })
 }
 
-/// Nearest to production first: the highest position, then by Branch name.
 fn nearest_first(a: Station, b: Station) -> order.Order {
   int.compare(b.position, a.position)
   |> order.break_tie(string.compare(
@@ -329,7 +298,6 @@ fn nearest_first(a: Station, b: Station) -> order.Order {
   ))
 }
 
-/// The nearest downstream first: the lowest position, then by Branch name.
 fn nearest_upstream_first(a: Station, b: Station) -> order.Order {
   int.compare(a.position, b.position)
   |> order.break_tie(string.compare(
@@ -337,8 +305,6 @@ fn nearest_upstream_first(a: Station, b: Station) -> order.Order {
     option.unwrap(b.branch, ""),
   ))
 }
-
-// --- Queries ---
 
 fn read(found: Result(a, sqlight.Error)) -> Result(a, ReadError) {
   result.replace_error(found, ReadFailed)
@@ -399,7 +365,6 @@ pub fn stations(
   )
 }
 
-/// Rework first, oldest first; then the Kanbans, oldest first (F18).
 pub fn priority_list(
   connection: sqlight.Connection,
   station_id: String,
@@ -457,9 +422,6 @@ fn members(
   )
 }
 
-/// The Reworks a Person repairs, then the Pieces they hold, nearest to
-/// production first. The Rework that runs, or else the Piece in flow, is the
-/// active one; the others wait (F32).
 fn assignments(
   connection: sqlight.Connection,
   person_id: String,
@@ -530,8 +492,6 @@ fn assignments(
     })
   Ok(list.append(repairs, pieces))
 }
-
-// --- JSON ---
 
 pub fn to_json(view: View) -> Json {
   json.object([

@@ -1,21 +1,14 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 
-/** The links between two steps of the Value Stream, drawn as elbow connectors:
- *  the Piece moves downstream, the Kanban that authorizes the next one travels
- *  back upstream. Each lane leaves a card edge, joins a vertical trunk in the
- *  gap, then runs into the facing card. */
 const props = defineProps<{
   container: HTMLElement | null
   columns: { position: number; kanbans: number }[]
 }>()
 
-/** Corner radius of an elbow. */
-const ARC = 10
-/** Half the distance between the Piece lane and the Kanban lane. */
-const LANE = 9
-/** Space kept between a lane end and the card it touches. */
-const PAD = 5
+const CORNER_RADIUS = 10
+const LANE_OFFSET = 9
+const LANE_END_GAP = 5
 
 type Card = { branch: string; left: number; right: number; middle: number }
 type Lane = { d: string; kind: "piece" | "kanban" }
@@ -29,7 +22,12 @@ function elbow(sx: number, sy: number, ex: number, ey: number, trunk: number): s
   if (Math.abs(ey - sy) < 1) return `M ${sx} ${sy} H ${ex}`
   const vertical = ey > sy ? 1 : -1
   const horizontal = ex > sx ? 1 : -1
-  const radius = Math.min(ARC, Math.abs(ey - sy) / 2, Math.abs(trunk - sx), Math.abs(ex - trunk))
+  const radius = Math.min(
+    CORNER_RADIUS,
+    Math.abs(ey - sy) / 2,
+    Math.abs(trunk - sx),
+    Math.abs(ex - trunk),
+  )
   return [
     `M ${sx} ${sy}`,
     `H ${trunk - horizontal * radius}`,
@@ -40,9 +38,6 @@ function elbow(sx: number, sy: number, ex: number, ey: number, trunk: number): s
   ].join(" ")
 }
 
-/** A Split keeps its Branches apart: a Work Station of one Branch links only to
- *  the Work Station of the same Branch, never across. A step without a Branch
- *  links to every Work Station of the facing step. */
 function linked(one: Card, other: Card): boolean {
   return one.branch === "" || other.branch === "" || one.branch === other.branch
 }
@@ -83,7 +78,13 @@ function measure() {
         if (!linked(from, to)) continue
         nextLanes.push({
           kind: "piece",
-          d: elbow(leftEdge, from.middle - LANE, rightEdge - PAD, to.middle - LANE, middle - LANE),
+          d: elbow(
+            leftEdge,
+            from.middle - LANE_OFFSET,
+            rightEdge - LANE_END_GAP,
+            to.middle - LANE_OFFSET,
+            middle - LANE_OFFSET,
+          ),
         })
       }
     }
@@ -92,7 +93,13 @@ function measure() {
         if (!linked(from, to)) continue
         nextLanes.push({
           kind: "kanban",
-          d: elbow(rightEdge, from.middle + LANE, leftEdge + PAD, to.middle + LANE, middle + LANE),
+          d: elbow(
+            rightEdge,
+            from.middle + LANE_OFFSET,
+            leftEdge + LANE_END_GAP,
+            to.middle + LANE_OFFSET,
+            middle + LANE_OFFSET,
+          ),
         })
       }
     }
@@ -101,13 +108,13 @@ function measure() {
     nextLabels.push({
       kind: "piece",
       x: middle,
-      y: Math.min(...tops) - LANE - 12,
+      y: Math.min(...tops) - LANE_OFFSET - 12,
       text: "Piece",
     })
     nextLabels.push({
       kind: "kanban",
       x: middle,
-      y: Math.max(...tops) + LANE + 20,
+      y: Math.max(...tops) + LANE_OFFSET + 20,
       text: `${props.columns[index + 1]?.kanbans ?? 0} Kanban`,
     })
   }

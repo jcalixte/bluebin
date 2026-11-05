@@ -1,4 +1,3 @@
-/** A Demand as the API reports it, with its Takt Time and Takt Gap. */
 export type Demand = {
   id: string
   label: string
@@ -13,7 +12,6 @@ export type Demand = {
   andon: boolean
 }
 
-/** One Blue Bin slot of a Work Station; `piece` is null when the bin is empty. */
 export type BlueBin = {
   slot: number
   id: string | null
@@ -23,14 +21,12 @@ export type BlueBin = {
   pulledBy: string | null
 }
 
-/** A Piece a Deviation put in a Blue Bin that was already full (F9). */
 export type Overflow = {
   id: string
   piece: string
   demand: string
 }
 
-/** A pull rule broken on purpose, with the reason the Person gave (F6, F31). */
 export type Deviation = {
   rule: string
   piece: string | null
@@ -38,15 +34,12 @@ export type Deviation = {
   at: string
 }
 
-/** A Person of a Work Station, busy when they transform a Piece there. */
 export type Member = {
   id: string
   name: string
   busy: boolean
 }
 
-/** A Piece in the hands of a Work Station, paused while its Person repairs a
- *  Rework first (F13, F32). */
 export type InProgressPiece = {
   id: string
   piece: string
@@ -56,7 +49,6 @@ export type InProgressPiece = {
   paused: boolean
 }
 
-/** The repair of a defect, standing against the Work Station that made it. */
 export type Rework = {
   id: string
   piece: string
@@ -79,22 +71,18 @@ export type WorkStation = {
   people: Member[]
   inProgress: InProgressPiece[]
   rework: Rework[]
-  /** The share of Pieces that left and needed no Rework; null until one did. */
+  /** A fraction in 0..1; null until a Piece has left. */
   firstPassYield: number | null
-  /** Hours spent repairing the defects this Work Station made (F16). */
   reworkHours: number
   deviations: Deviation[]
   kanbans: number
 }
 
-/** A pull rule the API warns about: the action goes through only with a
- *  reason, and is then recorded as a Deviation. */
 export type FlowConfirm = {
   confirm: string
   message: string
 }
 
-/** A named position in the chain; a Split puts several Work Stations on one. */
 export type Step = {
   position: number
   name: string
@@ -107,15 +95,14 @@ export type ValueStream = {
   demandsBehind: number
 }
 
-/** A Person and the Work Stations they belong to, nearest to production first. */
+/** `stations` is ordered nearest to production first. */
 export type Person = {
   id: string
   name: string
   stations: string[]
 }
 
-/** What a Person holds: a Rework to repair or a Piece to transform. One is
- *  active; the others wait, paused (F32). */
+/** One Assignment of a Person is active; the others wait, paused. */
 export type Assignment =
   | {
       kind: "rework"
@@ -136,7 +123,6 @@ export type Assignment =
       active: boolean
     }
 
-/** The one next thing a Person does (F19). */
 export type NextThing =
   | { kind: "continue"; assignment: Assignment }
   | { kind: "take_rework"; rework: string; piece: string; station: string; stationName: string }
@@ -144,7 +130,7 @@ export type NextThing =
   | { kind: "help_downstream"; station: string; stationName: string; because: string }
   | { kind: "wait" }
 
-/** One item of a Priority List: Rework first, then the oldest Kanban (F18). */
+/** A Priority List is ordered Rework first, then the oldest Kanban. */
 export type PriorityItem =
   | { kind: "rework"; id: string; piece: string; description: string; assignee: string | null }
   | { kind: "kanban"; id: string; since: string }
@@ -156,8 +142,6 @@ export type PriorityList = {
   items: PriorityItem[]
 }
 
-/** One Person's screen: the next thing, their Assignments, and the Priority
- *  List of each of their Work Stations. */
 export type PersonView = {
   person: { id: string; name: string }
   next: NextThing

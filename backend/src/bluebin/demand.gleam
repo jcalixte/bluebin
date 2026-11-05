@@ -5,9 +5,8 @@ import gleam/json
 import gleam/list
 import sqlight
 
-/// Hours in one working day of the Working Calendar. The Working Calendar is a
-/// per-Value-Stream setting (F39); until the designer screen exists, every
-/// Value Stream runs Monday to Friday, seven hours a day.
+/// Stand-in for the per-Value-Stream Working Calendar (F39): every Value Stream
+/// runs Monday to Friday, seven hours a day.
 const working_hours_per_day = 7.0
 
 pub type Demand {
@@ -23,8 +22,8 @@ pub type Demand {
   )
 }
 
-/// Working days are counted exactly — every day between the first start and the
-/// later of today and the last due date, minus Saturdays and Sundays.
+/// Working days: every day between the first start and the later of today and
+/// the last due date, minus Saturdays and Sundays.
 const list_sql = "
 with recursive
   span(day, last_day) as (
@@ -84,8 +83,6 @@ fn decoder() -> decode.Decoder(Demand) {
   ))
 }
 
-/// Takt Time: the Working Time available for the Demand divided by the number
-/// of Pieces it asks for, in hours per Piece.
 pub fn takt_time_hours(demand: Demand) -> Float {
   case demand.pieces_asked {
     0 -> 0.0
@@ -96,9 +93,6 @@ pub fn takt_time_hours(demand: Demand) -> Float {
   }
 }
 
-/// Takt Gap: how many Pieces the Demand is ahead (+) or behind (−) its Takt
-/// Time right now — produced Pieces minus the Pieces the Takt Time asked for by
-/// the Working Time already spent.
 pub fn takt_gap(demand: Demand) -> Float {
   case demand.working_days_total {
     0 -> 0.0
@@ -111,7 +105,6 @@ pub fn takt_gap(demand: Demand) -> Float {
   }
 }
 
-/// An Andon is raised when a Demand falls a whole Piece behind its Takt Time.
 pub fn andon(demand: Demand) -> Bool {
   takt_gap(demand) <=. -1.0
 }
@@ -139,9 +132,6 @@ pub fn to_json(demands: List(Demand)) -> String {
   |> json.to_string
 }
 
-/// The Takt Time of the whole Value Stream combines every active Demand:
-/// 1 ÷ (sum of 1 ÷ Takt Time of each Demand). It changes when a Demand enters
-/// or ends (F11).
 pub fn value_stream_takt_hours(demands: List(Demand)) -> Float {
   let rate =
     demands
@@ -155,7 +145,6 @@ pub fn value_stream_takt_hours(demands: List(Demand)) -> Float {
   }
 }
 
-/// How many active Demands have raised an Andon (Takt Gap ≤ −1).
 pub fn behind_count(demands: List(Demand)) -> Int {
   demands |> list.filter(andon) |> list.length
 }
