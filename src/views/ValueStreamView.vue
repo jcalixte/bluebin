@@ -145,25 +145,60 @@ const taktLabel = computed(() => {
 
 <template>
   <section>
-    <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
+    <header class="mb-6 flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
       <div>
         <h2 class="text-xl font-semibold">Value Stream</h2>
-        <p class="text-sm opacity-70">
-          Takt Time {{ taktLabel }} per Piece, across every active Demand
-        </p>
+        <p class="text-sm opacity-70">Pieces flow to the right. Kanbans flow back to the left.</p>
       </div>
-      <p
-        v-if="valueStream && valueStream.activeAssignments > 0"
-        class="text-sm"
-        title="Active Assignments with no event for more than one working day. Target: 5 % or less."
-      >
-        <span :class="staleShare > 5 ? 'font-medium text-warning' : 'opacity-70'">
-          {{ stale.size }} of {{ valueStream.activeAssignments }} active Assignments stale ({{
-            staleShare
-          }}
-          %)
-        </span>
-      </p>
+      <dl v-if="valueStream" class="flex flex-wrap gap-x-8 gap-y-3">
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Takt Time</dt>
+          <dd class="text-2xl font-semibold tabular-nums">
+            {{ taktLabel }} <span class="text-sm font-normal opacity-70">per Piece</span>
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Andons</dt>
+          <dd class="flex items-center gap-2 text-2xl font-semibold tabular-nums">
+            <span
+              v-if="valueStream.andons.length > 0"
+              class="size-2.5 rounded-full bg-andon"
+              aria-hidden="true"
+            />
+            {{ valueStream.andons.length }}
+          </dd>
+        </div>
+        <div>
+          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
+            Demands behind Takt
+          </dt>
+          <dd class="flex items-center gap-2 text-2xl font-semibold tabular-nums">
+            <span
+              v-if="valueStream.demandsBehind > 0"
+              class="size-2.5 rounded-full bg-andon"
+              aria-hidden="true"
+            />
+            {{ valueStream.demandsBehind }}
+          </dd>
+        </div>
+        <div
+          v-if="valueStream.activeAssignments > 0"
+          title="Active Assignments with no event for more than one working day. Target: 5 % or less."
+        >
+          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
+            Stale Assignments
+          </dt>
+          <dd
+            class="text-2xl font-semibold tabular-nums"
+            :class="staleShare > 5 ? 'text-warning-ink' : ''"
+          >
+            {{ staleShare }} %
+            <span class="text-sm font-normal opacity-70">
+              {{ stale.size }} of {{ valueStream.activeAssignments }}, target 5 %
+            </span>
+          </dd>
+        </div>
+      </dl>
     </header>
 
     <AndonAlert v-if="valueStream" :andons="valueStream.andons" />
@@ -227,7 +262,7 @@ const taktLabel = computed(() => {
                 @assign="(kind, id, person) => run(() => assign(kind, id, person))"
               />
             </div>
-            <p v-if="column.stations.length > 1" class="text-xs italic opacity-50">
+            <p v-if="column.stations.length > 1" class="text-xs italic opacity-70">
               {{ column.stations.length }} Branches in parallel
             </p>
           </div>

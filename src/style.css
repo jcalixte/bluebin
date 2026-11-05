@@ -36,4 +36,8 @@
      strokes, the favicon. Filled controls use --color-error, one step darker,
      so their labels pass WCAG AA (#eb2f06 fails against both black and white). */
   --color-andon: #eb2f06;
+  /* Warning as text. --color-warning (#fcb700) is 1.8:1 on the light surface,
+     so light text uses the dark warning-content (9.2:1); dark keeps the
+     warning itself (9.0:1 on base-100). */
+  --color-warning-ink: light-dark(var(--color-warning-content), var(--color-warning));
 }

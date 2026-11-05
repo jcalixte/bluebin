@@ -78,9 +78,10 @@ function raisedAt(at: string) {
   return new Date(at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
 }
 
+const binsFilled = computed(() => props.station.blueBins.filter((bin) => bin.piece !== null).length)
+
 const binsFull = computed(
-  () =>
-    props.station.blueBins.length > 0 && props.station.blueBins.every((bin) => bin.piece !== null),
+  () => props.station.blueBins.length > 0 && binsFilled.value === props.station.blueBins.length,
 )
 
 const yieldPercent = computed(() =>
@@ -92,62 +93,60 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
 
 <template>
   <article
-    class="card border bg-base-100 shadow-sm"
-    :class="stop || hasRework ? 'border-error border-2' : 'border-base-300'"
+    class="card overflow-hidden border bg-base-100 shadow-sm"
+    :class="stop || hasRework ? 'border-2 border-error' : 'border-base-300'"
   >
-    <div class="card-body gap-3 p-4">
-      <div
-        v-if="stop"
-        role="alert"
-        class="alert alert-error flex-col items-stretch gap-1 p-2 text-sm"
+    <div
+      v-if="stop"
+      role="alert"
+      class="flex flex-col gap-1 bg-error px-4 py-3 text-sm text-error-content"
+    >
+      <p class="flex items-center gap-2 font-semibold">
+        <span
+          class="size-2.5 rounded-full bg-current motion-safe:animate-pulse"
+          aria-hidden="true"
+        />
+        Andon: stopped at {{ raisedAt(stop.raisedAt) }}
+        <template v-if="stop.raisedBy"> by {{ stop.raisedBy }}</template>
+      </p>
+      <p v-if="stop.teamLeader">
+        Team Leader {{ stop.teamLeader }} is called. A pull is a Deviation until the Andon is
+        closed.
+      </p>
+      <button
+        v-if="stop.teamLeaderId"
+        class="btn btn-xs mt-1 self-start"
+        :disabled="busy"
+        @click="$emit('closeAndon', stop.teamLeaderId)"
       >
-        <p class="font-semibold">
-          Andon: stopped at {{ raisedAt(stop.raisedAt) }}
-          <template v-if="stop.raisedBy"> by {{ stop.raisedBy }}</template>
-        </p>
-        <p v-if="stop.teamLeader">
-          Team Leader {{ stop.teamLeader }} is called. A pull is a Deviation until it is closed.
-        </p>
-        <button
-          v-if="stop.teamLeaderId"
-          class="btn btn-xs self-start"
-          :disabled="busy"
-          @click="$emit('closeAndon', stop.teamLeaderId)"
-        >
-          {{ stop.teamLeader }} closes the Andon
-        </button>
-      </div>
+        {{ stop.teamLeader }} closes the Andon
+      </button>
+    </div>
 
+    <div class="card-body gap-4 p-4">
       <header class="flex items-start justify-between gap-2">
-        <div>
-          <h3 class="font-semibold leading-tight">{{ station.name }}</h3>
-          <p v-if="station.teamLeader" class="text-xs opacity-60">
+        <div class="min-w-0">
+          <h3 class="text-base font-semibold leading-tight">{{ station.name }}</h3>
+          <p v-if="station.teamLeader" class="mt-0.5 text-xs opacity-70">
             Team Leader {{ station.teamLeader }}
           </p>
         </div>
-        <span class="flex shrink-0 flex-col items-end gap-1">
-          <span
-            class="badge badge-sm"
-            :class="station.kanbans > 0 ? 'badge-primary' : 'badge-ghost'"
-            :title="`${station.kanbans} Kanban(s)`"
-          >
-            {{ station.kanbans }} Kanban
-          </span>
-          <button
-            v-if="!stop"
-            class="btn btn-xs btn-outline btn-error"
-            :disabled="busy"
-            title="Stop this Work Station and call its Team Leader"
-            @click="$emit('andon', person === '' ? undefined : person)"
-          >
-            Andon
-          </button>
-        </span>
+        <button
+          v-if="!stop"
+          class="btn btn-ghost btn-xs shrink-0 gap-1.5"
+          :disabled="busy"
+          title="Stop this Work Station and call its Team Leader"
+          @click="$emit('andon', person === '' ? undefined : person)"
+        >
+          <span class="size-2 rounded-full bg-andon" aria-hidden="true" />
+          Andon
+        </button>
       </header>
+
       <section
         v-if="bottleneck"
         aria-label="Bottleneck"
-        class="-mt-1 rounded-r-box border-l-4 border-warning bg-warning/10 px-3 py-2 text-xs"
+        class="rounded-r-box border-l-4 border-warning bg-warning/10 px-3 py-2 text-xs"
       >
         <p class="flex items-baseline justify-between gap-2">
           <span class="text-sm font-semibold">Bottleneck</span>
@@ -170,85 +169,118 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         </p>
       </section>
 
-      <div class="flex gap-1">
+      <!-- The card reads in the order of its flow: Kanbans in, work in hand, Blue Bins out. -->
+      <section aria-label="Pull">
         <button
-          class="btn btn-sm btn-primary flex-1"
+          class="btn btn-sm btn-primary w-full justify-between"
           :disabled="busy"
           @click="$emit('pull', person === '' ? undefined : person)"
         >
           {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
-        </button>
-        <select
-          v-model="person"
-          class="select select-bordered select-sm w-24"
-          title="The Person who takes the Piece in hand"
-        >
-          <option value="">Nobody</option>
-          <option v-for="one in station.people" :key="one.id" :value="one.id">
-            {{ one.name }}
-          </option>
-        </select>
-      </div>
-      <p v-if="keptFirst" class="-mt-2 text-xs text-warning">{{ keptFirst }}</p>
-
-      <div>
-        <p class="text-xs uppercase tracking-wide opacity-60">Blue Bins</p>
-        <ul class="mt-1 flex flex-wrap gap-1">
-          <li
-            v-for="bin in station.blueBins"
-            :key="bin.slot"
-            class="flex items-center gap-1 rounded border px-2 py-1 text-xs"
-            :class="
-              bin.piece
-                ? 'border-primary bg-primary text-primary-content'
-                : 'border-dashed border-base-300 opacity-60'
+          <span
+            class="rounded-full bg-primary-content/10 px-2 py-0.5 text-xs font-medium tabular-nums"
+            :title="
+              station.kanbans > 0
+                ? `${station.kanbans} Kanban(s) authorize a pull`
+                : 'No Kanban: a pull is a Deviation'
             "
-            :title="bin.demand ?? 'Empty Blue Bin'"
           >
-            {{ bin.piece ?? "empty" }}
-            <span v-if="bin.pulledBy" class="opacity-80">· {{ bin.pulledBy }} pulled</span>
-            <button
-              v-if="last && bin.id"
-              class="btn btn-xs"
-              :disabled="busy"
-              @click="$emit('deliver', bin.id)"
-            >
-              Deliver
-            </button>
-          </li>
-        </ul>
-        <ul v-if="station.overflow.length > 0" class="mt-1 flex flex-wrap gap-1">
-          <li
-            v-for="extra in station.overflow"
-            :key="extra.id"
-            class="flex items-center gap-1 rounded border border-warning bg-warning/20 px-2 py-1 text-xs"
-            :title="`${extra.demand} — over the Blue Bin count, put there by a Deviation`"
+            {{ station.kanbans }} Kanban
+          </span>
+        </button>
+        <label class="mt-1.5 flex items-center gap-2 text-xs">
+          <span class="opacity-70">Taken by</span>
+          <select
+            v-model="person"
+            class="select select-ghost select-xs w-auto"
+            title="The Person who takes the Piece in hand. Also names who raises an Andon."
           >
-            {{ extra.piece }} · over the count
-            <button
-              v-if="last"
-              class="btn btn-xs"
-              :disabled="busy"
-              @click="$emit('deliver', extra.id)"
-            >
-              Deliver
-            </button>
-          </li>
-        </ul>
-        <p v-if="binsFull" class="mt-1 text-xs font-medium text-warning">Every Blue Bin is full</p>
-      </div>
+            <option value="">Nobody</option>
+            <option v-for="one in station.people" :key="one.id" :value="one.id">
+              {{ one.name }}
+            </option>
+          </select>
+        </label>
+        <p v-if="keptFirst" class="mt-1.5 text-xs text-warning-ink">{{ keptFirst }}</p>
+      </section>
 
-      <div v-if="station.inProgress.length > 0">
-        <p class="text-xs uppercase tracking-wide opacity-60">In the hands of</p>
-        <ul class="mt-1 space-y-1 text-sm">
-          <li v-for="item in station.inProgress" :key="item.id" class="flex items-center gap-2">
-            <span class="font-medium" :class="item.paused ? 'opacity-50 line-through' : ''">
+      <section v-if="hasRework" aria-label="Rework">
+        <h4 class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+          <span class="size-2 rounded-full bg-andon" aria-hidden="true" />
+          Rework
+        </h4>
+        <ul class="mt-2 space-y-2">
+          <li
+            v-for="item in station.rework"
+            :key="item.id"
+            class="rounded-r-box border-l-4 border-error bg-error/5 px-3 py-2 text-sm"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <p>
+                <span class="font-medium">{{ item.piece }}</span>
+                <span class="opacity-80"> — {{ item.description }}</span>
+              </p>
+              <button
+                class="btn btn-xs shrink-0"
+                :disabled="busy"
+                @click="$emit('repair', item.id)"
+              >
+                Repaired
+              </button>
+            </div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+              <span class="opacity-70">Found by {{ item.foundBy }}</span>
+              <select
+                class="select select-ghost select-xs w-auto"
+                :value="item.assigneeId ?? ''"
+                :disabled="busy"
+                aria-label="Who repairs it"
+                title="Who repairs it: pick another Person to hand it over"
+                @change="handOver('rework', item.id, $event)"
+              >
+                <option value="" disabled>nobody repairs it</option>
+                <option v-for="one in station.people" :key="one.id" :value="one.id">
+                  {{ one.name }} repairs
+                </option>
+              </select>
+              <span
+                v-if="stale.has(`rework:${item.id}`)"
+                class="badge badge-xs badge-warning"
+                title="No event for more than one working day: is it still in repair?"
+              >
+                stale
+              </span>
+              <span
+                v-if="reworkWaits(item.id) !== null"
+                class="badge badge-xs badge-error"
+                title="A Rework that waits with no active Assignment raises an Andon after 1 h of Working Time"
+              >
+                Andon · waits {{ reworkWaits(item.id) }} h
+              </span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section aria-label="In the hands of">
+        <h4 class="text-xs font-semibold uppercase tracking-wide opacity-70">In the hands of</h4>
+        <p v-if="station.inProgress.length === 0" class="mt-1 text-sm opacity-70">
+          No Piece in hand
+        </p>
+        <ul v-else class="mt-1 divide-y divide-base-300">
+          <li
+            v-for="item in station.inProgress"
+            :key="item.id"
+            class="flex flex-wrap items-center gap-x-2 gap-y-1 py-1.5 text-sm"
+          >
+            <span class="font-medium" :class="item.paused ? 'italic opacity-70' : ''">
               {{ item.piece }}
             </span>
             <select
-              class="select select-ghost select-xs w-24 opacity-70"
+              class="select select-ghost select-xs w-auto"
               :value="item.personId ?? ''"
               :disabled="busy"
+              aria-label="Who holds this Piece"
               title="Who holds this Piece: pick another Person to hand it over"
               @change="handOver('piece', item.id, $event)"
             >
@@ -273,7 +305,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             </span>
             <span class="ml-auto flex gap-1">
               <button
-                class="btn btn-xs"
+                class="btn btn-ghost btn-xs"
                 :disabled="busy || item.paused"
                 title="Raise a Rework: name the Work Station that made the defect"
                 @click="$emit('rework', item.id)"
@@ -290,82 +322,110 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             </span>
           </li>
         </ul>
-      </div>
+      </section>
 
-      <div v-if="hasRework" class="rounded bg-error/10 p-2">
-        <p class="text-xs font-semibold uppercase tracking-wide text-error">Rework</p>
-        <ul class="mt-1 space-y-1 text-sm">
-          <li v-for="item in station.rework" :key="item.id" class="flex items-start gap-2">
-            <span>
-              <span class="font-medium">{{ item.piece }}</span>
-              <span class="opacity-70"> — {{ item.description }}</span>
-              <span class="flex items-center gap-1 text-xs opacity-60">
-                found by {{ item.foundBy }} ·
-                <select
-                  class="select select-ghost select-xs w-28"
-                  :value="item.assigneeId ?? ''"
-                  :disabled="busy"
-                  title="Who repairs it: pick another Person to hand it over"
-                  @change="handOver('rework', item.id, $event)"
-                >
-                  <option value="" disabled>nobody repairs it</option>
-                  <option v-for="one in station.people" :key="one.id" :value="one.id">
-                    {{ one.name }} repairs
-                  </option>
-                </select>
-                <span
-                  v-if="stale.has(`rework:${item.id}`)"
-                  class="badge badge-xs badge-warning"
-                  title="No event for more than one working day: is it still in repair?"
-                >
-                  stale
-                </span>
+      <section aria-label="Blue Bins">
+        <h4
+          class="flex items-baseline justify-between text-xs font-semibold uppercase tracking-wide"
+        >
+          <span class="opacity-70">Blue Bins</span>
+          <span
+            class="tabular-nums"
+            :class="binsFull ? 'text-warning-ink' : 'opacity-70'"
+            :title="`${binsFilled} of ${station.blueBins.length} Blue Bins hold a Piece`"
+          >
+            {{ binsFilled }}/{{ station.blueBins.length }}
+          </span>
+        </h4>
+        <ul class="mt-2 grid grid-cols-[repeat(auto-fill,minmax(4rem,1fr))] gap-1.5">
+          <li
+            v-for="bin in station.blueBins"
+            :key="bin.slot"
+            class="flex min-h-14 flex-col justify-end gap-1 rounded-b-lg border-2 border-t-0 px-1.5 pb-1.5 pt-3 text-xs"
+            :class="
+              bin.piece
+                ? 'border-primary bg-primary text-primary-content'
+                : 'border-dashed border-base-content/50'
+            "
+            :title="bin.piece ? (bin.demand ?? bin.piece) : 'Empty Blue Bin'"
+          >
+            <template v-if="bin.piece">
+              <span class="truncate font-medium">{{ bin.piece }}</span>
+              <span v-if="bin.pulledBy" class="truncate text-[0.6875rem] opacity-80">
+                {{ bin.pulledBy }} pulled
               </span>
-              <span
-                v-if="reworkWaits(item.id) !== null"
-                class="badge badge-xs badge-error mt-1"
-                title="A Rework that waits with no active Assignment raises an Andon after 1 h of Working Time"
+              <button
+                v-if="last && bin.id"
+                class="btn btn-xs"
+                :disabled="busy"
+                @click="$emit('deliver', bin.id)"
               >
-                Andon · waits {{ reworkWaits(item.id) }} h
-              </span>
-            </span>
-            <button class="btn btn-xs ml-auto" :disabled="busy" @click="$emit('repair', item.id)">
-              Repaired
+                Deliver
+              </button>
+            </template>
+            <span v-else class="sr-only">Empty Blue Bin</span>
+          </li>
+          <li
+            v-for="extra in station.overflow"
+            :key="extra.id"
+            class="flex min-h-14 flex-col justify-end gap-1 rounded-b-lg border-2 border-t-0 border-warning bg-warning px-1.5 pb-1.5 pt-3 text-xs text-warning-content"
+            :title="`${extra.demand} — over the Blue Bin count, put there by a Deviation`"
+          >
+            <span class="truncate font-medium">{{ extra.piece }}</span>
+            <span class="text-[0.6875rem]">over the count</span>
+            <button
+              v-if="last"
+              class="btn btn-xs"
+              :disabled="busy"
+              @click="$emit('deliver', extra.id)"
+            >
+              Deliver
             </button>
           </li>
         </ul>
-      </div>
+        <p v-if="binsFull" class="mt-1.5 text-xs font-medium text-warning-ink">
+          Every Blue Bin is full
+        </p>
+      </section>
 
-      <div v-if="station.deviations.length > 0">
-        <p class="text-xs uppercase tracking-wide text-warning">Deviations</p>
-        <ul class="mt-1 space-y-1 text-xs opacity-70">
-          <li v-for="(item, index) in station.deviations" :key="index">
-            <span class="font-medium">{{ item.piece ?? "—" }}</span>
-            — {{ item.reason }}
+      <footer class="flex flex-col gap-2 border-t border-base-300 pt-3">
+        <ul class="flex flex-wrap gap-1" aria-label="People">
+          <li
+            v-for="one in station.people"
+            :key="one.id"
+            class="badge badge-sm badge-outline gap-1.5"
+            :title="
+              one.busy ? `${one.name} has a Piece or a Rework in hand` : `${one.name} is free`
+            "
+          >
+            <span
+              class="size-1.5 rounded-full"
+              :class="one.busy ? 'bg-primary' : 'bg-base-content/40'"
+              aria-hidden="true"
+            />
+            {{ one.name }}
+            <span class="sr-only">{{ one.busy ? "busy" : "free" }}</span>
           </li>
         </ul>
-      </div>
-
-      <p class="text-xs opacity-60" title="First Pass Yield and Rework Time of this Work Station">
-        <span v-if="yieldPercent === null">No Piece has left yet</span>
-        <span v-else :class="yieldPercent < 90 ? 'font-medium text-warning' : ''">
-          First Pass Yield {{ yieldPercent }} %
-        </span>
-        <span v-if="reworkHours > 0"> · {{ reworkHours }} h of Rework</span>
-      </p>
-
-      <footer class="flex flex-wrap gap-1">
-        <span
-          v-for="one in station.people"
-          :key="one.id"
-          class="badge badge-sm badge-outline gap-1"
-        >
-          <span
-            class="inline-block size-1.5 rounded-full"
-            :class="one.busy ? 'bg-primary' : 'bg-base-content/30'"
-          />
-          {{ one.name }}
-        </span>
+        <p class="text-xs" title="First Pass Yield and Rework Time of this Work Station">
+          <span v-if="yieldPercent === null" class="opacity-70">No Piece has left yet</span>
+          <span v-else :class="yieldPercent < 90 ? 'font-medium text-warning-ink' : 'opacity-70'">
+            First Pass Yield {{ yieldPercent }} %
+          </span>
+          <span v-if="reworkHours > 0" class="opacity-70"> · {{ reworkHours }} h of Rework</span>
+        </p>
+        <details v-if="station.deviations.length > 0" class="text-xs">
+          <summary class="cursor-pointer font-medium text-warning-ink">
+            {{ station.deviations.length }}
+            {{ station.deviations.length === 1 ? "Deviation" : "Deviations" }}
+          </summary>
+          <ul class="mt-1 space-y-1 opacity-80">
+            <li v-for="(item, index) in station.deviations" :key="index">
+              <span class="font-medium">{{ item.piece ?? "—" }}</span>
+              — {{ item.reason }}
+            </li>
+          </ul>
+        </details>
       </footer>
     </div>
   </article>

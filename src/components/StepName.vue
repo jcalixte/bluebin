@@ -38,13 +38,13 @@ function save() {
     />
     <button
       v-else
-      class="group flex items-center gap-1 text-xs uppercase tracking-wide opacity-50 hover:opacity-100"
+      class="group flex items-center gap-1 text-xs font-semibold uppercase tracking-wide opacity-70 hover:opacity-100 focus-visible:opacity-100"
       :title="`Rename ${name}`"
       @click="start"
     >
       {{ name }}
       <svg
-        class="size-3 opacity-0 transition-opacity group-hover:opacity-100"
+        class="size-3 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

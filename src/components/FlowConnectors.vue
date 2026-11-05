@@ -202,7 +202,7 @@ watch(
       :key="`${lane.kind}-${index}`"
       :d="lane.d"
       :stroke="lane.kind === 'piece' ? 'var(--color-primary)' : 'var(--color-base-content)'"
-      :stroke-opacity="lane.kind === 'piece' ? 0.9 : 0.35"
+      :stroke-opacity="lane.kind === 'piece' ? 0.9 : 0.5"
       stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
@@ -215,9 +215,9 @@ watch(
       :x="label.x"
       :y="label.y"
       text-anchor="middle"
-      class="text-[0.625rem] uppercase tracking-wide"
+      class="text-[0.6875rem] font-medium uppercase tracking-wide"
       :fill="label.kind === 'piece' ? 'var(--color-primary)' : 'var(--color-base-content)'"
-      :fill-opacity="label.kind === 'piece' ? 0.9 : 0.5"
+      :fill-opacity="label.kind === 'piece' ? 1 : 0.7"
     >
       {{ label.text }}
     </text>
