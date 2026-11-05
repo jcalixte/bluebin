@@ -5,13 +5,8 @@ services:
     # label, so the port is exposed to the Docker network, never published.
     expose:
       - "80"
-    # Every request must pass authentik SSO (auth.apoena.dev, provider and app
-    # "bluebin", group "bluebin-users"). Coolify attaches any middleware defined
-    # here to all routers of this service, after its www redirect.
-    labels:
-      - traefik.http.middlewares.bluebin-sso.forwardauth.address=http://authentik-server-yttc0v4j98b678ckc2lwuzz5:9000/outpost.goauthentik.io/auth/traefik
-      - traefik.http.middlewares.bluebin-sso.forwardauth.trustForwardHeader=true
-      - traefik.http.middlewares.bluebin-sso.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-groups
+    # Public on purpose: authentik SSO (provider and app "bluebin") comes back
+    # once users can create and replace the seed data themselves.
     depends_on:
       api:
         condition: service_healthy
