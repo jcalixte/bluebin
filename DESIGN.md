@@ -1,6 +1,6 @@
 # Bluebin — Design (QFD)
 
-This document designs Bluebin: how a team designs its Value Stream and then runs its daily work in it, with pull, Takt Time and Heijunka. It does not define terms: every term in **bold** is defined in [CONTEXT.md](./CONTEXT.md). Decisions that are hard to reverse go in [docs/adr/](./docs/adr/).
+This document designs Bluebin: how a team designs its Line and then runs its daily work in it, with pull, Takt Time and Heijunka. It does not define terms: every term in **bold** is defined in [CONTEXT.md](./CONTEXT.md). Decisions that are hard to reverse go in [docs/adr/](./docs/adr/).
 
 Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank none.
 
@@ -340,7 +340,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
                      4/{G4 Jidoka: stop and fix},
                      5/{G5 Person knows the next thing},
                      6/{G6 Levelled Product Mix},
-                     7/{G7 Value Stream at a glance},
+                     7/{G7 Line at a glance},
                      8/{G8 Recording costs seconds},
                      9/{G9 Flow problems as numbers},
                      10/{G10 Design and change without code}}
@@ -447,7 +447,7 @@ The right-hand zone scores each Goal 0–5 for four alternatives. **Bluebin** is
 | G4 Jidoka: stop and fix              |    5    |  2   |   2    |       2        | A bug ticket at the end of the board is the opposite of stopping where the defect is found                       |
 | G5 Person knows the next thing       |    5    |  3   | **4**  |       2        | Linear's triage and "my issues" come closest; still no **Rework**, no **Help Downstream**                        |
 | G6 Levelled **Product Mix**          |    5    |  1   |   1    |       3        | The Heijunka box is physical practice; no card board levels anything                                             |
-| G7 **Value Stream** at a glance      |    4    |  2   |   3    |     **5**      | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen is our answer, not a win                 |
+| G7 **Line** at a glance      |    4    |  2   |   3    |     **5**      | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen is our answer, not a win                 |
 | G8 Recording costs seconds           |    4    |  1   |   4    |     **5**      | Jira is form-heavy; Linear is keyboard-fast and ties us; we pay a click and a reason                             |
 | G9 Flow problems as numbers          |    5    |  4   |   3    |       1        | Jira's reports are the closest fight; they just measure the wrong flow                                           |
 | G10 Design and change without code   |    5    |  3   |   2    |     **5**      | A wall is redrawn in a minute; Jira pays an admin for it; Linear refuses; keeping that freedom in software is R1 |
@@ -509,11 +509,11 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   \node[ids, anchor=east] at (14.6, 2.5) {F23--F26};
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!15] (-0.8, 1) rectangle (14.8, 2);
   \node[head=bbBase, anchor=west, align=left] at (-0.6, 1.5) {Stability and\\visual management};
-  \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Value Stream} is visible at a glance \quad G8 Recording work costs seconds};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Line} is visible at a glance \quad G8 Recording work costs seconds};
   \node[ids, anchor=east] at (14.6, 1.5) {F27--F33};
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!8] (-0.8, 0) rectangle (14.8, 1);
   \node[head=bbBase, anchor=west] at (-0.6, 0.5) {Kaizen};
-  \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Value Stream} without code};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Line} without code};
   \node[ids, anchor=east] at (14.6, 0.5) {F34--F41};
   % Deferred
   \draw[line width=0.6pt, dashed, black!55] (-0.8, -0.25) rectangle (14.8, -1.05);
@@ -536,13 +536,13 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 | **Foundation — Heijunka**                        |                                                                                                                                               |        |                                    |
 | G6                                               | The **Pieces** that leave the **Backlog** have a levelled **Product Mix**                                                                     |   7    | Kick-off conversation              |
 | **Foundation — Stability and visual management** |                                                                                                                                               |        |                                    |
-| G7                                               | The whole **Value Stream** is visible at a glance: **Kanbans**, **Blue Bins**, **Rework**, bottleneck                                         |   8    | Kick-off conversation              |
+| G7                                               | The whole **Line** is visible at a glance: **Kanbans**, **Blue Bins**, **Rework**, bottleneck                                         |   8    | Kick-off conversation              |
 | G8                                               | Recording work costs seconds, so the data stays true                                                                                          |   8    | Kick-off conversation              |
 | **Foundation — Kaizen**                          |                                                                                                                                               |        |                                    |
 | G9                                               | Flow problems show as numbers: **Lead Time**, **Stagnation Time**, **Starvation Time**, **Rework Time**                                       |   8    | Kick-off conversation              |
-| G10                                              | A **Value Stream** can be designed and changed without code: **Work Stations**, **Branches**, **Blue Bins**, **People**, **Working Calendar** |   6    | Kick-off conversation              |
+| G10                                              | A **Line** can be designed and changed without code: **Work Stations**, **Branches**, **Blue Bins**, **People**, **Working Calendar** |   6    | Kick-off conversation              |
 
-User segments: **Person** (daily work), Value Stream designer (design and Kaizen), **Client** and Demand owner (Demands and **Takt Time**).
+User segments: **Person** (daily work), Line designer (design and Kaizen), **Client** and Demand owner (Demands and **Takt Time**).
 
 Deferred: **Standardized Work** (foundation). The Definition of Done of each **Work Station** stays out of the app for now. **Trigger to revisit:** **Rework** shows that **Work Stations** disagree on what "done" means.
 
@@ -565,8 +565,8 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F7                                               | Send one **Kanban** upstream for each pull out of a **Blue Bin**, and one **Kanban** to each **Branch** for each **Assembly**                                                                        |  →  | **Kanbans** ≤ empty **Blue Bins**, at all times               | G2   |
 | F8                                               | Warn before an **Assembly** when a **Sub-Piece** is not in the last **Blue Bin** of its **Branch**, and record a **Deviation** with its reason if the **Person** goes on                             |  →  | 100 % warned and recorded                                     | G2   |
 | F9                                               | Warn before a second **Piece** goes in a **Blue Bin**, and record a **Deviation** with its reason if the **Person** goes on                                                                          |  →  | 100 % warned and recorded                                     | G3   |
-| F10                                              | Compare the capacity of each **Work Station** (average **Touch Time** ÷ **People** working) with the **Takt Time** of the **Value Stream**, and flag the slower ones                                 |  ↓  | flag ≤ 1 working day after the change                         | G3   |
-| F11                                              | Recompute the **Takt Time** of the **Value Stream** when a **Demand** enters or ends                                                                                                                 |  ↓  | ≤ 1 min                                                       | G3   |
+| F10                                              | Compare the capacity of each **Work Station** (average **Touch Time** ÷ **People** working) with the **Takt Time** of the **Line**, and flag the slower ones                                 |  ↓  | flag ≤ 1 working day after the change                         | G3   |
+| F11                                              | Recompute the **Takt Time** of the **Line** when a **Demand** enters or ends                                                                                                                 |  ↓  | ≤ 1 min                                                       | G3   |
 | **Pillar — Jidoka**                              |                                                                                                                                                                                                      |     |                                                               |      |
 | F12                                              | Raise **Rework** on a **Piece**: name the **Work Station** that made the defect, and describe the defect in one line                                                                                 |  ↓  | ≤ 2 clicks, ≤ 10 s                                            | G4   |
 | F13                                              | Give the **Rework** to its author by default: put it first in their **Assignments** and pause their current **Piece**                                                                                |  ↓  | ≤ 1 min after the **Rework** is raised                        | G4   |
@@ -587,7 +587,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F25                                              | Let a **Person** reorder the **Heijunka Sequence** by hand as a **Deviation** with its reason, and show the effect on the **Takt Gap** and the forecast of each **Demand** before they confirm       |  ↓  | effect shown ≤ 2 s                                            | G6   |
 | F26                                              | Measure, for each day, the gap between the planned and the real **Product Mix** of the **Pieces** that leave the **Backlog**                                                                         |  ↓  | ≤ 1 **Piece** for each **Demand**, each day                   | G6   |
 | **Foundation — Stability and visual management** |                                                                                                                                                                                                      |     |                                                               |      |
-| F27                                              | Show the **Value Stream** view: each **Work Station** with its **Blue Bins** (full or empty), **Kanbans**, **People**, active **Assignments**, open **Rework**, **Deviations** and **Andons**        |  ↓  | 1 screen, readable on a wall TV                               | G7   |
+| F27                                              | Show the **Line** view: each **Work Station** with its **Blue Bins** (full or empty), **Kanbans**, **People**, active **Assignments**, open **Rework**, **Deviations** and **Andons**        |  ↓  | 1 screen, readable on a wall TV                               | G7   |
 | F28                                              | Update every open view after a flow event, with no manual refresh                                                                                                                                    |  ↓  | ≤ 2 s                                                         | G7   |
 | F29                                              | Highlight the bottleneck: the **Work Stations** flagged by F10, or with a full **Blue Bin** in front of them                                                                                         |  ↓  | ≤ 1 min after the change                                      | G7   |
 | F30                                              | Record a flow event (pull, put in **Blue Bin**, **Assembly**, take a **Kanban**, reassign)                                                                                                           |  ↓  | ≤ 2 clicks, ≤ 5 s                                             | G8   |
@@ -599,10 +599,10 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F35                                              | Switch every measure between **Calendar Time** (the default) and **Working Time**                                                                                                                    |  ↓  | 1 click                                                       | G9   |
 | F36                                              | Show, for each **Work Station**, the share of **Touch Time** in the **Station Lead Time**                                                                                                            |  ↑  | value visible for each **Work Station**                       | G9   |
 | F37                                              | Show the **Deviations** for each **Work Station** and for each rule, with their reasons                                                                                                              |  ↓  | ≤ 5 % of pulls                                                | G9   |
-| F38                                              | Compare two periods (before and after a **Value Stream** change) on all measures                                                                                                                     |  ↓  | 1 view                                                        | G9   |
-| F39                                              | Design a **Value Stream**: **Work Stations**, **Splits**, **Branches**, **Assembly**, **Blue Bin** count, **People**, **Working Calendar**                                                           |  ↓  | the software team example in ≤ 30 min                         | G10  |
-| F40                                              | Change a **Value Stream** while it runs (**Blue Bins**, **People**, **Work Stations**), keep all past events, and date each change                                                                   |  →  | 0 lost events, 100 % of changes dated                         | G10  |
-| F41                                              | Let each **Value Stream** name its own **Demands** and **Pieces**, for example "Feature" and "User Story"                                                                                            |  →  | free labels for each **Value Stream**                         | G10  |
+| F38                                              | Compare two periods (before and after a **Line** change) on all measures                                                                                                                     |  ↓  | 1 view                                                        | G9   |
+| F39                                              | Design a **Line**: **Work Stations**, **Splits**, **Branches**, **Assembly**, **Blue Bin** count, **People**, **Working Calendar**                                                           |  ↓  | the software team example in ≤ 30 min                         | G10  |
+| F40                                              | Change a **Line** while it runs (**Blue Bins**, **People**, **Work Stations**), keep all past events, and date each change                                                                   |  →  | 0 lost events, 100 % of changes dated                         | G10  |
+| F41                                              | Let each **Line** name its own **Demands** and **Pieces**, for example "Feature" and "User Story"                                                                                            |  →  | free labels for each **Line**                         | G10  |
 
 ---
 
@@ -614,7 +614,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 - **G4** Jidoka, stop and fix _W:8_ — F12–F16, F42
 - **G5** A **Person** knows the next thing to do _W:9_ — F17–F22
 - **G6** Levelled **Product Mix** _W:7_ — F23–F26
-- **G7** **Value Stream** at a glance _W:8_ — F27–F29
+- **G7** **Line** at a glance _W:8_ — F27–F29
 - **G8** Recording costs seconds _W:8_ — F30–F33
 - **G9** Flow problems as numbers _W:8_ — F34–F38
 - **G10** Design and change without code _W:6_ — F39–F41
@@ -629,7 +629,7 @@ Core How decisions, shared by many Functions:
 - **How H2 — full event sourcing** (rejected, see T1)
 - **How H5 — Server-Sent Events** (chosen, see T2)
   - Serves: F2, F3, F15, F17, F27, F28 (every open screen updated in ≤ 2 s)
-  - Each new flow event in the log is pushed to the open screens of its **Value Stream**; actions still go as normal HTTP requests
+  - Each new flow event in the log is pushed to the open screens of its **Line**; actions still go as normal HTTP requests
   - A screen that reconnects reloads the current state; nothing is lost, because the log is the source of truth
 - **How H4 — polling every 2 s** (rejected, see T2)
 - **How H6 — WebSockets** (rejected, see T2)
@@ -686,7 +686,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 
 | ID  | Component                                                    | Role                                                                                                                             | Main Functions                   | ADR                                                              |
 | --- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
-| C1  | SPA: Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI       | All screens: **Demands** and **Takt Gap**, **Assignments**, **Value Stream** view (wall TV), **Value Stream** designer, measures | F1, F19, F25, F27, F35, F38, F39 | —                                                                |
+| C1  | SPA: Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI       | All screens: **Demands** and **Takt Gap**, **Assignments**, **Line** view (wall TV), **Line** designer, measures | F1, F19, F25, F27, F35, F38, F39 | —                                                                |
 | C2  | API: Gleam (wisp + mist)                                     | HTTP actions; pull rules and **Deviations**; **Priority List** and **Assignment** ordering; Heijunka sequencer; measures         | F6–F26, F30–F34, F40             | —                                                                |
 | C3  | Store: SQLite (sqlight)                                      | Flow event log and current-state tables, written in one transaction                                                              | F34, F38, F40                    | [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) |
 | C4  | Event stream: Server-Sent Events from mist                   | Pushes each new flow event to the open screens                                                                                   | F2, F3, F15, F17, F28            | —                                                                |
@@ -703,7 +703,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 |  3   | F34 **Lead Time** = **Touch Time** + **Stagnation Time** | exact                 | Nightly job that recomputes the measures from the log and compares              | The log is the truth: rebuild the current-state tables from it ([ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md))                       |
 |  4   | F2 / F3 **Takt Gap** and **Andon**                       | ≤ 1 min               | Time from the timer tick or event to the **Andon** on screen                    | The **Takt Gap** is also computed when a screen opens, so a missed tick does no harm                                                                    |
 |  5   | F4 delivery forecast                                     | error ≤ 1 working day | Forecast date vs real date, for each finished **Demand**                        | Show a date range, not one date, until the error goes down                                                                                              |
-|  6   | F39 design the software team's **Value Stream**          | ≤ 30 min              | Time measured in the first real session with the team                           | Supply a "software team" template, with the **Split** for Web, iOS and Android                                                                          |
+|  6   | F39 design the software team's **Line**          | ≤ 30 min              | Time measured in the first real session with the team                           | Supply a "software team" template, with the **Split** for Web, iOS and Android                                                                          |
 
 ---
 
@@ -711,7 +711,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 
 | ID  | Tradeoff                                                                                                       | Got                                                                                                                 | Paid                                                                                      | ADR                                                              |
 | --- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| T1  | Flow events + current state in one transaction (H3), over current state only (H1) and full event sourcing (H2) | Full history; every measure can be recomputed; dated **Value Stream** changes; simple, fast reads for daily screens | Two writes for each action that must stay consistent; the log grows forever               | [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) |
+| T1  | Flow events + current state in one transaction (H3), over current state only (H1) and full event sourcing (H2) | Full history; every measure can be recomputed; dated **Line** changes; simple, fast reads for daily screens | Two writes for each action that must stay consistent; the log grows forever               | [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) |
 | T2  | Server-Sent Events (H5), over polling (H4) and WebSockets (H6)                                                 | Updates in less than 1 s; standard browser reconnect; one direction is all we need                                  | One open connection for each screen; actions and updates use two channels                 | —                                                                |
 | T3  | SQLite (C3), over Postgres                                                                                     | One file, real transactions, no database server; fits the one-writer flow of a team                                 | Single writer: a move to Postgres when many teams share one instance (H3 does not change) | —                                                                |
 

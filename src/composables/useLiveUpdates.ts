@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted } from "vue"
+import { api } from "../api"
 
 /** A closed stream (the proxy or the SSO answered something else) is not retried by the browser. */
 const reopenAfterMs = 5000
@@ -32,7 +33,7 @@ export function useLiveUpdates(reload: () => Promise<unknown>) {
   }
 
   function open() {
-    source = new EventSource("/api/events")
+    source = new EventSource(api("/api/events"))
     source.addEventListener("change", refresh)
     source.onopen = () => {
       if (lost) {

@@ -497,7 +497,7 @@ pub fn list_steps(
     decode.success(Step(position:, name:))
   }
   sqlight.query(
-    "select position, name from stream_step order by position",
+    "select position, name from line_step order by position",
     on: connection,
     with: [],
     expecting: decoder,
@@ -527,7 +527,7 @@ pub fn rename_step(
 
   let update =
     sqlight.query(
-      "update stream_step
+      "update line_step
        set name = ?, renamed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
        where position = ?
        returning position, name",

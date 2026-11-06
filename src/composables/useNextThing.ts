@@ -1,5 +1,5 @@
 import { onMounted, ref, watch, type Ref } from "vue"
-import { postAction } from "../api"
+import { api, postAction } from "../api"
 import type { FlowConfirm, Person, PersonView } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 
@@ -10,7 +10,7 @@ export function useNextThing(personId: Ref<string>) {
   const loading = ref(true)
 
   async function loadPeople() {
-    const response = await fetch("/api/people")
+    const response = await fetch(api("/api/people"))
     if (!response.ok) {
       throw new Error(`API answered ${response.status}`)
     }
@@ -28,7 +28,7 @@ export function useNextThing(personId: Ref<string>) {
         view.value = null
         return
       }
-      const response = await fetch(`/api/people/${encodeURIComponent(personId.value)}/next`)
+      const response = await fetch(api(`/api/people/${encodeURIComponent(personId.value)}/next`))
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }

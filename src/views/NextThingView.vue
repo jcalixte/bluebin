@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import { lineId } from "../api"
 import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
@@ -7,7 +8,8 @@ import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
 import type { Assignment, FlowConfirm, NextThing } from "../types"
 
-const storageKey = "bluebin.person"
+/** People differ from one Line to the next. */
+const storageKey = `bluebin.person.${lineId}`
 const personId = ref(
   new URLSearchParams(location.search).get("person") ?? localStorage.getItem(storageKey) ?? "",
 )

@@ -6,10 +6,11 @@ import bluebin/demand
 import bluebin/design
 import bluebin/flow
 import bluebin/heijunka
+import bluebin/line
+import bluebin/lines
 import bluebin/live
 import bluebin/measures
 import bluebin/spa
-import bluebin/value_stream
 import bluebin/workspace
 import gleam/bytes_tree
 import gleam/dynamic/decode
@@ -44,13 +45,8 @@ pub fn main() {
   let assert Ok(_) =
     fn(request) {
       case request.path_segments(request) {
-        ["api", "events"] ->
-          case workspace.from_request(request) {
-            Ok(workspace) -> live.stream(request, hub, workspace)
-            Error(Nil) ->
-              response.new(401)
-              |> response.set_body(mist.Bytes(bytes_tree.new()))
-          }
+        ["api", "events"] -> events(request, hub, lines.first)
+        ["api", "lines", line, "events"] -> events(request, hub, line)
         _ -> api(request)
       }
     }
@@ -60,6 +56,22 @@ pub fn main() {
     |> mist.start
 
   process.sleep_forever()
+}
+
+fn events(
+  request: request.Request(mist.Connection),
+  hub: live.Hub,
+  line: String,
+) -> response.Response(mist.ResponseData) {
+  let empty = fn(status) {
+    response.new(status) |> response.set_body(mist.Bytes(bytes_tree.new()))
+  }
+  case workspace.from_request(request), lines.is_id(line) {
+    Error(Nil), _ -> empty(401)
+    Ok(_), False -> empty(404)
+    Ok(workspace), True ->
+      live.stream(request, hub, lines.channel(workspace, line))
+  }
 }
 
 /// Holds the built SPA in the image; absent in dev, where Vite serves it.
@@ -77,18 +89,112 @@ pub fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
       use <- wisp.require_method(request, http.Get)
       wisp.ok()
     }
-    _ -> {
+    segments -> {
       use workspace <- require_workspace(request)
-      let database = db.workspace_path(workspace)
-      case db.ready(database) {
-        Error(_) -> wisp.internal_server_error()
-        Ok(Nil) -> {
-          use <- announce_change(request, hub, workspace)
-          route(request, database)
+      case segments {
+        ["api", "lines"] ->
+          case request.method {
+            http.Post -> create_line(request, workspace)
+            _ -> {
+              use <- wisp.require_method(request, http.Get)
+              list_lines(workspace)
+            }
+          }
+        ["api", "lines", line] -> {
+          use <- wisp.require_method(request, http.Put)
+          rename_line(request, workspace, line)
         }
+        ["api", "lines", line, ..rest] ->
+          in_line(request, hub, workspace, line, ["api", ..rest])
+        // The routes of the first Line, as before an account could
+        // own several: scripts and an SPA still open during a deploy use them.
+        ["api", ..] -> in_line(request, hub, workspace, lines.first, segments)
+        _ -> wisp.not_found()
       }
     }
   }
+}
+
+/// `segments` is the path inside the Line, `["api", "demands"]` for
+/// both `/api/demands` and `/api/lines/<id>/demands`.
+fn in_line(
+  request: wisp.Request,
+  hub: live.Hub,
+  workspace: String,
+  line: String,
+  segments: List(String),
+) -> wisp.Response {
+  case lines.database(workspace, line) {
+    Error(lines.UnknownLine) -> wisp.not_found()
+    Error(_) -> wisp.internal_server_error()
+    Ok(database) -> {
+      use <- announce_change(
+        request,
+        hub,
+        lines.channel(workspace, line),
+        segments,
+      )
+      route(request, segments, database)
+    }
+  }
+}
+
+fn list_lines(workspace: String) -> wisp.Response {
+  case lines.list(workspace) {
+    Ok(found) ->
+      wisp.json_response(json.to_string(json.array(found, line_json)), 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn create_line(request: wisp.Request, workspace: String) -> wisp.Response {
+  use name <- require_line_name(request)
+  line_response(lines.create(workspace, name), 201)
+}
+
+fn rename_line(
+  request: wisp.Request,
+  workspace: String,
+  line: String,
+) -> wisp.Response {
+  use name <- require_line_name(request)
+  line_response(lines.rename(workspace, line, name), 200)
+}
+
+fn require_line_name(
+  request: wisp.Request,
+  next: fn(String) -> wisp.Response,
+) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  case decode.run(body, decode.field("name", decode.string, decode.success)) {
+    Ok(name) -> next(name)
+    Error(_) -> wisp.bad_request("expected a body like {\"name\": \"Mobile\"}")
+  }
+}
+
+fn line_response(
+  result: Result(lines.Line, lines.LineError),
+  status: Int,
+) -> wisp.Response {
+  case result {
+    Ok(line) -> wisp.json_response(json.to_string(line_json(line)), status)
+    Error(lines.EmptyName) -> wisp.bad_request("a Line needs a name")
+    Error(lines.NameTooLong) ->
+      wisp.bad_request(
+        "a Line name stays under "
+        <> int.to_string(lines.max_name_length)
+        <> " characters",
+      )
+    Error(lines.UnknownLine) -> wisp.not_found()
+    Error(lines.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+fn line_json(line: lines.Line) -> json.Json {
+  json.object([
+    #("id", json.string(line.id)),
+    #("name", json.string(line.name)),
+  ])
 }
 
 fn require_workspace(
@@ -101,8 +207,12 @@ fn require_workspace(
   }
 }
 
-fn route(request: wisp.Request, database: String) -> wisp.Response {
-  case wisp.path_segments(request) {
+fn route(
+  request: wisp.Request,
+  segments: List(String),
+  database: String,
+) -> wisp.Response {
+  case segments {
     ["api", "demands"] ->
       case request.method {
         http.Post -> create_demand(request, database)
@@ -111,9 +221,9 @@ fn route(request: wisp.Request, database: String) -> wisp.Response {
           demands(database)
         }
       }
-    ["api", "value-stream"] -> {
+    ["api", "line"] -> {
       use <- wisp.require_method(request, http.Get)
-      value_stream(database)
+      line_view(database)
     }
     ["api", "backlog"] -> {
       use <- wisp.require_method(request, http.Get)
@@ -364,16 +474,17 @@ fn reset(request: wisp.Request, database: String) -> wisp.Response {
 fn announce_change(
   request: wisp.Request,
   hub: live.Hub,
-  workspace: String,
+  channel: String,
+  segments: List(String),
   next: fn() -> wisp.Response,
 ) -> wisp.Response {
   let response = next()
   case request.method, response.status {
     http.Get, _ | http.Head, _ -> Nil
     _, status if status >= 200 && status < 300 ->
-      case wisp.path_segments(request) {
+      case segments {
         ["api", ..action] ->
-          live.announce(hub, workspace, string.join(action, "/"))
+          live.announce(hub, channel, string.join(action, "/"))
         _ -> Nil
       }
     _, _ -> Nil
@@ -424,22 +535,22 @@ fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-fn value_stream(database: String) -> wisp.Response {
+fn line_view(database: String) -> wisp.Response {
   let result =
     db.with_connection_at(database, fn(connection) {
-      use stations <- result.try(value_stream.load(connection))
-      use steps <- result.try(value_stream.list_steps(connection))
+      use stations <- result.try(line.load(connection))
+      use steps <- result.try(line.list_steps(connection))
       use demands <- result.try(demand.list_active(connection))
       use calendar <- result.try(calendar.load(connection))
       use now <- result.try(andon.now(connection))
       use andons <- result.try(andon.andons(connection, calendar, now))
       use #(stale, active) <- result.try(andon.stale(connection, calendar, now))
-      let takt = demand.value_stream_takt_hours(demands)
+      let takt = demand.line_takt_hours(demands)
       use bottlenecks <- result.try(andon.bottlenecks(connection, takt))
       Ok(
         json.object([
           #("stations", stations),
-          #("steps", value_stream.steps_json(steps)),
+          #("steps", line.steps_json(steps)),
           #("taktTimeHours", json.float(takt)),
           #("demandsBehind", json.int(demand.behind_count(demands))),
           #("andons", andon.andons_json(andons)),
@@ -968,7 +1079,7 @@ fn rename_step(
     Ok(#(position, name)) -> {
       let renamed =
         db.with_connection_at(database, fn(connection) {
-          value_stream.rename_step(connection, position, name)
+          line.rename_step(connection, position, name)
         })
 
       case renamed {
@@ -982,15 +1093,15 @@ fn rename_step(
             ),
             200,
           )
-        Error(value_stream.EmptyName) -> wisp.bad_request("a step needs a name")
-        Error(value_stream.NameTooLong) ->
+        Error(line.EmptyName) -> wisp.bad_request("a step needs a name")
+        Error(line.NameTooLong) ->
           wisp.bad_request(
             "a step name stays under "
-            <> int.to_string(value_stream.max_name_length)
+            <> int.to_string(line.max_name_length)
             <> " characters",
           )
-        Error(value_stream.UnknownStep) -> wisp.not_found()
-        Error(value_stream.StoreFailed) -> wisp.internal_server_error()
+        Error(line.UnknownStep) -> wisp.not_found()
+        Error(line.StoreFailed) -> wisp.internal_server_error()
       }
     }
   }

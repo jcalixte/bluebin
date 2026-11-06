@@ -205,7 +205,7 @@ pub fn to_json(
   |> json.to_string
 }
 
-pub fn value_stream_takt_hours(demands: List(Demand)) -> Float {
+pub fn line_takt_hours(demands: List(Demand)) -> Float {
   let rate =
     demands
     |> list.map(takt_time_hours)

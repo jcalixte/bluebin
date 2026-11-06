@@ -1,10 +1,10 @@
 import { onMounted, ref } from "vue"
-import { postAction } from "../api"
-import type { FlowConfirm, ValueStream } from "../types"
+import { api, postAction } from "../api"
+import type { FlowConfirm, Line } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 
-export function useValueStream() {
-  const valueStream = ref<ValueStream | null>(null)
+export function useLine() {
+  const line = ref<Line | null>(null)
   const error = ref<string | null>(null)
   const loading = ref(true)
 
@@ -12,11 +12,11 @@ export function useValueStream() {
     loading.value = true
     error.value = null
     try {
-      const response = await fetch("/api/value-stream")
+      const response = await fetch(api("/api/line"))
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
-      valueStream.value = (await response.json()) as ValueStream
+      line.value = (await response.json()) as Line
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -55,7 +55,7 @@ export function useValueStream() {
 
   /** The server trims the name, so its answer wins over ours. */
   async function renameStep(position: number, name: string) {
-    const response = await fetch(`/api/steps/${position}`, {
+    const response = await fetch(api(`/api/steps/${position}`), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name }),
@@ -64,7 +64,7 @@ export function useValueStream() {
       throw new Error(await response.text())
     }
     const saved = (await response.json()) as { position: number; name: string }
-    const step = valueStream.value?.steps.find((one) => one.position === saved.position)
+    const step = line.value?.steps.find((one) => one.position === saved.position)
     if (step) {
       step.name = saved.name
     }
@@ -74,7 +74,7 @@ export function useValueStream() {
   useLiveUpdates(load)
 
   return {
-    valueStream,
+    line,
     error,
     loading,
     load,

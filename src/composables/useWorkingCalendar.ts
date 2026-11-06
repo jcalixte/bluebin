@@ -1,4 +1,5 @@
 import { onMounted, ref } from "vue"
+import { api } from "../api"
 import type { WorkingCalendar } from "../types"
 
 export function useWorkingCalendar(afterSave?: () => Promise<unknown>) {
@@ -8,7 +9,7 @@ export function useWorkingCalendar(afterSave?: () => Promise<unknown>) {
   async function loadCalendar() {
     calendarError.value = null
     try {
-      const response = await fetch("/api/calendar")
+      const response = await fetch(api("/api/calendar"))
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
@@ -19,7 +20,7 @@ export function useWorkingCalendar(afterSave?: () => Promise<unknown>) {
   }
 
   async function saveCalendar(next: WorkingCalendar) {
-    const response = await fetch("/api/calendar", {
+    const response = await fetch(api("/api/calendar"), {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(next),

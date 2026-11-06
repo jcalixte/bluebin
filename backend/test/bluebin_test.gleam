@@ -5,8 +5,8 @@ import bluebin/db
 import bluebin/demand.{type Demand, Demand}
 import bluebin/flow
 import bluebin/heijunka
+import bluebin/line
 import bluebin/measures
-import bluebin/value_stream
 import gleam/dynamic/decode
 import gleam/json
 import gleam/list
@@ -67,11 +67,11 @@ pub fn an_andon_rises_a_whole_piece_behind_test() {
   assert demand.andon(a_demand(10, 3, 10, 8)) == True
 }
 
-pub fn the_value_stream_takt_combines_every_demand_test() {
+pub fn the_line_takt_combines_every_demand_test() {
   // Two Demands, one Piece every 7 hours each: together one every 3.5 hours.
   let demands = [a_demand(10, 0, 10, 0), a_demand(10, 0, 10, 0)]
-  assert demand.value_stream_takt_hours(demands) == 3.5
-  assert demand.value_stream_takt_hours([a_demand(0, 0, 10, 0)]) == 0.0
+  assert demand.line_takt_hours(demands) == 3.5
+  assert demand.line_takt_hours([a_demand(0, 0, 10, 0)]) == 0.0
 }
 
 pub fn behind_count_counts_only_the_demands_with_an_andon_test() {
@@ -108,7 +108,7 @@ fn count(connection: sqlight.Connection, sql: String) -> Int {
   value
 }
 
-pub fn the_seed_fills_the_value_stream_test() {
+pub fn the_seed_fills_the_line_test() {
   use connection <- with_seeded_database()
   assert count(connection, "select count(*) from demand") == 3
   assert count(connection, "select count(*) from work_station") == 9
@@ -133,14 +133,11 @@ pub fn the_seed_runs_once_test() {
 fn fingerprint(connection: sqlight.Connection) -> List(Int) {
   [
     "demand", "piece", "flow_event", "person", "work_station", "station_person",
-    "kanban", "rework", "deviation", "piece_pass", "stream_step",
+    "kanban", "rework", "deviation", "piece_pass", "line_step",
   ]
   |> list.map(fn(table) { count(connection, "select count(*) from " <> table) })
   |> list.append([
-    count(
-      connection,
-      "select count(*) from stream_step where name like 'Step %'",
-    ),
+    count(connection, "select count(*) from line_step where name like 'Step %'"),
     count(connection, "select count(*) from piece where state = 'produced'"),
   ])
 }
@@ -149,7 +146,7 @@ pub fn the_demo_reset_puts_back_the_seed_test() {
   use connection <- with_seeded_database()
   let seeded = fingerprint(connection)
   let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
-  let assert Ok(_) = value_stream.rename_step(connection, 2, "Design")
+  let assert Ok(_) = line.rename_step(connection, 2, "Design")
   exec(connection, "delete from kanban; delete from deviation;")
   assert fingerprint(connection) != seeded
   let assert Ok(Nil) = db.reset(connection)
@@ -407,7 +404,7 @@ pub fn every_action_writes_one_flow_event_test() {
 
 pub fn the_reset_keeps_the_names_of_the_steps_test() {
   use connection <- with_database_at_version_4()
-  let assert Ok(_) = value_stream.rename_step(connection, 2, "Design")
+  exec(connection, "update stream_step set name = 'Design' where position = 2")
   let assert Ok(Nil) = db.prepare(connection)
   assert count(connection, "select count(*) from demand") == 3
   assert count(
@@ -416,8 +413,8 @@ pub fn the_reset_keeps_the_names_of_the_steps_test() {
        where parent_id is not null and state != 'assembled'",
     )
     == 6
-  let assert Ok(steps) = value_stream.list_steps(connection)
-  assert list.contains(steps, value_stream.Step(position: 2, name: "Design"))
+  let assert Ok(steps) = line.list_steps(connection)
+  assert list.contains(steps, line.Step(position: 2, name: "Design"))
 }
 
 pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
@@ -588,7 +585,7 @@ pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
       "select count(*) from piece_pass where station_id = 'ws-ios'",
     )
     == 12
-  let assert Ok(payload) = value_stream.load(connection)
+  let assert Ok(payload) = line.load(connection)
   let text = json.to_string(payload)
   assert string.contains(text, "\"firstPassYield\"")
   assert string.contains(text, "\"reworkHours\"")
@@ -597,7 +594,7 @@ pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
   assert string.contains(text, "\"reworkHours\":3.0")
 
   exec(connection, "delete from piece_pass where station_id = 'ws-uat'")
-  let assert Ok(empty) = value_stream.load(connection)
+  let assert Ok(empty) = line.load(connection)
   assert string.contains(json.to_string(empty), "\"firstPassYield\":null")
 }
 
@@ -873,9 +870,9 @@ pub fn the_demands_payload_carries_the_takt_numbers_test() {
   assert string.contains(payload, "\"forecastLateDays\":")
 }
 
-pub fn the_value_stream_payload_lists_every_work_station_test() {
+pub fn the_line_payload_lists_every_work_station_test() {
   use connection <- with_seeded_database()
-  let assert Ok(payload) = value_stream.load(connection)
+  let assert Ok(payload) = line.load(connection)
   let text = json.to_string(payload)
 
   let station_names = [
@@ -889,7 +886,7 @@ pub fn the_value_stream_payload_lists_every_work_station_test() {
 
 pub fn the_seed_names_every_step_test() {
   use connection <- with_seeded_database()
-  let assert Ok(steps) = value_stream.list_steps(connection)
+  let assert Ok(steps) = line.list_steps(connection)
   assert list.length(steps) == 5
   let assert [first, ..] = steps
   assert first.name == "From the Backlog"
@@ -897,20 +894,20 @@ pub fn the_seed_names_every_step_test() {
 
 pub fn a_step_can_be_renamed_test() {
   use connection <- with_seeded_database()
-  let assert Ok(step) = value_stream.rename_step(connection, 2, "  Design  ")
+  let assert Ok(step) = line.rename_step(connection, 2, "  Design  ")
   assert step.name == "Design"
-  let assert Ok(steps) = value_stream.list_steps(connection)
-  assert list.contains(steps, value_stream.Step(position: 2, name: "Design"))
+  let assert Ok(steps) = line.list_steps(connection)
+  assert list.contains(steps, line.Step(position: 2, name: "Design"))
 }
 
 pub fn a_rename_is_dated_in_the_flow_event_log_test() {
   use connection <- with_seeded_database()
   let before = count(connection, "select count(*) from flow_event")
-  let assert Ok(_) = value_stream.rename_step(connection, 2, "Design")
+  let assert Ok(_) = line.rename_step(connection, 2, "Design")
   assert count(connection, "select count(*) from flow_event") == before + 1
   assert count(
       connection,
-      "select count(*) from stream_step
+      "select count(*) from line_step
        where position = 2 and renamed_at is not null",
     )
     == 1
@@ -918,31 +915,28 @@ pub fn a_rename_is_dated_in_the_flow_event_log_test() {
 
 pub fn a_step_never_loses_its_name_test() {
   use connection <- with_seeded_database()
-  assert value_stream.rename_step(connection, 2, "   ")
-    == Error(value_stream.EmptyName)
-  let assert Ok(steps) = value_stream.list_steps(connection)
-  assert list.contains(steps, value_stream.Step(position: 2, name: "Step 2"))
+  assert line.rename_step(connection, 2, "   ") == Error(line.EmptyName)
+  let assert Ok(steps) = line.list_steps(connection)
+  assert list.contains(steps, line.Step(position: 2, name: "Step 2"))
 }
 
 pub fn a_step_name_stays_short_enough_for_a_wall_tv_test() {
   use connection <- with_seeded_database()
-  let too_long = string.repeat("a", value_stream.max_name_length + 1)
-  assert value_stream.rename_step(connection, 2, too_long)
-    == Error(value_stream.NameTooLong)
-  let longest = string.repeat("a", value_stream.max_name_length)
-  let assert Ok(step) = value_stream.rename_step(connection, 2, longest)
+  let too_long = string.repeat("a", line.max_name_length + 1)
+  assert line.rename_step(connection, 2, too_long) == Error(line.NameTooLong)
+  let longest = string.repeat("a", line.max_name_length)
+  let assert Ok(step) = line.rename_step(connection, 2, longest)
   assert step.name == longest
 }
 
 pub fn renaming_a_step_that_does_not_exist_is_refused_test() {
   use connection <- with_seeded_database()
-  assert value_stream.rename_step(connection, 99, "Nowhere")
-    == Error(value_stream.UnknownStep)
+  assert line.rename_step(connection, 99, "Nowhere") == Error(line.UnknownStep)
 }
 
 pub fn a_quote_in_a_name_is_stored_as_typed_test() {
   use connection <- with_seeded_database()
-  let assert Ok(step) = value_stream.rename_step(connection, 2, "Dev's turn")
+  let assert Ok(step) = line.rename_step(connection, 2, "Dev's turn")
   assert step.name == "Dev's turn"
 }
 
@@ -1133,7 +1127,7 @@ pub fn the_product_mix_counts_each_piece_that_leaves_the_backlog_test() {
   let weekday =
     count(connection, "select strftime('%w', 'now') not in ('0', '6')")
   let assert Ok(_) = flow.pull(connection, "ws-analysis", None, None)
-  // A pull further down the Value Stream is no release.
+  // A pull further down the Line is no release.
   let assert Ok(_) = flow.pull(connection, "ws-web", None, None)
   assert released_today(connection) == before + weekday
 }

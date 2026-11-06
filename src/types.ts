@@ -137,7 +137,7 @@ export type Bottleneck = {
   fullInFront: boolean
 }
 
-export type ValueStream = {
+export type Line = {
   stations: WorkStation[]
   steps: Step[]
   taktTimeHours: number
@@ -323,7 +323,7 @@ export type WorkingCalendar = {
   holidays: Holiday[]
 }
 
-/** The names a Value Stream gives to its Demands and Pieces (F41). */
+/** The names a Line gives to its Demands and Pieces (F41). */
 export type Labels = {
   demand: string
   demands: string

@@ -1,9 +1,10 @@
 import { computed, onMounted, ref } from "vue"
+import { api } from "../api"
 import type { Design, DesignInput, DesignPerson, DesignStationInput, Labels } from "../types"
 import { useLabels } from "./useLabels"
 import { useLiveUpdates } from "./useLiveUpdates"
 
-/** Must match max_name_length in backend/src/bluebin/value_stream.gleam. */
+/** Must match max_name_length in backend/src/bluebin/line.gleam. */
 export const maxNameLength = 40
 
 export type DraftStation = DesignStationInput & {
@@ -112,7 +113,7 @@ export function designProblems(draft: DesignDraft): string[] {
     problems.push("Give a name to each Person.")
   }
   if (steps.length === 0) {
-    problems.push("The Value Stream needs one step or more.")
+    problems.push("The Line needs one step or more.")
   }
   steps.forEach((step, index) => {
     const name = step.name.trim() === "" ? `Step ${index + 1}` : `"${step.name.trim()}"`
@@ -193,7 +194,7 @@ export function useDesign() {
   async function load() {
     loading.value = true
     try {
-      const response = await fetch("/api/design")
+      const response = await fetch(api("/api/design"))
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
@@ -219,7 +220,7 @@ export function useDesign() {
     if (!draft.value) return
     saving.value = true
     try {
-      const response = await fetch("/api/design", {
+      const response = await fetch(api("/api/design"), {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(toPayload(draft.value)),
@@ -238,7 +239,7 @@ export function useDesign() {
 
   async function addPerson(name: string) {
     try {
-      const response = await fetch("/api/people", {
+      const response = await fetch(api("/api/people"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name }),

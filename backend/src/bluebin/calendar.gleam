@@ -7,7 +7,7 @@ import gleam/set.{type Set}
 import gleam/string
 import sqlight
 
-/// The Working Calendar of the Value Stream. `days` uses `strftime('%w')`
+/// The Working Calendar of the Line. `days` uses `strftime('%w')`
 /// numbers, 0 for Sunday; `start` and `end` are minutes after midnight, UTC.
 pub type Calendar {
   Calendar(days: List(Int), start: Int, end: Int, holidays: List(Holiday))

@@ -10,7 +10,7 @@ import sqlight
 pub const workspaces_directory = "data/workspaces"
 
 /// The highest migration step; raise it when you append a step to `migrate`.
-const latest_version = 11
+const latest_version = 13
 
 /// From this version a Workspace can be empty on purpose (`reset_empty`), so
 /// only an older database gets the demo data.
@@ -116,7 +116,7 @@ create table if not exists deviation (
 "
 
 /// Pieces already in a Branch were whole, which the pull rules no longer
-/// allow, so the demo data is emptied for `seed` to refill. `stream_step` is
+/// allow, so the demo data is emptied for `seed` to refill. the step names are
 /// kept so renamed steps survive.
 const schema_v5 = "
 alter table piece add column parent_id text references piece(id);
@@ -228,7 +228,7 @@ create unique index if not exists andon_open on andon(station_id)
   where closed_at is null;
 "
 
-/// The names each Value Stream gives its Demands and Pieces (F41).
+/// The names each Line gives its Demands and Pieces (F41).
 const schema_v10 = "
 create table if not exists stream_label (
   id      integer primary key check (id = 1),
@@ -262,6 +262,21 @@ update demand set state = 'delivered'
            and p.state = 'produced') >= pieces_asked;
 "
 
+/// An account can own several Lines, so each one carries the name its
+/// owner gives it. A new column with a default, so the old code still runs.
+const schema_v12 = "
+alter table stream_label add column name text not null default 'Line';
+"
+
+/// "Value Stream" became "Line" (see CONTEXT.md). Existing rows keep their
+/// data; only the table names, the event kind and the default name change.
+const schema_v13 = "
+alter table stream_label rename to line_label;
+alter table stream_step rename to line_step;
+update line_label set name = 'Line' where name = 'Value Stream';
+update flow_event set kind = 'line_changed' where kind = 'stream_changed';
+"
+
 const schema_v3 = "
 create table if not exists stream_step (
   position   integer primary key,
@@ -271,7 +286,7 @@ create table if not exists stream_step (
 "
 
 const seed_steps_sql = "
-insert into stream_step (position, name)
+insert into line_step (position, name)
 select w.position,
        case when w.position = (select min(position) from work_station)
             then 'From the Backlog'
@@ -312,7 +327,7 @@ select produced_at, 'piece_reached_production', id, null
 from piece where state = 'produced' order by produced_at;
 "
 
-const seed_value_stream_sql = "
+const seed_line_sql = "
 insert into person (id, name) values
   ('pe-ines', 'Inès'), ('pe-marc', 'Marc'), ('pe-sofia', 'Sofia'),
   ('pe-bob', 'Bob'), ('pe-lila', 'Lila'), ('pe-alice', 'Alice'),
@@ -393,7 +408,7 @@ select strftime('%Y-%m-%dT%H:%M:%SZ', since, '-1 day'),
  where parent_id is null and state not in ('backlog', 'produced')
  order by 1;
 
--- Each produced Piece crossed the whole Value Stream: the trunk, one Sub-Piece
+-- Each produced Piece crossed the whole Line: the trunk, one Sub-Piece
 -- per Branch, the Assembly and UAT. Hours count back from its production and
 -- stretch a little from one Piece to the next, so the measures vary.
 insert into piece (id, demand_id, reference, state, parent_id, branch)
@@ -541,6 +556,8 @@ pub fn migrate_to(
     #(9, schema_v9),
     #(10, schema_v10),
     #(11, schema_v11),
+    #(12, schema_v12),
+    #(13, schema_v13),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
@@ -580,9 +597,9 @@ pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use _ <- result.try(seed_when_empty(
     connection,
     "work_station",
-    seed_value_stream_sql <> seed_passes_sql,
+    seed_line_sql <> seed_passes_sql,
   ))
-  seed_when_empty(connection, "stream_step", seed_steps_sql)
+  seed_when_empty(connection, "line_step", seed_steps_sql)
 }
 
 /// Empties every table and seeds the demo data again, in one transaction.
@@ -595,7 +612,7 @@ pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   seed(connection)
 }
 
-/// Starts a Value Stream from scratch: no Demand, Piece or history, one Person
+/// Starts a Line from scratch: no Demand, Piece or history, one Person
 /// in one Work Station. The Working Calendar and the labels stay.
 pub fn reset_empty(
   connection: sqlight.Connection,
@@ -631,14 +648,14 @@ delete from piece;
 delete from demand;
 delete from work_station;
 delete from person;
-delete from stream_step;
+delete from line_step;
 delete from sqlite_sequence;
 "
 
 const default_calendar_and_labels_sql = "
 delete from holiday;
 update working_calendar set days = '12345', day_start = '09:00', day_end = '16:00';
-update stream_label
+update line_label
    set demand = 'Feature', demands = 'Features',
        piece = 'User Story', pieces = 'User Stories';
 "
@@ -661,7 +678,7 @@ select 'kb-' || lower(hex(randomblob(6))), id from work_station;
 insert into flow_event (at, kind, payload)
 select created_at, 'kanban_sent', json_object('station', station_id) from kanban;
 
-insert into stream_step (position, name) values (1, 'From the Backlog');
+insert into line_step (position, name) values (1, 'From the Backlog');
 "
 
 fn seed_when_empty(

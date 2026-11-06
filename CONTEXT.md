@@ -1,17 +1,17 @@
 # Bluebin
 
-A pull system for software teams, built on Toyota Production System principles: Takt Time, one-piece flow, Heijunka and Just-In-Time. Teams design their Value Stream and then run their daily work in it. Work moves only when a downstream Work Station signals that it can take more.
+A pull system for software teams, built on Toyota Production System principles: Takt Time, one-piece flow, Heijunka and Just-In-Time. Teams design their Line and then run their daily work in it. Work moves only when a downstream Work Station signals that it can take more.
 
 ## Language
 
 ### Flow
 
-**Value Stream**:
+**Line**:
 The ordered chain of Work Stations that a Piece crosses from Demand to production.
-_Avoid_: value flow, kanban system, pipeline, workflow, board
+_Avoid_: value stream, value flow, kanban system, pipeline, workflow, board
 
 **Work Station**:
-A team of People that does one step of the Value Stream.
+A team of People that does one step of the Line.
 _Avoid_: column, stage, step, lane
 
 **Demand**:
@@ -27,7 +27,7 @@ The queue where Pieces wait, in Heijunka Sequence, for a Kanban from the first W
 _Avoid_: inbox, todo, icebox
 
 **Piece**:
-The matter that a Work Station transforms, and that follows the Kanbans through the Value Stream, for example a User Story.
+The matter that a Work Station transforms, and that follows the Kanbans through the Line, for example a User Story.
 _Avoid_: card, ticket, task, item
 
 **Sub-Piece**:
@@ -69,7 +69,7 @@ _Avoid_: swarm, help out, firefighting
 ### Pace
 
 **Takt Time**:
-The available Working Time divided by the number of Pieces asked for in that time, for one Demand or for the whole Value Stream.
+The available Working Time divided by the number of Pieces asked for in that time, for one Demand or for the whole Line.
 _Avoid_: velocity, cycle time
 
 **Takt Gap**:
@@ -85,7 +85,7 @@ The share of Demands delivered by their due date. A Demand is delivered when its
 _Avoid_: success rate, SLA
 
 **Andon**:
-A signal, visible to all People of a Value Stream, that the flow has a problem, for example a Demand behind its Takt Time.
+A signal, visible to all People of a Line, that the flow has a problem, for example a Demand behind its Takt Time.
 _Avoid_: alert, alarm, notification
 
 **Heijunka**:
@@ -103,7 +103,7 @@ _Avoid_: ratio, allocation
 ### Measures
 
 **Working Calendar**:
-The working days, working hours and holidays of a Value Stream.
+The working days, working hours and holidays of a Line.
 _Avoid_: schedule, business hours, opening hours
 
 **Calendar Time**:
@@ -165,12 +165,12 @@ The link between one item of a Work Station's Priority List and the one Person o
 _Avoid_: allocation, dispatch, affectation, ownership
 
 **Workspace**:
-All the data of one Value Stream, private to the signed-in account that owns it. Visitors who are not signed in share the one public Workspace.
+All the Lines of one signed-in account, private to it. Each Line has a name and its own data. Visitors who are not signed in share the one public Workspace.
 _Avoid_: tenant, organization, board
 
 ## Relationships
 
-- A **Value Stream** is an ordered chain of **Work Stations**; a **Split** opens parallel **Branches** and an **Assembly** closes them
+- A **Line** is an ordered chain of **Work Stations**; a **Split** opens parallel **Branches** and an **Assembly** closes them
 - A **Work Station** has one or more **People**; a **Person** belongs to one or more **Work Stations**
 - A **Work Station** has a configured number of **Blue Bins**; each **Blue Bin** holds zero or one **Piece**; a second **Piece** is a **Deviation**
 - A **Work Station** never has more **Kanbans** than empty **Blue Bins**
@@ -179,9 +179,9 @@ _Avoid_: tenant, organization, board
 - A **Demand** comes from exactly one **Client**; a **Client** can have many **Demands**
 - A **Demand** has one **Takt Time**: its available Working Time divided by its number of **Pieces**
 - A **Demand** has no **Forecast** until one of its **Pieces** reaches production; it is late when its **Forecast** falls after its due date
-- The **Takt Time** of the **Value Stream** combines all active **Demands**: 1 ÷ (sum of 1 ÷ **Takt Time** of each active **Demand**); it changes when a **Demand** enters or ends
-- A **Work Station** compares its **Touch Time** per **Piece** with the **Takt Time** of the **Value Stream**, not of one **Demand**
-- A **Piece** waits in the **Backlog**, then flows alone through the **Value Stream** (one-piece flow)
+- The **Takt Time** of the **Line** combines all active **Demands**: 1 ÷ (sum of 1 ÷ **Takt Time** of each active **Demand**); it changes when a **Demand** enters or ends
+- A **Work Station** compares its **Touch Time** per **Piece** with the **Takt Time** of the **Line**, not of one **Demand**
+- A **Piece** waits in the **Backlog**, then flows alone through the **Line** (one-piece flow)
 - The **Heijunka Sequence** decides which **Piece** leaves the **Backlog**; a **Kanban** from the first **Work Station** decides when
 - In the **Heijunka Sequence**, each **Piece** has an ideal slot at a multiple of its **Demand**'s **Takt Time**; the earliest slot goes first, then the earliest due date, then first-in, first-out
 - Inside one **Demand**, **Pieces** keep first-in, first-out order
@@ -209,15 +209,16 @@ _Avoid_: tenant, organization, board
 - While an **Andon** stops a **Work Station**, its **People** pull a new **Piece** only as a **Deviation**; pull spreads the stop upstream and downstream by itself
 - A **Work Station** has exactly one **Team Leader**; a **Person** can be **Team Leader** of several **Work Stations**
 - A **Team Leader** answers **Andons** and never pushes **Assignments**
-- A **Value Stream** has exactly one **Working Calendar**
-- A **Value Stream** can change while it runs: only an empty **Blue Bin** or a **Work Station** with no **Piece**, open **Rework** or open **Andon** can go, and each change is dated in the flow log
+- A **Workspace** has one or more **Lines**, each with its own name; no **Demand**, **Piece**, **Person** or **Work Station** belongs to two **Lines**
+- A **Line** has exactly one **Working Calendar**
+- A **Line** can change while it runs: only an empty **Blue Bin** or a **Work Station** with no **Piece**, open **Rework** or open **Andon** can go, and each change is dated in the flow log
 - A new **Blue Bin** brings one **Kanban** to its **Work Station**; a removed empty **Blue Bin** takes one back
 - **Starvation Time** belongs to a **Work Station**, never to a **Piece**, and is not part of the **Lead Time**
-- The **Andon Time** of a **Value Stream** is the time at least one of its **Work Stations** is stopped; stops at the same time count once
+- The **Andon Time** of a **Line** is the time at least one of its **Work Stations** is stopped; stops at the same time count once
 - A **Person** transforms at most one **Piece** at a time; when another **Piece** comes into their hands, the one nearest to production stays active and the other pauses, and the paused time is **Stagnation Time**. On a tie, the new **Piece** waits: finishing beats starting
 - A **Work Station** transforms as many **Pieces** at the same time as it has **People** working
 - Priority works in two stages: first which **Work Station** must work, then which **Person** of that **Work Station** does it (**Assignment**)
-- Stage 1: across the **Value Stream**, the **Work Station** nearest to production comes first
+- Stage 1: across the **Line**, the **Work Station** nearest to production comes first
 - A **Work Station** has one **Priority List**, made of its **Rework** and its **Kanbans**, ordered: **Rework** first, then the oldest **Kanban**
 - Stage 2: an **Assignment** gives one item of a **Priority List** to one **Person** of that **Work Station**
 - A **Person** sees the **Assignments** they hold in all their **Work Stations**; the **Assignment** in the **Work Station** nearest to production comes first
@@ -250,7 +251,8 @@ _Avoid_: tenant, organization, board
 
 ## Flagged ambiguities
 
-- "value flow" and "kanban system" — resolved: both mean **Value Stream**. "Kanban system" is avoided because **Kanban** is the signal, not the whole design.
+- "value stream" — resolved: renamed **Line**. "Value stream" is a Western Lean term (Womack & Jones, Rother & Shook); Toyota says line (ライン) and calls the map "material and information flow".
+- "value flow" and "kanban system" — resolved: both mean **Line**. "Kanban system" is avoided because **Kanban** is the signal, not the whole design.
 - "user" was used for the Person who moves work — resolved: in the domain this is a **Person**; "user" is reserved for the app account, if ever needed.
 - "piece" vs **Kanban** — resolved: distinct. The **Piece** is the matter; the **Kanban** is the signal that the **Piece** follows.
 - "blue bins are configurable" — resolved: the number of **Blue Bins** is configured per **Work Station**; one **Blue Bin** holds one **Piece** (one-piece flow).
@@ -261,7 +263,7 @@ _Avoid_: tenant, organization, board
 - **Stagnation Time** between two **Work Stations** — resolved: the wait from "Kanban sent" to "pulled in" is the **Starvation Time** of the **Work Station**, not the **Stagnation Time** of the **Piece**. This stops the same wait being counted twice.
 - Pauses during **Touch Time** — resolved: a **Person** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to production; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
 - Time measures and the working calendar — resolved: measures show **Calendar Time** by default and **Working Time** as a second view; **Takt Time** uses **Working Time** only.
-- **Takt Time** of a **Demand** vs of the **Value Stream** — resolved: one term, two scopes. The **Takt Time** of the **Value Stream** is computed from all active **Demands**.
+- **Takt Time** of a **Demand** vs of the **Line** — resolved: one term, two scopes. The **Takt Time** of the **Line** is computed from all active **Demands**.
 - **Heijunka** order — resolved: computed as the **Heijunka Sequence**, released only on a **Kanban** (pull, not a timed pitch), with manual reorder allowed.
 - "Heijunka sequencer" — the part of the app that computes the **Heijunka Sequence**; a design name, not a domain term.
 - "branch" — resolved: **Branch** is the chain of **Work Stations** between a **Split** and an **Assembly**; "fork" is avoided.
@@ -276,6 +278,6 @@ _Avoid_: tenant, organization, board
 - "affectation" — resolved: **Assignment**.
 - Hard vs soft pull rules — resolved: the pull rules are the norm, and a **Person** can break one only as a **Deviation**, with a reason. "Never" in this glossary means "never without a **Deviation**" for the pull rules. A manual reorder of the **Heijunka Sequence** is also a **Deviation**.
 - "team leader" — resolved: **Team Leader** answers **Andons**; it does not assign work, so pull stays intact.
-- "stop the line" — resolved: an **Andon** stops one **Work Station**, not the whole **Value Stream**; pull spreads the stop.
+- "stop the line" — resolved: an **Andon** stops one **Work Station**; pull then stops the rest of the **Line**, upstream and downstream, by itself.
 - "client" — resolved: **Client** is who asks for a **Demand**; "user" stays reserved for the app account.
 - Who makes the **Assignment** — resolved: a **Person** takes a **Kanban** (pull); **Rework** goes to its author by default; the team can reassign. No team lead pushes work.

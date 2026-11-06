@@ -156,17 +156,20 @@ pub fn a_piece_of_an_unfinished_demand_does_not_deliver_it_test() {
 pub fn migration_11_delivers_the_demands_already_complete_test() {
   use connection <- db.with_connection_at(":memory:")
   let assert Ok(Nil) = db.migrate_to(connection, 10)
-  let assert Ok(Nil) = db.seed(connection)
   exec(
     connection,
     "insert into demand values
-       ('d-done', 'Done', 'Retail', '2026-10-01', '2026-10-20', 2, 'active');
+       ('d-done', 'Done', 'Retail', '2026-10-01', '2026-10-20', 2, 'active'),
+       ('d-open', 'Open', 'Retail', '2026-10-01', '2026-12-20', 2, 'active');
+     insert into person (id, name) values ('pe-a', 'A');
+     insert into work_station (id, name, position, branch, blue_bins, team_leader)
+       values ('ws-a', 'A', 1, null, 1, 'pe-a');
      insert into piece (id, demand_id, reference, state, produced_at) values
        ('p-done-1', 'd-done', 'US-1', 'produced', '2026-10-05T10:00:00Z'),
        ('p-done-2', 'd-done', 'US-2', 'produced', '2026-10-09T15:00:00Z');",
   )
   let assert Ok(Nil) = db.prepare(connection)
-  assert count(connection, "pragma user_version") == 11
+  assert count(connection, "pragma user_version") >= 11
   assert text(
       connection,
       "select group_concat(id) from demand
@@ -179,9 +182,9 @@ pub fn migration_11_delivers_the_demands_already_complete_test() {
       where kind = 'demand_delivered'",
     )
     == "2026-10-09T15:00:00Z"
-  // The seed is not touched: its Demands still run.
-  assert count(connection, "select count(*) from demand where state = 'active'")
-    == 3
+  // A Demand with Pieces still to make keeps running.
+  assert text(connection, "select state from demand where id = 'd-open'")
+    == "active"
 }
 
 // --- Forecast ------------------------------------------------------------------
@@ -286,7 +289,7 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
     connection,
     "insert into holiday (day, label) values ('2026-12-25', 'Christmas');
      update working_calendar set days = '1234';
-     update stream_label set piece = 'Story', pieces = 'Stories';",
+     update line_label set piece = 'Story', pieces = 'Stories';",
   )
   let assert Ok(Nil) = db.reset_empty(connection)
 
@@ -301,8 +304,8 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
     == 0
   assert count(connection, "select count(*) from holiday") == 1
   assert text(connection, "select days from working_calendar") == "1234"
-  assert text(connection, "select piece from stream_label") == "Story"
-  assert text(connection, "select group_concat(name) from stream_step")
+  assert text(connection, "select piece from line_label") == "Story"
+  assert text(connection, "select group_concat(name) from line_step")
     == "From the Backlog"
 
   let assert Ok(#(found, _)) = design.load(connection)
@@ -326,7 +329,7 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
   let assert Ok(Nil) = db.prepare(connection)
   assert count(connection, "select count(*) from demand") == 0
 
-  // The empty Value Stream runs: a Demand enters, its first Piece is pulled.
+  // The empty Line runs: a Demand enters, its first Piece is pulled.
   let assert Ok(_) =
     demand.create(connection, "Search", "Retail", today(connection), 2)
   let assert Ok(id) = option.to_result(station.id, Nil)

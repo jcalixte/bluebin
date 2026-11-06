@@ -1,8 +1,8 @@
-//// Design and change a running Value Stream without code (F39–F41).
+//// Design and change a running Line without code (F39–F41).
 ////
-//// The designer sends the whole Value Stream it wants; `save` compares it with
+//// The designer sends the whole Line it wants; `save` compares it with
 //// the one that runs, refuses what would lose or move work (R1), and applies
-//// the rest in one transaction with one dated `stream_changed` event per
+//// the rest in one transaction with one dated `line_changed` event per
 //// change (F40).
 
 import gleam/bool
@@ -63,7 +63,7 @@ pub type DesignError {
 
 pub fn load_labels(connection: sqlight.Connection) -> Result(Labels, Nil) {
   sqlight.query(
-    "select demand, demands, piece, pieces from stream_label where id = 1",
+    "select demand, demands, piece, pieces from line_label where id = 1",
     on: connection,
     with: [],
     expecting: {
@@ -101,7 +101,7 @@ pub fn load(
     pair_decoder(),
   ))
   use names <- result.try(
-    query(connection, "select position, name from stream_step", [], {
+    query(connection, "select position, name from line_step", [], {
       use position <- decode.field(0, decode.int)
       use name <- decode.field(1, decode.string)
       decode.success(#(position, name))
@@ -187,7 +187,7 @@ pub fn load(
 pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
   use <- bool.guard(
     steps == [],
-    Error("A Value Stream needs at least one Work Station."),
+    Error("A Line needs at least one Work Station."),
   )
   use shapes <- result.try(
     list.index_map(steps, fn(step, index) { step_shape(step, index + 1) })
@@ -426,7 +426,7 @@ fn check_station(
     Some(id) ->
       case dict.get(current, id), dict.get(held, id) {
         Error(Nil), _ | _, Error(Nil) ->
-          Error(label <> " is not in this Value Stream any more. Reload.")
+          Error(label <> " is not in this Line any more. Reload.")
         Ok(before), Ok(held) -> {
           use _ <- result.try(case station.blue_bins >= held.in_bins {
             True -> Ok(Nil)
@@ -475,10 +475,7 @@ fn check_locked_order(
   case moved {
     Ok(#(#(_, _, a), #(_, _, b))) ->
       Error(
-        a
-        <> " and "
-        <> b
-        <> " hold work, so they keep their order in the Value Stream.",
+        a <> " and " <> b <> " hold work, so they keep their order in the Line.",
       )
     Error(Nil) -> Ok(Nil)
   }
@@ -628,7 +625,7 @@ fn save_labels(
   use _ <- result.try(
     run(
       connection,
-      "update stream_label set demand = ?1, demands = ?2, piece = ?3, pieces = ?4
+      "update line_label set demand = ?1, demands = ?2, piece = ?3, pieces = ?4
       where id = 1",
       [
         sqlight.text(wanted.demand),
@@ -878,18 +875,17 @@ fn save_steps(
   before: List(Step),
   wanted: List(Step),
 ) -> Result(Nil, DesignError) {
-  use _ <- result.try(run(connection, "delete from stream_step", []))
+  use _ <- result.try(run(connection, "delete from line_step", []))
   list.index_map(wanted, fn(step, index) {
     #(index + 1, string.trim(step.name))
   })
   |> list.try_each(fn(entry) {
     let #(position, name) = entry
     use _ <- result.try(
-      run(
-        connection,
-        "insert into stream_step (position, name) values (?1, ?2)",
-        [sqlight.int(position), sqlight.text(name)],
-      ),
+      run(connection, "insert into line_step (position, name) values (?1, ?2)", [
+        sqlight.int(position),
+        sqlight.text(name),
+      ]),
     )
     let old =
       list.drop(before, position - 1)
@@ -907,14 +903,14 @@ fn save_steps(
   })
 }
 
-/// One dated event per change to the Value Stream (F40).
+/// One dated event per change to the Line (F40).
 fn changed(
   connection: sqlight.Connection,
   payload: List(#(String, Json)),
 ) -> Result(Nil, DesignError) {
   run(
     connection,
-    "insert into flow_event (kind, payload) values ('stream_changed', ?1)",
+    "insert into flow_event (kind, payload) values ('line_changed', ?1)",
     [sqlight.text(json.to_string(json.object(payload)))],
   )
 }

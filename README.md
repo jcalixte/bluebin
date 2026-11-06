@@ -44,14 +44,26 @@ the old code must still run on the new schema.
 Traefik forward auth sends each request to authentik (`auth.apoena.dev`,
 provider and app `bluebin`) and copies the `X-authentik-uid` header from its
 answer, which replaces any value the client sends. The API trusts only that
-header: each uid gets its own SQLite file, `data/workspaces/<uid>.db`, seeded
-on the first request. A request without it uses the shared `public` Workspace,
-`data/workspaces/public.db`; a uid that is not a safe file name gets `401`.
-In dev, the Vite proxy sends `X-authentik-uid: dev`.
+header: each uid is one Workspace. A request without it uses the shared
+`public` Workspace; a uid that is not a safe file name gets `401`. In dev, the
+Vite proxy sends `X-authentik-uid: dev`.
 
-Only members of the authentik group `bluebin-users` get in. Each new Workspace
-starts with the demo data; **Reset… → Start empty** replaces it with one Work
-Station and one Person to rename in Design.
+A Workspace holds as many named Lines as its owner makes, one SQLite
+file each, so no query can read across two of them:
+
+| Line                                                 | File                                | API                               |
+| ---------------------------------------------------- | ----------------------------------- | --------------------------------- |
+| `main`, made on the first request with the demo data | `data/workspaces/<uid>.db`          | `/api/lines/main/…`, and `/api/…` |
+| each one made with **New Line…**, empty              | `data/workspaces/<uid>/ln-<hex>.db` | `/api/lines/ln-<hex>/…`           |
+
+`GET /api/lines` lists them by name, `POST /api/lines {"name"}` makes one,
+`PUT /api/lines/<id> {"name"}` renames one; an unknown id gets `404` and
+never creates a file. The SPA keeps the Line in its URL,
+`/lines/<id>/<view>`, and opens the last one used at `/`.
+
+Only members of the authentik group `bluebin-users` get in. **Reset…** acts on
+the open Line only: demo data, or one Work Station and one Person to
+rename in Design.
 
 <!-- docs:start -->
 

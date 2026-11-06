@@ -52,7 +52,7 @@ fn kanbans_over_empty_blue_bins(connection: sqlight.Connection) -> Int {
 fn changes(connection: sqlight.Connection) -> Int {
   count(
     connection,
-    "select count(*) from flow_event where kind = 'stream_changed'",
+    "select count(*) from flow_event where kind = 'line_changed'",
   )
 }
 
@@ -172,7 +172,7 @@ pub fn nested_splits_are_refused_test() {
     ])
 }
 
-pub fn an_empty_value_stream_is_refused_test() {
+pub fn an_empty_line_is_refused_test() {
   let assert Error(_) = design.check_structure([])
 }
 
@@ -221,7 +221,7 @@ pub fn a_new_work_station_gets_one_kanban_per_blue_bin_test() {
   assert count(
       connection,
       "select count(*) from flow_event
-        where kind = 'stream_changed'
+        where kind = 'line_changed'
           and json_extract(payload, '$.change') = 'station_added'",
     )
     == 1
@@ -340,7 +340,7 @@ pub fn a_refused_change_writes_nothing_test() {
   assert changes(connection) == 0
 }
 
-pub fn labels_are_free_for_each_value_stream_test() {
+pub fn labels_are_free_for_each_line_test() {
   use connection <- with_seeded_database()
   let before = current(connection)
   let labels = design.Labels("Epic", "Epics", "Story", "Stories")

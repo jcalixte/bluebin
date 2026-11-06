@@ -1,4 +1,5 @@
 import { onMounted, reactive, ref, watch } from "vue"
+import { api } from "../api"
 import type { Measures } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useWorkingCalendar } from "./useWorkingCalendar"
@@ -19,7 +20,7 @@ export function isValidPeriod(period: Period) {
 
 async function fetchMeasures(period: Period) {
   const query = new URLSearchParams({ from: period.from, to: period.to })
-  const response = await fetch(`/api/measures?${query}`)
+  const response = await fetch(api(`/api/measures?${query}`))
   if (!response.ok) {
     throw new Error(`API answered ${response.status}`)
   }

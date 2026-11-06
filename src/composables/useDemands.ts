@@ -1,4 +1,5 @@
 import { onMounted, ref } from "vue"
+import { api } from "../api"
 import type { Andon, Demand } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 
@@ -13,8 +14,8 @@ export function useDemands() {
     error.value = null
     try {
       const [demandsResponse, andonsResponse] = await Promise.all([
-        fetch("/api/demands"),
-        fetch("/api/andons"),
+        fetch(api("/api/demands")),
+        fetch(api("/api/andons")),
       ])
       for (const response of [demandsResponse, andonsResponse]) {
         if (!response.ok) {

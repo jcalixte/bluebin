@@ -1,19 +1,21 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue"
+import { api, pageUrl, settleLineUrl, viewPath } from "./api"
 import AppModal from "./components/AppModal.vue"
 import ErrorToast from "./components/ErrorToast.vue"
+import LinePicker from "./components/LinePicker.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
 import DesignView from "./views/DesignView.vue"
 import MeasuresView from "./views/MeasuresView.vue"
 import NextThingView from "./views/NextThingView.vue"
-import ValueStreamView from "./views/ValueStreamView.vue"
+import LineView from "./views/LineView.vue"
 import { useLabels } from "./composables/useLabels"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
   { id: "backlog", label: "Backlog", path: "/backlog" },
-  { id: "value-stream", label: "Value Stream", path: "/value-stream" },
+  { id: "line", label: "Line", path: "/line" },
   { id: "next", label: "My next thing", path: "/next" },
   { id: "measures", label: "Measures", path: "/measures" },
   { id: "design", label: "Design", path: "/design" },
@@ -27,11 +29,12 @@ function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
 }
 
-const current = ref<View>(viewAt(location.pathname))
+settleLineUrl()
+const current = ref<View>(viewAt(viewPath()))
 
 function open(view: View) {
-  if (view.path !== location.pathname) {
-    history.pushState(null, "", view.path)
+  if (view.path !== viewPath()) {
+    history.pushState(null, "", pageUrl(view.path))
   }
   current.value = view
 }
@@ -43,7 +46,7 @@ const resetError = ref<string | null>(null)
 async function reset(mode: "demo" | "empty") {
   resetting.value = true
   try {
-    const response = await fetch("/api/reset", {
+    const response = await fetch(api("/api/reset"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ mode }),
@@ -59,7 +62,7 @@ async function reset(mode: "demo" | "empty") {
   }
 }
 
-const onPopState = () => (current.value = viewAt(location.pathname))
+const onPopState = () => (current.value = viewAt(viewPath()))
 addEventListener("popstate", onPopState)
 onBeforeUnmount(() => removeEventListener("popstate", onPopState))
 </script>
@@ -76,13 +79,14 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             style="mask: url(/favicon.svg) center / contain no-repeat"
           />
           <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
+          <LinePicker :view="current.path" />
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="tabs tabs-box">
             <a
               v-for="view in views"
               :key="view.id"
-              :href="view.path"
+              :href="pageUrl(view.path)"
               class="tab"
               :class="
                 current.id === view.id
@@ -111,16 +115,16 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
     <main class="mx-auto max-w-[110rem] px-6 py-8">
       <DemandsView v-if="current.id === 'demands'" />
       <BacklogView v-else-if="current.id === 'backlog'" />
-      <ValueStreamView v-else-if="current.id === 'value-stream'" />
+      <LineView v-else-if="current.id === 'line'" />
       <MeasuresView v-else-if="current.id === 'measures'" />
       <DesignView v-else-if="current.id === 'design'" />
       <NextThingView v-else />
     </main>
 
     <AppModal v-if="choosingReset" @close="choosingReset = false">
-      <h3 class="text-lg font-semibold">Reset the Value Stream</h3>
+      <h3 class="text-lg font-semibold">Reset this Line</h3>
       <p class="py-2 text-sm opacity-80">
-        Every change made on Bluebin is lost. Pick what to start from.
+        Every change made in this Line is lost. The other Lines stay. Pick what to start from.
       </p>
       <div class="grid gap-3">
         <div class="rounded-box border border-base-300 p-4">

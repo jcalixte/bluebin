@@ -39,7 +39,7 @@ pub type Stale {
 
 /// A Work Station that holds up the flow (F10, F29). `capacity` is the
 /// average Touch Time of its last passes divided by its People, in hours;
-/// `slower` says it is above the Takt Time of the Value Stream.
+/// `slower` says it is above the Takt Time of the Line.
 pub type Bottleneck {
   Bottleneck(
     station_id: String,

@@ -54,60 +54,60 @@ check "an Andon is raised exactly when the Takt Gap is a whole Piece behind" \
 check "no Demand reports more Pieces produced than asked" assert_json \
   'all(.piecesProduced <= .piecesAsked)' "$demands"
 
-stream=$(curl -fsS "$BASE/api/value-stream")
+line=$(curl -fsS "$BASE/api/line")
 check "the Value Stream has Work Stations" assert_json \
-  '.stations | type == "array" and length > 0' "$stream"
+  '.stations | type == "array" and length > 0' "$line"
 check "the Value Stream Takt Time is positive" assert_json \
-  '.taktTimeHours > 0' "$stream"
+  '.taktTimeHours > 0' "$line"
 check "each Work Station has as many Blue Bins as it declares" assert_json \
-  '.stations | all((.blueBins | length) == .blueBinCount)' "$stream"
+  '.stations | all((.blueBins | length) == .blueBinCount)' "$line"
 check "no Work Station holds more Kanbans than it has empty Blue Bins" \
   assert_json \
   '.stations | all(.kanbans <= ([.blueBins[] | select(.piece == null)] | length))' \
-  "$stream"
+  "$line"
 check "no Piece sits in two Blue Bins at once" assert_json \
   '[.stations[].blueBins[].piece | select(. != null)] | length == (unique | length)' \
-  "$stream"
+  "$line"
 check "every Person busy at a Work Station holds a Piece there" assert_json \
   '.stations | all(([.people[] | select(.busy)] | length) <= (.inProgress | length))' \
-  "$stream"
+  "$line"
 check "every Piece in a Blue Bin carries the id an action needs" assert_json \
-  '.stations | all(.blueBins | all(.piece == null or (.id | length) > 0))' "$stream"
+  '.stations | all(.blueBins | all(.piece == null or (.id | length) > 0))' "$line"
 check "every Piece in the hands of a Work Station carries its id" assert_json \
-  '.stations | all(.inProgress | all((.id | length) > 0))' "$stream"
+  '.stations | all(.inProgress | all((.id | length) > 0))' "$line"
 check "a Blue Bin over its count shows as overflow" assert_json \
-  '.stations | all(.overflow | type == "array")' "$stream"
+  '.stations | all(.overflow | type == "array")' "$line"
 check "every Deviation names its rule and its reason" assert_json \
   '.stations | all(.deviations | all((.rule | length) > 0 and (.reason | length) > 0))' \
-  "$stream"
+  "$line"
 check "every open Rework says what it is, who found it and who repairs it" \
   assert_json \
   '.stations | all(.rework | all((.id | length) > 0 and (.piece | length) > 0
      and (.description | length) > 0 and (.foundBy | length) > 0
-     and (.assignee == null or (.assignee | length) > 0)))' "$stream"
+     and (.assignee == null or (.assignee | length) > 0)))' "$line"
 check "the Work Station that found a defect holds the Piece of its Rework" \
   assert_json \
   '[.stations[].rework[].piece] - [.stations[].inProgress[].piece] | length == 0' \
-  "$stream"
+  "$line"
 check "every First Pass Yield is a share, or none until a Piece has left" \
   assert_json \
   '.stations | all(.firstPassYield == null
-     or (.firstPassYield >= 0 and .firstPassYield <= 1))' "$stream"
+     or (.firstPassYield >= 0 and .firstPassYield <= 1))' "$line"
 check "no Work Station reports a negative Rework Time" assert_json \
-  '.stations | all(.reworkHours >= 0)' "$stream"
+  '.stations | all(.reworkHours >= 0)' "$line"
 check "a paused Piece waits for a Rework its Person repairs first" assert_json \
-  '.stations | all(.inProgress | all(.paused | type == "boolean"))' "$stream"
+  '.stations | all(.inProgress | all(.paused | type == "boolean"))' "$line"
 check "every Person carries the id an action needs" assert_json \
-  '.stations | all(.people | all((.id | length) > 0))' "$stream"
+  '.stations | all(.people | all((.id | length) > 0))' "$line"
 check "every step of the chain carries a name" assert_json \
-  '(.steps | length) > 0 and (.steps | all(.name != ""))' "$stream"
+  '(.steps | length) > 0 and (.steps | all(.name != ""))' "$line"
 check "every Work Station sits on a named step" assert_json \
-  '[.stations[].position] - [.steps[].position] | length == 0' "$stream"
+  '[.stations[].position] - [.steps[].position] | length == 0' "$line"
 
 check "every open Rework carries the id of who repairs it" assert_json \
-  '.stations | all(.rework | all((.assignee == null) == (.assigneeId == null)))' "$stream"
+  '.stations | all(.rework | all((.assignee == null) == (.assigneeId == null)))' "$line"
 check "every Piece in hand carries the id of who holds it" assert_json \
-  '.stations | all(.inProgress | all((.person == null) == (.personId == null)))' "$stream"
+  '.stations | all(.inProgress | all((.person == null) == (.personId == null)))' "$line"
 
 people=$(curl -fsS "$BASE/api/people")
 check "people is a non-empty array, each Person of a Work Station" assert_json \
@@ -155,11 +155,11 @@ check "every Andon is a stop or a Rework that waits, on a named Work Station" as
 check "a Rework raises an Andon only after an hour of Working Time" assert_json \
   'map(select(.kind == "rework_waits")) | all(.waitingHours >= 1)' "$andons"
 check "the Value Stream shows the same Andons" assert_json \
-  "(.andons | length) == $(printf '%s' "$andons" | jq length)" "$stream"
+  "(.andons | length) == $(printf '%s' "$andons" | jq length)" "$line"
 check "stale Assignments are a part of the active ones" assert_json \
-  '(.stale | length) <= .activeAssignments' "$stream"
+  '(.stale | length) <= .activeAssignments' "$line"
 check "every bottleneck is slower than the Takt Time or has full Blue Bins in front" \
-  assert_json '.bottlenecks | all(.slower or .fullInFront)' "$stream"
+  assert_json '.bottlenecks | all(.slower or .fullInFront)' "$line"
 check "closing an Andon nobody raised is refused" test \
   "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
      -d '{"station": "ws-nowhere", "person": "pe-nobody"}' "$BASE/api/andon/close")" = 404
@@ -221,7 +221,7 @@ check "an empty start has no Demand" assert_json 'length == 0' \
   "$(curl -fsS "$BASE/api/demands")"
 check "an empty start has one Work Station holding one Kanban" assert_json \
   '.stations | length == 1 and .[0].kanbans == 1' \
-  "$(curl -fsS "$BASE/api/value-stream")"
+  "$(curl -fsS "$BASE/api/line")"
 check "a reset without a body puts back the demo data" test \
   "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/reset")" = 204
 check "the demo data has Demands again" assert_json 'length > 0' \

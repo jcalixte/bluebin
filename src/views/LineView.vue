@@ -8,11 +8,11 @@ import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
-import { useValueStream } from "../composables/useValueStream"
+import { useLine } from "../composables/useLine"
 import type { WorkStation } from "../types"
 
 const {
-  valueStream,
+  line,
   error,
   loading,
   load,
@@ -25,30 +25,28 @@ const {
   assign,
   raiseAndon,
   closeAndon,
-} = useValueStream()
+} = useLine()
 
 const stale = computed(
-  () => new Set((valueStream.value?.stale ?? []).map((one) => `${one.kind}:${one.id}`)),
+  () => new Set((line.value?.stale ?? []).map((one) => `${one.kind}:${one.id}`)),
 )
 
 const staleShare = computed(() => {
-  const active = valueStream.value?.activeAssignments ?? 0
+  const active = line.value?.activeAssignments ?? 0
   return active === 0 ? 0 : Math.round((stale.value.size / active) * 100)
 })
 
 function bottleneckOf(station: string) {
-  return valueStream.value?.bottlenecks.find((one) => one.station === station)
+  return line.value?.bottlenecks.find((one) => one.station === station)
 }
 
-/** Must match max_name_length in backend/src/bluebin/value_stream.gleam. */
+/** Must match max_name_length in backend/src/bluebin/line.gleam. */
 const maxNameLength = 40
 
 const renameError = ref<string | null>(null)
 
 function stepName(position: number) {
-  return (
-    valueStream.value?.steps.find((step) => step.position === position)?.name ?? `Step ${position}`
-  )
+  return line.value?.steps.find((step) => step.position === position)?.name ?? `Step ${position}`
 }
 
 async function rename(position: number, name: string) {
@@ -82,7 +80,7 @@ const madeByChoices = computed(() => {
   if (!found) {
     return []
   }
-  return (valueStream.value?.stations ?? []).filter(
+  return (line.value?.stations ?? []).filter(
     (one) =>
       one.position < found.position &&
       (one.branch === null || found.branch === null || one.branch === found.branch),
@@ -99,16 +97,13 @@ async function recordRework() {
 }
 
 const lastPosition = computed(() =>
-  (valueStream.value?.stations ?? []).reduce(
-    (last, station) => Math.max(last, station.position),
-    0,
-  ),
+  (line.value?.stations ?? []).reduce((last, station) => Math.max(last, station.position), 0),
 )
 
 /** The Piece each Person transforms now, with the position of its Work Station. */
 const activePieces = computed(() => {
   const active = new Map<string, { piece: string; position: number }>()
-  for (const station of valueStream.value?.stations ?? []) {
+  for (const station of line.value?.stations ?? []) {
     for (const item of station.inProgress) {
       if (item.personId && !item.paused) {
         active.set(item.personId, { piece: item.piece, position: station.position })
@@ -118,11 +113,11 @@ const activePieces = computed(() => {
   return active
 })
 
-const streamEl = ref<HTMLElement | null>(null)
+const lineEl = ref<HTMLElement | null>(null)
 
 const columns = computed<{ position: number; stations: WorkStation[]; kanbans: number }[]>(() => {
   const byPosition = new Map<number, WorkStation[]>()
-  for (const station of valueStream.value?.stations ?? []) {
+  for (const station of line.value?.stations ?? []) {
     const column = byPosition.get(station.position) ?? []
     column.push(station)
     byPosition.set(station.position, column)
@@ -139,7 +134,7 @@ const columns = computed<{ position: number; stations: WorkStation[]; kanbans: n
 })
 
 const taktLabel = computed(() => {
-  const hours = valueStream.value?.taktTimeHours ?? 0
+  const hours = line.value?.taktTimeHours ?? 0
   return hours >= 7 ? `${Math.round((hours / 7) * 10) / 10} working days` : `${hours} h`
 })
 </script>
@@ -148,10 +143,10 @@ const taktLabel = computed(() => {
   <section>
     <header class="mb-6 flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
       <div>
-        <h2 class="text-xl font-semibold">Value Stream</h2>
+        <h2 class="text-xl font-semibold">Line</h2>
         <p class="text-sm opacity-70">Pieces flow to the right. Kanbans flow back to the left.</p>
       </div>
-      <dl v-if="valueStream" class="flex flex-wrap gap-x-8 gap-y-3">
+      <dl v-if="line" class="flex flex-wrap gap-x-8 gap-y-3">
         <div>
           <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Takt Time</dt>
           <dd class="text-2xl font-semibold tabular-nums">
@@ -162,11 +157,11 @@ const taktLabel = computed(() => {
           <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Andons</dt>
           <dd class="flex items-center gap-2 text-2xl font-semibold tabular-nums">
             <span
-              v-if="valueStream.andons.length > 0"
+              v-if="line.andons.length > 0"
               class="size-2.5 rounded-full bg-andon"
               aria-hidden="true"
             />
-            {{ valueStream.andons.length }}
+            {{ line.andons.length }}
           </dd>
         </div>
         <div>
@@ -175,15 +170,15 @@ const taktLabel = computed(() => {
           </dt>
           <dd class="flex items-center gap-2 text-2xl font-semibold tabular-nums">
             <span
-              v-if="valueStream.demandsBehind > 0"
+              v-if="line.demandsBehind > 0"
               class="size-2.5 rounded-full bg-andon"
               aria-hidden="true"
             />
-            {{ valueStream.demandsBehind }}
+            {{ line.demandsBehind }}
           </dd>
         </div>
         <div
-          v-if="valueStream.activeAssignments > 0"
+          v-if="line.activeAssignments > 0"
           title="Active Assignments with no event for more than one working day. Target: 5 % or less."
         >
           <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
@@ -195,23 +190,23 @@ const taktLabel = computed(() => {
           >
             {{ staleShare }} %
             <span class="text-sm font-normal opacity-70">
-              {{ stale.size }} of {{ valueStream.activeAssignments }}, target 5 %
+              {{ stale.size }} of {{ line.activeAssignments }}, target 5 %
             </span>
           </dd>
         </div>
       </dl>
     </header>
 
-    <AndonAlert v-if="valueStream" :andons="valueStream.andons" />
+    <AndonAlert v-if="line" :andons="line.andons" />
 
     <ErrorToast v-model="renameError" tone="error" />
     <ErrorToast v-model="actionError" />
 
     <!-- Only the first load shows the spinner: a reload after an action keeps the
-         stream on screen, so the page keeps its scroll position. -->
-    <p v-if="loading && !valueStream" class="flex items-center gap-3 opacity-70">
+         line on screen, so the page keeps its scroll position. -->
+    <p v-if="loading && !line" class="flex items-center gap-3 opacity-70">
       <span class="loading loading-spinner loading-sm" />
-      Loading the Value Stream…
+      Loading the Line…
     </p>
 
     <div v-else-if="error" class="alert alert-error">
@@ -221,7 +216,7 @@ const taktLabel = computed(() => {
     <p v-else-if="columns.length === 0" class="opacity-70">No Work Station yet.</p>
 
     <div v-else class="overflow-x-auto pb-4">
-      <div ref="streamEl" class="relative flex min-w-max gap-4">
+      <div ref="lineEl" class="relative flex min-w-max gap-4">
         <template v-for="(column, index) in columns" :key="column.position">
           <div v-if="index > 0" class="w-24 shrink-0" />
           <div class="flex min-w-[15rem] flex-1 flex-col gap-3">
@@ -244,10 +239,10 @@ const taktLabel = computed(() => {
                   station.branch === null && (columns[index - 1]?.stations.length ?? 0) > 1
                 "
                 :busy="busy"
-                :andons="valueStream?.andons ?? []"
+                :andons="line?.andons ?? []"
                 :stale="stale"
                 :bottleneck="bottleneckOf(station.id)"
-                :takt-hours="valueStream?.taktTimeHours ?? 0"
+                :takt-hours="line?.taktTimeHours ?? 0"
                 @andon="(who) => run(() => raiseAndon(station.id, who))"
                 @close-andon="(who) => run(() => closeAndon(station.id, who))"
                 @pull="(who) => run((why) => pull(station.id, who, why))"
@@ -263,7 +258,7 @@ const taktLabel = computed(() => {
             </p>
           </div>
         </template>
-        <FlowConnectors :container="streamEl" :columns="columns" />
+        <FlowConnectors :container="lineEl" :columns="columns" />
       </div>
     </div>
 

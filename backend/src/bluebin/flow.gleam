@@ -319,7 +319,7 @@ pub fn make_urgent(
         ReorderNeedsConfirmation(heijunka.effects(
           backlog.sequence,
           after,
-          demand.value_stream_takt_hours(backlog.demands),
+          demand.line_takt_hours(backlog.demands),
         )),
       )
     Some(reason) -> {

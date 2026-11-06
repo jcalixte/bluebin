@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import { api } from "../api"
 import { useLabels } from "../composables/useLabels"
 import AppModal from "./AppModal.vue"
 
@@ -42,7 +43,7 @@ async function create() {
   saving.value = true
   problem.value = null
   try {
-    const response = await fetch("/api/demands", {
+    const response = await fetch(api("/api/demands"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

@@ -1,6 +1,7 @@
 import bluebin
 import bluebin/db
 import bluebin/demand
+import bluebin/lines
 import bluebin/live
 import bluebin/workspace
 import gleam/erlang/process
@@ -8,8 +9,10 @@ import gleam/http
 import gleam/http/request
 import gleam/int
 import gleam/list
+import gleam/string
 import simplifile
 import sqlight
+import wisp
 import wisp/simulate
 
 fn with_uid(uid: String) {
@@ -121,4 +124,116 @@ pub fn a_signed_in_user_gets_a_seeded_workspace_test() {
     |> bluebin.handle_request(hub)
   remove_workspace(uid)
   assert response.status == 200
+}
+
+fn as_user(
+  method: http.Method,
+  path: String,
+  uid: String,
+  body: String,
+  hub: live.Hub,
+) {
+  simulate.request(method, path)
+  |> simulate.header("x-authentik-uid", uid)
+  |> simulate.string_body(body)
+  |> simulate.header("content-type", "application/json")
+  |> bluebin.handle_request(hub)
+}
+
+fn remove_lines(uid: String) {
+  remove_workspace(uid)
+  let _ = simplifile.delete_all([db.workspaces_directory <> "/" <> uid])
+  Nil
+}
+
+pub fn an_account_names_and_lists_its_lines_test() {
+  let assert Ok(hub) = live.start()
+  let uid = "lines-test-" <> int.to_string(int.random(1_000_000))
+  let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
+
+  let assert Ok(line) = lines.create(uid, "  Mobile  ")
+  assert line.name == "Mobile"
+  let assert Ok(_) = lines.rename(uid, lines.first, "Web")
+  let assert Ok(found) = lines.list(uid)
+
+  let created =
+    as_user(http.Post, "/api/lines", uid, "{\"name\": \"Back office\"}", hub)
+  let listed = as_user(http.Get, "/api/lines", uid, "", hub)
+  remove_lines(uid)
+
+  assert found == [lines.Line(line.id, "Mobile"), lines.Line("main", "Web")]
+  assert created.status == 201
+  let assert wisp.Text(body) = listed.body
+  assert string.contains(body, "\"name\":\"Back office\"")
+}
+
+pub fn a_new_line_starts_empty_and_apart_test() {
+  let uid = "lines-test-" <> int.to_string(int.random(1_000_000))
+  let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
+
+  let assert Ok(line) = lines.create(uid, "Mobile")
+  let assert Ok(first) = lines.database(uid, lines.first)
+  let assert Ok(other) = lines.database(uid, line.id)
+  let assert Ok(first_demands) = {
+    use connection <- db.with_connection_at(first)
+    demand.list_active(connection)
+  }
+  let assert Ok(other_demands) = {
+    use connection <- db.with_connection_at(other)
+    demand.list_active(connection)
+  }
+  remove_lines(uid)
+
+  assert first != other
+  assert list.length(first_demands) == 3
+  assert other_demands == []
+}
+
+pub fn a_line_needs_a_name_test() {
+  let uid = "lines-test-" <> int.to_string(int.random(1_000_000))
+  assert lines.create(uid, "   ") == Error(lines.EmptyName)
+  assert lines.create(uid, string_of(61)) == Error(lines.NameTooLong)
+  assert lines.rename(uid, lines.first, "") == Error(lines.EmptyName)
+}
+
+pub fn an_unknown_line_is_not_created_test() {
+  let assert Ok(hub) = live.start()
+  let uid = "lines-test-" <> int.to_string(int.random(1_000_000))
+  let unknown = as_user(http.Get, "/api/lines/ln-abc/demands", uid, "", hub)
+  let unsafe = as_user(http.Get, "/api/lines/..%2Fapp/demands", uid, "", hub)
+  let other_account =
+    as_user(http.Put, "/api/lines/ln-abc", uid, "{\"name\": \"Mine\"}", hub)
+  remove_lines(uid)
+
+  assert unknown.status == 404
+  assert unsafe.status == 404
+  assert other_account.status == 404
+  assert simplifile.is_file(
+      db.workspaces_directory <> "/" <> uid <> "/ln-abc.db",
+    )
+    == Ok(False)
+  assert lines.is_id("main")
+  assert lines.is_id("ln-0a1b2c")
+  assert !lines.is_id("ln-")
+  assert !lines.is_id("ln-XYZ")
+  assert !lines.is_id("../main")
+}
+
+pub fn the_routes_of_a_line_reach_its_own_data_test() {
+  let assert Ok(hub) = live.start()
+  let uid = "lines-test-" <> int.to_string(int.random(1_000_000))
+  let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
+  let assert Ok(line) = lines.create(uid, "Mobile")
+
+  let scoped =
+    as_user(http.Get, "/api/lines/" <> line.id <> "/demands", uid, "", hub)
+  let first = as_user(http.Get, "/api/lines/main/demands", uid, "", hub)
+  let bare = as_user(http.Get, "/api/demands", uid, "", hub)
+  remove_lines(uid)
+
+  let assert wisp.Text(scoped) = scoped.body
+  let assert wisp.Text(first) = first.body
+  let assert wisp.Text(bare) = bare.body
+  assert scoped != first
+  assert first == bare
 }

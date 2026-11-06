@@ -36,7 +36,7 @@ pub type Backlog {
 
 /// What a manual reorder costs one Demand: its next Piece leaves `places`
 /// later (negative: earlier), which is `hours` of Working Time at the Value
-/// Stream Takt Time, and `takt_gap` Pieces on its Takt Gap.
+/// Line Takt Time, and `takt_gap` Pieces on its Takt Gap.
 pub type Effect {
   Effect(demand: Demand, places: Int, hours: Float, takt_gap: Float)
 }
@@ -169,7 +169,7 @@ pub fn can_be_urgent(sequence: List(Placed)) -> List(String) {
 pub fn effects(
   before: List(Placed),
   after: List(Placed),
-  value_stream_takt_hours: Float,
+  line_takt_hours: Float,
 ) -> List(Effect) {
   before
   |> list.map(fn(placed) { placed.demand })
@@ -177,7 +177,7 @@ pub fn effects(
   |> list.filter_map(fn(demand) {
     let places = next_place(after, demand.id) - next_place(before, demand.id)
     use <- bool.guard(when: places == 0, return: Error(Nil))
-    let hours = int.to_float(places) *. value_stream_takt_hours
+    let hours = int.to_float(places) *. line_takt_hours
     let takt_gap = case demand.takt_time_hours(demand) {
       0.0 -> 0.0
       takt -> 0.0 -. hours /. takt
@@ -301,10 +301,7 @@ pub fn on_plan(cell: MixCell) -> Bool {
 pub fn to_json(backlog: Backlog, mix: List(MixRow)) -> json.Json {
   let urgent_ok = can_be_urgent(backlog.sequence)
   json.object([
-    #(
-      "taktTimeHours",
-      json.float(demand.value_stream_takt_hours(backlog.demands)),
-    ),
+    #("taktTimeHours", json.float(demand.line_takt_hours(backlog.demands))),
     #(
       "sequence",
       json.array(backlog.sequence, fn(placed) {

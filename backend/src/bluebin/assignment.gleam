@@ -263,10 +263,10 @@ pub fn help_downstream(
 }
 
 fn downstream_of(other: Station, own: Station) -> Bool {
-  other.position > own.position && same_line(other, own)
+  other.position > own.position && same_chain(other, own)
 }
 
-fn same_line(one: Station, other: Station) -> Bool {
+fn same_chain(one: Station, other: Station) -> Bool {
   case one.branch, other.branch {
     Some(a), Some(b) -> a == b
     _, _ -> True
@@ -277,7 +277,7 @@ fn same_line(one: Station, other: Station) -> Bool {
 pub fn in_front_full(station: Station, all: List(Station)) -> Bool {
   let upstream =
     list.filter(all, fn(other) {
-      other.position < station.position && same_line(other, station)
+      other.position < station.position && same_chain(other, station)
     })
   let previous =
     list.fold(upstream, -1, fn(highest, other) {
