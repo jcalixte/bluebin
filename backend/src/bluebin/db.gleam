@@ -10,7 +10,7 @@ import sqlight
 pub const workspaces_directory = "data/workspaces"
 
 /// The highest migration step; raise it when you append a step to `migrate`.
-const latest_version = 13
+const latest_version = 14
 
 /// From this version a Workspace can be empty on purpose (`reset_empty`), so
 /// only an older database gets the demo data.
@@ -275,6 +275,12 @@ alter table stream_label rename to line_label;
 alter table stream_step rename to line_step;
 update line_label set name = 'Line' where name = 'Value Stream';
 update flow_event set kind = 'line_changed' where kind = 'stream_changed';
+"
+
+/// A Person removed in Design keeps their row, so the history still shows
+/// their name. A new nullable column, so the old code still runs.
+const schema_v14 = "
+alter table person add column removed_at text;
 "
 
 const schema_v3 = "
@@ -558,6 +564,7 @@ pub fn migrate_to(
     #(11, schema_v11),
     #(12, schema_v12),
     #(13, schema_v13),
+    #(14, schema_v14),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step

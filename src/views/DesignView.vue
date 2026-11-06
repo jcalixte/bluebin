@@ -18,6 +18,7 @@ const {
   save,
   discard,
   addPerson,
+  removePerson,
   addStepAfter,
   removeStep,
   canMove,
@@ -230,7 +231,7 @@ function confirmDiscard() {
       </div>
 
       <div class="grid gap-6 xl:grid-cols-3">
-        <DesignPeopleCard v-model="draft.people" :add="addPerson" />
+        <DesignPeopleCard v-model="draft.people" :add="addPerson" @remove="removePerson" />
 
         <div class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body gap-4 p-5">

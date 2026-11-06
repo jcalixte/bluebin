@@ -372,3 +372,69 @@ pub fn a_new_person_can_join_a_work_station_test() {
         where id = 'ws-uat' and team_leader = '" <> person.id <> "'") == 1
   assert refused(design.add_person(connection, " "), "name")
 }
+
+fn without_person(wanted: Design, id: String) -> Design {
+  let wanted =
+    Design(
+      ..wanted,
+      people: list.filter(wanted.people, fn(person) { person.id != id }),
+    )
+  Design(
+    ..wanted,
+    steps: list.map(wanted.steps, fn(step) {
+      Step(
+        ..step,
+        stations: list.map(step.stations, fn(station) {
+          Station(
+            ..station,
+            people: list.filter(station.people, fn(person) { person != id }),
+          )
+        }),
+      )
+    }),
+  )
+}
+
+pub fn a_person_with_no_work_in_hand_can_go_test() {
+  use connection <- with_seeded_database()
+  let wanted = current(connection) |> without_person("pe-karim")
+  let assert Ok(saved) = design.save(connection, wanted)
+  assert !list.any(saved.people, fn(person) { person.id == "pe-karim" })
+  assert current(connection) == saved
+  assert count(
+      connection,
+      "select count(*) from station_person where person_id = 'pe-karim'",
+    )
+    == 0
+  // The row stays, so the history keeps the name.
+  assert count(
+      connection,
+      "select count(*) from person
+        where id = 'pe-karim' and name = 'Karim' and removed_at is not null",
+    )
+    == 1
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'line_changed'
+        and payload ->> 'change' = 'person_removed'",
+    )
+    == 1
+}
+
+pub fn a_removed_person_cannot_stay_in_a_work_station_test() {
+  use connection <- with_seeded_database()
+  let before = current(connection)
+  let wanted =
+    Design(
+      ..before,
+      people: list.filter(before.people, fn(person) { person.id != "pe-karim" }),
+    )
+  assert refused(design.save(connection, wanted), "not in the Line any more")
+  assert current(connection) == before
+}
+
+pub fn a_person_with_work_in_hand_cannot_go_test() {
+  use connection <- with_seeded_database()
+  let wanted = current(connection) |> without_person("pe-marc")
+  assert refused(design.save(connection, wanted), "work in hand")
+}

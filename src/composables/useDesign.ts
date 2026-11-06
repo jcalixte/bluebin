@@ -257,6 +257,18 @@ export function useDesign() {
     }
   }
 
+  /** Saved with the other changes. Each Work Station lets the Person go too. */
+  function removePerson(id: string) {
+    if (!draft.value) return
+    draft.value.people = draft.value.people.filter((person) => person.id !== id)
+    for (const station of steps().flatMap((step) => step.stations)) {
+      station.people = station.people.filter((one) => one !== id)
+      if (station.teamLeader === id) {
+        station.teamLeader = station.people[0] ?? ""
+      }
+    }
+  }
+
   function steps() {
     return draft.value?.steps ?? []
   }
@@ -348,6 +360,7 @@ export function useDesign() {
     save,
     discard,
     addPerson,
+    removePerson,
     addStepAfter,
     removeStep,
     canMove,

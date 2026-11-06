@@ -88,11 +88,16 @@ pub fn load(
 ) -> Result(#(Design, Dict(String, Held)), Nil) {
   use labels <- result.try(load_labels(connection))
   use people <- result.try(
-    query(connection, "select id, name from person order by rowid", [], {
-      use id <- decode.field(0, decode.string)
-      use name <- decode.field(1, decode.string)
-      decode.success(Person(id:, name:))
-    }),
+    query(
+      connection,
+      "select id, name from person where removed_at is null order by rowid",
+      [],
+      {
+        use id <- decode.field(0, decode.string)
+        use name <- decode.field(1, decode.string)
+        decode.success(Person(id:, name:))
+      },
+    ),
   )
   use members <- result.try(query(
     connection,
@@ -304,6 +309,8 @@ pub fn check_change(
   )
 
   let known_people = list.map(current.people, fn(person) { person.id })
+  // A Person left out of `wanted.people` is removed, so no Work Station can keep them.
+  let kept_people = list.map(wanted.people, fn(person) { person.id })
   let placed = placed(wanted.steps)
   let current_stations = stations_by_id(current.steps)
   let wanted_ids = list.filter_map(placed, fn(entry) { entry.1 |> id_of })
@@ -325,7 +332,7 @@ pub fn check_change(
   use _ <- result.try(
     list.try_each(placed, fn(entry) {
       let #(position, station) = entry
-      check_station(station, position, current_stations, held, known_people)
+      check_station(station, position, current_stations, held, kept_people)
     }),
   )
 
@@ -347,7 +354,7 @@ pub fn check_change(
 
   use _ <- result.try(check_locked_order(placed, held))
 
-  // A Person with work in hand at a Work Station stays in it.
+  // A Person with work in hand at a Work Station stays in it, so in the Line.
   use _ <- result.try(
     list.try_each(busy, fn(pair) {
       let #(station_id, person_id) = pair
@@ -413,7 +420,8 @@ fn check_station(
     list.try_each(station.people, fn(person) {
       case list.contains(known_people, person) {
         True -> Ok(Nil)
-        False -> Error(label <> " names a Person that does not exist.")
+        False ->
+          Error(label <> " names a Person who is not in the Line any more.")
       }
     }),
   )
@@ -649,6 +657,12 @@ fn save_people(
   before: List(Person),
   wanted: List(Person),
 ) -> Result(Nil, DesignError) {
+  use _ <- result.try(
+    list.filter(before, fn(person) {
+      !list.any(wanted, fn(one) { one.id == person.id })
+    })
+    |> list.try_each(remove_person(connection, _)),
+  )
   list.try_each(wanted, fn(person) {
     let name = string.trim(person.name)
     case list.find(before, fn(one) { one.id == person.id }) {
@@ -668,6 +682,31 @@ fn save_people(
       _ -> Ok(Nil)
     }
   })
+}
+
+/// The row stays, so the history keeps the name (F40).
+fn remove_person(
+  connection: sqlight.Connection,
+  person: Person,
+) -> Result(Nil, DesignError) {
+  use _ <- result.try(
+    run(connection, "delete from station_person where person_id = ?1", [
+      sqlight.text(person.id),
+    ]),
+  )
+  use _ <- result.try(
+    run(
+      connection,
+      "update person set removed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id = ?1",
+      [sqlight.text(person.id)],
+    ),
+  )
+  changed(connection, [
+    #("change", json.string("person_removed")),
+    #("person", json.string(person.id)),
+    #("name", json.string(person.name)),
+  ])
 }
 
 fn add_station(
