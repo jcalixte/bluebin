@@ -88,8 +88,8 @@ const summary = computed(() => {
   const stationsB = measures.value.after.stations
   const andonsA = stationsA.reduce((total, station) => total + station.andons, 0)
   const andonsB = stationsB.reduce((total, station) => total + station.andons, 0)
-  const stoppedA = totalAndonTime(stationsA)
-  const stoppedB = totalAndonTime(stationsB)
+  const stoppedA = pick(measures.value.before.andonTime)
+  const stoppedB = pick(measures.value.after.andonTime)
   const durations = [
     { label: "Lead Time", a: pick(a.leadTime), b: pick(b.leadTime) },
     { label: "Touch Time", a: pick(a.touchTime), b: pick(b.touchTime) },
@@ -116,17 +116,13 @@ const summary = computed(() => {
       change: countChange(andonsA, andonsB),
     },
     {
-      label: "Andon Time (total of all Work Stations)",
+      label: "Andon Time (any Work Station stopped)",
       before: hours(stoppedA),
       after: hours(stoppedB),
       change: hoursChange(stoppedA, stoppedB),
     },
   ]
 })
-
-function totalAndonTime(stations: StationMeasures[]) {
-  return stations.reduce((total, station) => total + (pick(station.andonTime) ?? 0), 0)
-}
 
 type Paired<T> = { id: string; first: T; before?: T; after?: T }
 

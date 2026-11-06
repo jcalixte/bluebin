@@ -156,6 +156,10 @@ _Avoid_: my kanban, personal kanban, board, inbox, to-do, work queue
 The link between one item of a Work Station's Priority List and the one Person of that Work Station who does it.
 _Avoid_: allocation, dispatch, affectation, ownership
 
+**Workspace**:
+All the data of one Value Stream, private to the signed-in account that owns it.
+_Avoid_: tenant, organization, board
+
 ## Relationships
 
 - A **Value Stream** is an ordered chain of **Work Stations**; a **Split** opens parallel **Branches** and an **Assembly** closes them
@@ -198,6 +202,7 @@ _Avoid_: allocation, dispatch, affectation, ownership
 - A **Team Leader** answers **Andons** and never pushes **Assignments**
 - A **Value Stream** has exactly one **Working Calendar**
 - **Starvation Time** belongs to a **Work Station**, never to a **Piece**, and is not part of the **Lead Time**
+- The **Andon Time** of a **Value Stream** is the time at least one of its **Work Stations** is stopped; stops at the same time count once
 - A **Person** transforms at most one **Piece** at a time; when another **Piece** comes into their hands, the one nearest to production stays active and the other pauses, and the paused time is **Stagnation Time**. On a tie, the new **Piece** waits: finishing beats starting
 - A **Work Station** transforms as many **Pieces** at the same time as it has **People** working
 - Priority works in two stages: first which **Work Station** must work, then which **Person** of that **Work Station** does it (**Assignment**)

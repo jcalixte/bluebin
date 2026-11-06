@@ -1,14 +1,23 @@
 #!/usr/bin/env sh
 # Smoke-test a running Bluebin API.
 #
-#   scripts/test-api.sh                      against https://bluebin.app
-#   scripts/test-api.sh http://localhost:8000  against a local backend
+#   scripts/test-api.sh                        against a local backend
+#   scripts/test-api.sh http://localhost:8000  the same, explicit
+#
+# bluebin.app sits behind authentik SSO, so a script cannot reach its API.
+# Each call acts as the workspace in $WORKSPACE (default "smoke"), the way
+# Traefik forward auth sends the authentik user id in production.
 #
 # Needs curl and jq only, no Erlang.
 set -eu
 
-BASE="${1:-https://bluebin.app}"
+BASE="${1:-http://localhost:8000}"
+WORKSPACE="${WORKSPACE:-smoke}"
 failures=0
+
+curl() {
+  command curl -H "X-authentik-uid: $WORKSPACE" "$@"
+}
 
 check() {
   name="$1"
@@ -30,6 +39,10 @@ echo "Bluebin API smoke test against $BASE"
 
 health=$(curl -fsS "$BASE/api/health" || true)
 check "GET /api/health answers OK" test "$health" = "OK"
+check "a request without an identity is refused" test \
+  "$(command curl -s -o /dev/null -w '%{http_code}' "$BASE/api/demands")" = 401
+check "an identity that could leave the workspaces directory is refused" test \
+  "$(command curl -s -o /dev/null -w '%{http_code}' -H 'X-authentik-uid: ../app' "$BASE/api/demands")" = 401
 
 demands=$(curl -fsS "$BASE/api/demands")
 check "demands is a non-empty array" assert_json 'type == "array" and length > 0' "$demands"
@@ -126,6 +139,8 @@ check "every Work Station has a Touch share between 0 and 1" assert_json \
   '.stations | all(.touchShare == null or (.touchShare >= 0 and .touchShare <= 1))' "$measures"
 check "every Work Station has an Andon Time no longer than its Calendar Time" assert_json \
   '.stations | all(.andons >= 0 and .andonTime.working <= .andonTime.calendar)' "$measures"
+check "the Value Stream Andon Time is no longer than the sum of its Work Stations" assert_json \
+  '.andonTime.calendar <= ([.stations[].andonTime.calendar] | add) + 0.01' "$measures"
 check "every Deviation of the period carries its reason" assert_json \
   '.deviations.list | all(.reason != "")' "$measures"
 check "a period ending before it starts is refused" test \

@@ -4,9 +4,13 @@ import gleam/list
 import gleam/result
 import sqlight
 
-/// Must stay under `data/`, the volume docker-compose.yml mounts, or the
-/// database is lost on redeploy.
-pub const path = "data/app.db"
+/// Each workspace has its own SQLite file in this directory, so no query can
+/// read the data of another workspace. Must stay under `data/`, the mounted
+/// volume, or the data is lost on redeploy.
+pub const workspaces_directory = "data/workspaces"
+
+/// The highest migration step; raise it when you append a step to `migrate`.
+const latest_version = 9
 
 const schema_v1 = "
 pragma journal_mode = wal;
@@ -425,8 +429,31 @@ values ('rw-1', 'p-offline-4-ios', 'ws-ios',
         strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour'));
 "
 
-pub fn with_connection(run: fn(sqlight.Connection) -> a) -> a {
-  with_connection_at(path, run)
+/// `workspace` must be a checked identity (see `bluebin/workspace`): it
+/// becomes part of a file path.
+pub fn workspace_path(workspace: String) -> String {
+  workspaces_directory <> "/" <> workspace <> ".db"
+}
+
+/// Migrates and seeds the database when it is new or behind. The SPA sends
+/// several requests at once on its first load, so the slow path holds the
+/// write lock: the other requests wait, then see the current version.
+pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
+  use connection <- with_connection_at(database)
+  use version <- result.try(user_version(connection))
+  case version >= latest_version {
+    True -> Ok(Nil)
+    False -> {
+      use _ <- result.try(sqlight.exec("begin immediate;", connection))
+      case prepare(connection) {
+        Ok(Nil) -> sqlight.exec("commit;", connection)
+        Error(error) -> {
+          let _ = sqlight.exec("rollback;", connection)
+          Error(error)
+        }
+      }
+    }
+  }
 }
 
 pub fn with_connection_at(
@@ -437,6 +464,10 @@ pub fn with_connection_at(
   // During a rolling deploy the old and the new container write to the same
   // file for a few seconds: wait for the lock instead of failing with BUSY.
   let _ = sqlight.exec("pragma busy_timeout = 5000;", connection)
+  // Outside any transaction, where SQLite ignores it. Switching a new file
+  // fails with BUSY when another connection does it at the same moment, and
+  // skips the busy wait: one of them succeeds, the next connections see WAL.
+  let _ = sqlight.exec("pragma journal_mode = wal;", connection)
   run(connection)
 }
 
@@ -448,7 +479,7 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 /// Each step runs at most once per database, tracked in `pragma user_version`:
 /// never edit an applied step, append a new one and raise this target.
 pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  migrate_to(connection, 9)
+  migrate_to(connection, latest_version)
 }
 
 pub fn migrate_to(

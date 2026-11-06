@@ -9,10 +9,13 @@ import bluebin/live
 import bluebin/measures
 import bluebin/spa
 import bluebin/value_stream
+import bluebin/workspace
+import gleam/bytes_tree
 import gleam/dynamic/decode
 import gleam/erlang/process
 import gleam/http
 import gleam/http/request
+import gleam/http/response
 import gleam/int
 import gleam/json
 import gleam/list
@@ -28,8 +31,7 @@ import wisp/wisp_mist
 pub fn main() {
   wisp.configure_logger()
 
-  let _ = simplifile.create_directory_all("data")
-  let assert Ok(Nil) = db.with_connection(db.prepare)
+  let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
   let assert Ok(hub) = live.start()
 
   let api =
@@ -41,7 +43,13 @@ pub fn main() {
   let assert Ok(_) =
     fn(request) {
       case request.path_segments(request) {
-        ["api", "events"] -> live.stream(request, hub)
+        ["api", "events"] ->
+          case workspace.from_request(request) {
+            Ok(workspace) -> live.stream(request, hub, workspace)
+            Error(Nil) ->
+              response.new(401)
+              |> response.set_body(mist.Bytes(bytes_tree.new()))
+          }
         _ -> api(request)
       }
     }
@@ -56,110 +64,136 @@ pub fn main() {
 /// Holds the built SPA in the image; absent in dev, where Vite serves it.
 const static_directory = "static"
 
-fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
+pub fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
   // Before the log, so each page load writes one line per API call, not per asset.
   use <- spa.serve(request, from: static_directory)
   use <- wisp.log_request(request)
   use <- wisp.rescue_crashes
-  use <- announce_change(request, hub)
 
   case wisp.path_segments(request) {
+    // Open: the container healthcheck has no identity.
     ["api", "health"] -> {
       use <- wisp.require_method(request, http.Get)
       wisp.ok()
     }
+    _ -> {
+      use workspace <- require_workspace(request)
+      let database = db.workspace_path(workspace)
+      case db.ready(database) {
+        Error(_) -> wisp.internal_server_error()
+        Ok(Nil) -> {
+          use <- announce_change(request, hub, workspace)
+          route(request, database)
+        }
+      }
+    }
+  }
+}
+
+fn require_workspace(
+  request: wisp.Request,
+  next: fn(String) -> wisp.Response,
+) -> wisp.Response {
+  case workspace.from_request(request) {
+    Ok(workspace) -> next(workspace)
+    Error(Nil) -> wisp.response(401)
+  }
+}
+
+fn route(request: wisp.Request, database: String) -> wisp.Response {
+  case wisp.path_segments(request) {
     ["api", "demands"] -> {
       use <- wisp.require_method(request, http.Get)
-      demands()
+      demands(database)
     }
     ["api", "value-stream"] -> {
       use <- wisp.require_method(request, http.Get)
-      value_stream()
+      value_stream(database)
     }
     ["api", "backlog"] -> {
       use <- wisp.require_method(request, http.Get)
-      backlog()
+      backlog(database)
     }
     ["api", "backlog", "urgent"] -> {
       use <- wisp.require_method(request, http.Post)
-      make_urgent(request)
+      make_urgent(request, database)
     }
     ["api", "pull"] -> {
       use <- wisp.require_method(request, http.Post)
-      pull(request)
+      pull(request, database)
     }
     ["api", "finish"] -> {
       use <- wisp.require_method(request, http.Post)
-      finish(request)
+      finish(request, database)
     }
     ["api", "deliver"] -> {
       use <- wisp.require_method(request, http.Post)
-      deliver(request)
+      deliver(request, database)
     }
     ["api", "rework"] -> {
       use <- wisp.require_method(request, http.Post)
-      raise_rework(request)
+      raise_rework(request, database)
     }
     ["api", "rework", "repair"] -> {
       use <- wisp.require_method(request, http.Post)
-      repair_rework(request)
+      repair_rework(request, database)
     }
     ["api", "andons"] -> {
       use <- wisp.require_method(request, http.Get)
-      andons()
+      andons(database)
     }
     ["api", "andon"] -> {
       use <- wisp.require_method(request, http.Post)
-      raise_andon(request)
+      raise_andon(request, database)
     }
     ["api", "andon", "close"] -> {
       use <- wisp.require_method(request, http.Post)
-      close_andon(request)
+      close_andon(request, database)
     }
     ["api", "assign"] -> {
       use <- wisp.require_method(request, http.Post)
-      assign(request)
+      assign(request, database)
     }
     ["api", "people"] -> {
       use <- wisp.require_method(request, http.Get)
-      people()
+      people(database)
     }
     ["api", "people", person, "next"] -> {
       use <- wisp.require_method(request, http.Get)
-      next_thing(person)
+      next_thing(person, database)
     }
     ["api", "steps", position] -> {
       use <- wisp.require_method(request, http.Put)
-      rename_step(request, position)
+      rename_step(request, position, database)
     }
     ["api", "measures"] -> {
       use <- wisp.require_method(request, http.Get)
-      measures_of(request)
+      measures_of(request, database)
     }
     ["api", "calendar"] ->
       case request.method {
-        http.Put -> save_calendar(request)
+        http.Put -> save_calendar(request, database)
         _ -> {
           use <- wisp.require_method(request, http.Get)
-          working_calendar()
+          working_calendar(database)
         }
       }
     ["api", "reset"] -> {
       use <- wisp.require_method(request, http.Post)
-      reset()
+      reset(database)
     }
     _ -> wisp.not_found()
   }
 }
 
 /// `from` and `to` are days, both included; the last 7 days by default.
-fn measures_of(request: wisp.Request) -> wisp.Response {
+fn measures_of(request: wisp.Request, database: String) -> wisp.Response {
   let query = wisp.get_query(request)
   let day = fn(key, default) {
     list.key_find(query, key) |> result.unwrap(default)
   }
   let result =
-    db.with_connection(fn(connection) {
+    db.with_connection_at(database, fn(connection) {
       use #(week_ago, today) <- result.try(
         sqlight.query(
           "select date('now', '-6 day'), date('now')",
@@ -190,15 +224,15 @@ fn measures_of(request: wisp.Request) -> wisp.Response {
   }
 }
 
-fn working_calendar() -> wisp.Response {
-  case db.with_connection(calendar.load) {
+fn working_calendar(database: String) -> wisp.Response {
+  case db.with_connection_at(database, calendar.load) {
     Ok(found) ->
       wisp.json_response(json.to_string(calendar.to_json(found)), 200)
     Error(_) -> wisp.internal_server_error()
   }
 }
 
-fn save_calendar(request: wisp.Request) -> wisp.Response {
+fn save_calendar(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   case decode.run(body, calendar.decoder()) {
     Error(_) ->
@@ -207,7 +241,7 @@ fn save_calendar(request: wisp.Request) -> wisp.Response {
       )
     Ok(wanted) ->
       case
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           use _ <- result.try(calendar.save(connection, wanted))
           calendar.load(connection)
           |> result.replace_error(calendar.StoreFailed)
@@ -221,8 +255,8 @@ fn save_calendar(request: wisp.Request) -> wisp.Response {
   }
 }
 
-fn reset() -> wisp.Response {
-  case db.with_connection(db.reset) {
+fn reset(database: String) -> wisp.Response {
+  case db.with_connection_at(database, db.reset) {
     Ok(Nil) -> wisp.no_content()
     Error(_) -> wisp.internal_server_error()
   }
@@ -233,6 +267,7 @@ fn reset() -> wisp.Response {
 fn announce_change(
   request: wisp.Request,
   hub: live.Hub,
+  workspace: String,
   next: fn() -> wisp.Response,
 ) -> wisp.Response {
   let response = next()
@@ -240,7 +275,8 @@ fn announce_change(
     http.Get, _ | http.Head, _ -> Nil
     _, status if status >= 200 && status < 300 ->
       case wisp.path_segments(request) {
-        ["api", ..action] -> live.announce(hub, string.join(action, "/"))
+        ["api", ..action] ->
+          live.announce(hub, workspace, string.join(action, "/"))
         _ -> Nil
       }
     _, _ -> Nil
@@ -248,9 +284,11 @@ fn announce_change(
   response
 }
 
-fn demands() -> wisp.Response {
+fn demands(database: String) -> wisp.Response {
   let result =
-    db.with_connection(fn(connection) { demand.list_active(connection) })
+    db.with_connection_at(database, fn(connection) {
+      demand.list_active(connection)
+    })
 
   case result {
     Ok(demands) -> wisp.json_response(demand.to_json(demands), 200)
@@ -258,9 +296,9 @@ fn demands() -> wisp.Response {
   }
 }
 
-fn value_stream() -> wisp.Response {
+fn value_stream(database: String) -> wisp.Response {
   let result =
-    db.with_connection(fn(connection) {
+    db.with_connection_at(database, fn(connection) {
       use stations <- result.try(value_stream.load(connection))
       use steps <- result.try(value_stream.list_steps(connection))
       use demands <- result.try(demand.list_active(connection))
@@ -290,9 +328,9 @@ fn value_stream() -> wisp.Response {
   }
 }
 
-fn andons() -> wisp.Response {
+fn andons(database: String) -> wisp.Response {
   let result =
-    db.with_connection(fn(connection) {
+    db.with_connection_at(database, fn(connection) {
       use calendar <- result.try(calendar.load(connection))
       use now <- result.try(andon.now(connection))
       andon.andons(connection, calendar, now)
@@ -305,7 +343,7 @@ fn andons() -> wisp.Response {
   }
 }
 
-fn raise_andon(request: wisp.Request) -> wisp.Response {
+fn raise_andon(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -322,14 +360,14 @@ fn raise_andon(request: wisp.Request) -> wisp.Response {
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
     Ok(#(station, person)) ->
       andon_response(
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.raise_andon(connection, station, person)
         }),
       )
   }
 }
 
-fn close_andon(request: wisp.Request) -> wisp.Response {
+fn close_andon(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -344,7 +382,7 @@ fn close_andon(request: wisp.Request) -> wisp.Response {
       )
     Ok(#(station, person)) ->
       andon_response(
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.close_andon(connection, station, person)
         }),
       )
@@ -358,9 +396,9 @@ fn andon_response(result: Result(Nil, flow.FlowError)) -> wisp.Response {
   }
 }
 
-fn backlog() -> wisp.Response {
+fn backlog(database: String) -> wisp.Response {
   let result =
-    db.with_connection(fn(connection) {
+    db.with_connection_at(database, fn(connection) {
       use backlog <- result.try(heijunka.load(connection))
       use mix <- result.try(heijunka.product_mix(connection, backlog.demands))
       Ok(heijunka.to_json(backlog, mix))
@@ -372,7 +410,7 @@ fn backlog() -> wisp.Response {
   }
 }
 
-fn make_urgent(request: wisp.Request) -> wisp.Response {
+fn make_urgent(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use piece <- decode.field("piece", decode.string)
@@ -389,14 +427,14 @@ fn make_urgent(request: wisp.Request) -> wisp.Response {
       wisp.bad_request("expected a body like {\"piece\": \"p-billing-3\"}")
     Ok(#(piece, reason)) ->
       flow_response(
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.make_urgent(connection, piece, reason)
         }),
       )
   }
 }
 
-fn pull(request: wisp.Request) -> wisp.Response {
+fn pull(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -418,14 +456,14 @@ fn pull(request: wisp.Request) -> wisp.Response {
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
     Ok(#(station, person, reason)) ->
       flow_response(
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.pull(connection, station, person, reason)
         }),
       )
   }
 }
 
-fn finish(request: wisp.Request) -> wisp.Response {
+fn finish(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -445,14 +483,14 @@ fn finish(request: wisp.Request) -> wisp.Response {
       )
     Ok(#(station, piece, reason)) ->
       flow_response(
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.finish(connection, station, piece, reason)
         }),
       )
   }
 }
 
-fn deliver(request: wisp.Request) -> wisp.Response {
+fn deliver(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = decode.field("piece", decode.string, decode.success)
 
@@ -461,7 +499,9 @@ fn deliver(request: wisp.Request) -> wisp.Response {
       wisp.bad_request("expected a body like {\"piece\": \"p-checkout-9\"}")
     Ok(piece) ->
       flow_response(
-        db.with_connection(fn(connection) { flow.deliver(connection, piece) }),
+        db.with_connection_at(database, fn(connection) {
+          flow.deliver(connection, piece)
+        }),
       )
   }
 }
@@ -641,7 +681,7 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
   }
 }
 
-fn raise_rework(request: wisp.Request) -> wisp.Response {
+fn raise_rework(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -658,7 +698,7 @@ fn raise_rework(request: wisp.Request) -> wisp.Response {
       )
     Ok(#(station, piece, made_by, description)) ->
       case
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.raise_rework(connection, station, piece, made_by, description)
         })
       {
@@ -678,7 +718,7 @@ fn raise_rework(request: wisp.Request) -> wisp.Response {
   }
 }
 
-fn repair_rework(request: wisp.Request) -> wisp.Response {
+fn repair_rework(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = decode.field("rework", decode.string, decode.success)
 
@@ -686,7 +726,7 @@ fn repair_rework(request: wisp.Request) -> wisp.Response {
     Error(_) -> wisp.bad_request("expected a body like {\"rework\": \"rw-1\"}")
     Ok(rework) ->
       case
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.repair_rework(connection, rework)
         })
       {
@@ -703,17 +743,17 @@ fn repair_rework(request: wisp.Request) -> wisp.Response {
   }
 }
 
-fn people() -> wisp.Response {
-  case db.with_connection(assignment.people) {
+fn people(database: String) -> wisp.Response {
+  case db.with_connection_at(database, assignment.people) {
     Ok(people) ->
       wisp.json_response(json.to_string(assignment.people_json(people)), 200)
     Error(_) -> wisp.internal_server_error()
   }
 }
 
-fn next_thing(person: String) -> wisp.Response {
+fn next_thing(person: String, database: String) -> wisp.Response {
   case
-    db.with_connection(fn(connection) {
+    db.with_connection_at(database, fn(connection) {
       use view <- result.try(assignment.load(connection, person))
       use andons <- result.try(
         {
@@ -737,7 +777,7 @@ fn next_thing(person: String) -> wisp.Response {
   }
 }
 
-fn assign(request: wisp.Request) -> wisp.Response {
+fn assign(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use kind <- decode.field("kind", decode.string)
@@ -758,7 +798,7 @@ fn assign(request: wisp.Request) -> wisp.Response {
       )
     Ok(#(kind, id, person)) ->
       case
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           flow.reassign(connection, kind, id, person)
         })
       {
@@ -779,7 +819,11 @@ fn json_body(fields: List(#(String, json.Json)), status: Int) -> wisp.Response {
   wisp.json_response(json.to_string(json.object(fields)), status)
 }
 
-fn rename_step(request: wisp.Request, position: String) -> wisp.Response {
+fn rename_step(
+  request: wisp.Request,
+  position: String,
+  database: String,
+) -> wisp.Response {
   use body <- wisp.require_json(request)
 
   let parsed = {
@@ -795,7 +839,7 @@ fn rename_step(request: wisp.Request, position: String) -> wisp.Response {
     Error(Nil) -> wisp.bad_request("expected a body like {\"name\": \"Build\"}")
     Ok(#(position, name)) -> {
       let renamed =
-        db.with_connection(fn(connection) {
+        db.with_connection_at(database, fn(connection) {
           value_stream.rename_step(connection, position, name)
         })
 

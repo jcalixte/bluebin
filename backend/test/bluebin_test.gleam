@@ -1182,16 +1182,23 @@ pub fn andon_time_is_the_stop_inside_the_period_test() {
     "insert into andon (station_id, raised_at, closed_at) values
        ('ws-web', '2026-09-30T23:00:00Z', '2026-10-01T01:00:00Z'),
        ('ws-web', '2026-10-01T10:00:00Z', '2026-10-01T11:30:00Z'),
-       ('ws-web', '2026-10-02T10:00:00Z', '2026-10-02T11:00:00Z')",
+       ('ws-web', '2026-10-02T10:00:00Z', '2026-10-02T11:00:00Z'),
+       ('ws-ios', '2026-10-01T11:00:00Z', '2026-10-01T12:00:00Z')",
   )
   let assert Ok(found) = measures.load(connection, "2026-10-01", "2026-10-01")
   let assert Ok(web) = list.find(found.stations, fn(one) { one.id == "ws-web" })
   // 1 h after midnight of the first stop, and the whole 1 h 30 of the second.
   assert web.andon == 9000
   assert web.andons == 1
+  let assert Ok(ios) = list.find(found.stations, fn(one) { one.id == "ws-ios" })
+  assert ios.andon == 3600
   let assert Ok(other) =
-    list.find(found.stations, fn(one) { one.id != "ws-web" })
+    list.find(found.stations, fn(one) {
+      one.id != "ws-web" && one.id != "ws-ios"
+    })
   assert other.andon == 0
+  // Web and iOS both stop from 11:00 to 11:30: that half hour counts once.
+  assert found.andon == 9000 + 3600 - 1800
 }
 
 pub fn a_stopped_work_station_holds_one_andon_test() {

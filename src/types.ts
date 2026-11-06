@@ -296,6 +296,8 @@ export type Measures = {
   pieces: PieceMeasures
   demands: DemandMeasures[]
   stations: StationMeasures[]
+  /** The time at least one Work Station is stopped by an Andon; stops at the same time count once. */
+  andonTime: Duration | null
   deviations: {
     byRule: { rule: string; count: number }[]
     list: RecordedDeviation[]

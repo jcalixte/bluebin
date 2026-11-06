@@ -39,6 +39,15 @@ starts, passes `/api/health`, takes the traffic, then the old one stops. For a
 few seconds both write to the SQLite file, so a migration must stay additive:
 the old code must still run on the new schema.
 
+### Sign-in and Workspaces
+
+Traefik forward auth sends each request to authentik (`auth.apoena.dev`,
+provider and app `bluebin`) and copies the `X-authentik-uid` header from its
+answer, which replaces any value the client sends. The API trusts only that
+header: each uid gets its own SQLite file, `data/workspaces/<uid>.db`, seeded
+on the first request. A request without it gets `401`; `/api/health` stays
+open for the healthcheck. In dev, the Vite proxy sends `X-authentik-uid: dev`.
+
 <!-- docs:start -->
 
 ## Documentation

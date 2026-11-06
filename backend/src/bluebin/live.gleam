@@ -15,9 +15,15 @@ pub opaque type Signal {
 }
 
 pub opaque type Message {
-  Subscribe(Subject(Signal))
-  Announce(action: String)
+  Subscribe(workspace: String, stream: Subject(Signal))
+  Announce(workspace: String, action: String)
+  Tick
   StreamDown(Monitor)
+}
+
+/// An open stream and the workspace it listens to.
+type Stream {
+  Stream(monitor: Monitor, workspace: String, subject: Subject(Signal))
 }
 
 pub type Hub =
@@ -54,38 +60,50 @@ pub fn start() -> Result(Hub, actor.StartError) {
 
 fn tick(hub: Hub) -> Nil {
   process.sleep(tick_ms)
-  announce(hub, "tick")
+  process.send(hub, Tick)
   tick(hub)
 }
 
 fn handle(
-  streams: List(#(Monitor, Subject(Signal))),
+  streams: List(Stream),
   message: Message,
-) -> actor.Next(List(#(Monitor, Subject(Signal))), Message) {
+) -> actor.Next(List(Stream), Message) {
   case message {
-    Subscribe(stream) ->
-      case process.subject_owner(stream) {
-        Ok(pid) -> actor.continue([#(process.monitor(pid), stream), ..streams])
+    Subscribe(workspace, subject) ->
+      case process.subject_owner(subject) {
+        Ok(pid) ->
+          actor.continue([
+            Stream(process.monitor(pid), workspace, subject),
+            ..streams
+          ])
         Error(Nil) -> actor.continue(streams)
       }
-    Announce(action) -> {
-      list.each(streams, fn(one) { process.send(one.1, Changed(action)) })
+    Announce(workspace, action) -> {
+      list.each(streams, fn(one) {
+        case one.workspace == workspace {
+          True -> process.send(one.subject, Changed(action))
+          False -> Nil
+        }
+      })
       actor.continue(streams)
     }
-
+    Tick -> {
+      list.each(streams, fn(one) { process.send(one.subject, Changed("tick")) })
+      actor.continue(streams)
+    }
     StreamDown(monitor) ->
-      actor.continue(list.filter(streams, fn(one) { one.0 != monitor }))
+      actor.continue(list.filter(streams, fn(one) { one.monitor != monitor }))
   }
 }
 
-pub fn subscribe(hub: Hub, stream: Subject(Signal)) -> Nil {
-  process.send(hub, Subscribe(stream))
+pub fn subscribe(hub: Hub, workspace: String, stream: Subject(Signal)) -> Nil {
+  process.send(hub, Subscribe(workspace, stream))
 }
 
-/// Tell every open screen that the state changed. `action` names what did it,
-/// for example `pull` or `rework/repair`.
-pub fn announce(hub: Hub, action: String) -> Nil {
-  process.send(hub, Announce(action))
+/// Tell the open screens of one workspace that its state changed. `action`
+/// names what did it, for example `pull` or `rework/repair`.
+pub fn announce(hub: Hub, workspace: String, action: String) -> Nil {
+  process.send(hub, Announce(workspace, action))
 }
 
 /// The action of a `Changed` signal; `Error(Nil)` for anything else.
@@ -101,12 +119,13 @@ pub fn changed_action(signal: Signal) -> Result(String, Nil) {
 pub fn stream(
   request: Request(mist.Connection),
   hub: Hub,
+  workspace: String,
 ) -> Response(mist.ResponseData) {
   mist.server_sent_events(
     request: request,
     initial_response: response.new(200),
     init: fn(self) {
-      subscribe(hub, self)
+      subscribe(hub, workspace, self)
       let _ = process.send_after(self, heartbeat_ms, Heartbeat)
       self
     },

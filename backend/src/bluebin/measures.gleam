@@ -337,6 +337,10 @@ pub type Measures {
     demands: List(DemandMeasure),
     stations: List(StationMeasure),
     deviations: List(DeviationRow),
+    /// The time at least one Work Station is stopped: stops at the same time
+    /// count once.
+    andon: Int,
+    andon_working: Int,
   )
 }
 
@@ -615,12 +619,16 @@ pub fn load(
       )
     })
 
+  let #(andon, andon_working) =
+    stops |> list.map(fn(stop) { stop.1 }) |> union |> in_measured
   Ok(Measures(
     period:,
     pieces: produced,
     demands: demand_measures,
     stations: station_measures,
     deviations:,
+    andon:,
+    andon_working:,
   ))
 }
 
@@ -782,6 +790,7 @@ pub fn to_json(measures: Measures) -> json.Json {
         ])
       }),
     ),
+    #("andonTime", duration(Some(measures.andon), Some(measures.andon_working))),
     #(
       "deviations",
       json.object([
