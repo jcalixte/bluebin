@@ -155,7 +155,7 @@ pub fn make_urgent(sequence: List(Placed), piece_id: String) -> List(Placed) {
   list.flatten([urgent, moved, others])
 }
 
-/// The Pieces a Person can make urgent and that would really move.
+/// The Pieces a Team Member can make urgent and that would really move.
 pub fn can_be_urgent(sequence: List(Placed)) -> List(String) {
   sequence
   |> list.filter(fn(placed) {

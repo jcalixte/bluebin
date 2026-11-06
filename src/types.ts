@@ -129,7 +129,7 @@ export type StaleAssignment = {
   id: string
 }
 
-/** `capacityHours` is the average Touch Time per Piece over the last 7 days, divided by its People. */
+/** `capacityHours` is the average Touch Time per Piece over the last 7 days, divided by its Team Members. */
 export type Bottleneck = {
   station: string
   capacityHours: number | null
@@ -149,13 +149,13 @@ export type Line = {
 }
 
 /** `stations` is ordered nearest to production first. */
-export type Person = {
+export type TeamMember = {
   id: string
   name: string
   stations: string[]
 }
 
-/** One Assignment of a Person is active; the others wait, paused. */
+/** One Assignment of a Team Member is active; the others wait, paused. */
 export type Assignment =
   | {
       kind: "rework"
@@ -195,9 +195,9 @@ export type PriorityList = {
   items: PriorityItem[]
 }
 
-export type PersonView = {
+export type TeamMemberView = {
   person: { id: string; name: string }
-  /** The Andons of the Person's Work Stations only. */
+  /** The Andons of the Team Member's Work Stations only. */
   andons: Andon[]
   next: NextThing
   assignments: Assignment[]
@@ -331,7 +331,7 @@ export type Labels = {
   pieces: string
 }
 
-export type DesignPerson = {
+export type DesignTeamMember = {
   id: string
   name: string
 }
@@ -359,7 +359,7 @@ export type DesignStep = {
 
 export type Design = {
   labels: Labels
-  people: DesignPerson[]
+  people: DesignTeamMember[]
   steps: DesignStep[]
 }
 
@@ -375,6 +375,6 @@ export type DesignStationInput = {
 
 export type DesignInput = {
   labels: Labels
-  people: DesignPerson[]
+  people: DesignTeamMember[]
   steps: { name: string; stations: DesignStationInput[] }[]
 }

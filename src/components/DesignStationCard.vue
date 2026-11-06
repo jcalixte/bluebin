@@ -1,22 +1,22 @@
 <script setup lang="ts">
 import { computed } from "vue"
 import { maxNameLength, type DraftStation } from "../composables/useDesign"
-import type { DesignPerson } from "../types"
+import type { DesignTeamMember } from "../types"
 
 const station = defineModel<DraftStation>({ required: true })
 
-const props = defineProps<{ people: DesignPerson[] }>()
+const props = defineProps<{ teamMembers: DesignTeamMember[] }>()
 
 defineEmits<{ remove: [] }>()
 
 const members = computed(() =>
-  props.people.filter((person) => station.value.people.includes(person.id)),
+  props.teamMembers.filter((teamMember) => station.value.people.includes(teamMember.id)),
 )
 
-function toggle(person: string, event: Event) {
+function toggle(teamMember: string, event: Event) {
   const on = (event.target as HTMLInputElement).checked
-  const people = station.value.people.filter((one) => one !== person)
-  station.value.people = on ? [...people, person] : people
+  const others = station.value.people.filter((one) => one !== teamMember)
+  station.value.people = on ? [...others, teamMember] : others
   if (!station.value.people.includes(station.value.teamLeader)) {
     station.value.teamLeader = station.value.people[0] ?? ""
   }
@@ -107,18 +107,18 @@ const tooFewBins = computed(() => !(Number(station.value.blueBins) >= station.va
       </label>
 
       <fieldset>
-        <legend class="mb-1 text-sm font-medium">People</legend>
-        <p v-if="people.length === 0" class="text-sm opacity-70">Add a Person first.</p>
+        <legend class="mb-1 text-sm font-medium">Team Members</legend>
+        <p v-if="teamMembers.length === 0" class="text-sm opacity-70">Add a Team Member first.</p>
         <ul v-else class="flex max-h-40 flex-col gap-1 overflow-y-auto">
-          <li v-for="person in people" :key="person.id">
+          <li v-for="teamMember in teamMembers" :key="teamMember.id">
             <label class="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm"
-                :checked="station.people.includes(person.id)"
-                @change="toggle(person.id, $event)"
+                :checked="station.people.includes(teamMember.id)"
+                @change="toggle(teamMember.id, $event)"
               />
-              {{ person.name || "Unnamed Person" }}
+              {{ teamMember.name || "Unnamed Team Member" }}
             </label>
           </li>
         </ul>
@@ -133,10 +133,10 @@ const tooFewBins = computed(() => !(Number(station.value.blueBins) >= station.va
           :disabled="members.length === 0"
         >
           <option value="" disabled>
-            {{ members.length === 0 ? "Pick its People first" : "Pick a Team Leader" }}
+            {{ members.length === 0 ? "Pick its Team Members first" : "Pick a Team Leader" }}
           </option>
-          <option v-for="person in members" :key="person.id" :value="person.id">
-            {{ person.name || "Unnamed Person" }}
+          <option v-for="teamMember in members" :key="teamMember.id" :value="teamMember.id">
+            {{ teamMember.name || "Unnamed Team Member" }}
           </option>
         </select>
       </label>

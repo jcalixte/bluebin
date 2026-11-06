@@ -271,10 +271,10 @@ fn route(
     }
     ["api", "people"] ->
       case request.method {
-        http.Post -> add_person(request, database)
+        http.Post -> add_team_member(request, database)
         _ -> {
           use <- wisp.require_method(request, http.Get)
-          people(database)
+          team_members(database)
         }
       }
     ["api", "design"] ->
@@ -289,9 +289,9 @@ fn route(
       use <- wisp.require_method(request, http.Get)
       labels(database)
     }
-    ["api", "people", person, "next"] -> {
+    ["api", "people", team_member, "next"] -> {
       use <- wisp.require_method(request, http.Get)
-      next_thing(person, database)
+      next_thing(team_member, database)
     }
     ["api", "steps", position] -> {
       use <- wisp.require_method(request, http.Put)
@@ -416,22 +416,22 @@ fn save_design(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-fn add_person(request: wisp.Request, database: String) -> wisp.Response {
+fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   case decode.run(body, decode.field("name", decode.string, decode.success)) {
     Error(_) -> wisp.bad_request("expected a body like {\"name\": \"Inès\"}")
     Ok(name) ->
       case
         db.with_connection_at(database, fn(connection) {
-          design.add_person(connection, name)
+          design.add_team_member(connection, name)
         })
       {
-        Ok(person) ->
+        Ok(team_member) ->
           wisp.json_response(
             json.to_string(
               json.object([
-                #("id", json.string(person.id)),
-                #("name", json.string(person.name)),
+                #("id", json.string(team_member.id)),
+                #("name", json.string(team_member.name)),
               ]),
             ),
             201,
@@ -586,21 +586,21 @@ fn raise_andon(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
-    use person <- decode.optional_field(
+    use team_member <- decode.optional_field(
       "person",
       None,
       decode.optional(decode.string),
     )
-    decode.success(#(station, person))
+    decode.success(#(station, team_member))
   }
 
   case decode.run(body, decoder) {
     Error(_) ->
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
-    Ok(#(station, person)) ->
+    Ok(#(station, team_member)) ->
       andon_response(
         db.with_connection_at(database, fn(connection) {
-          flow.raise_andon(connection, station, person)
+          flow.raise_andon(connection, station, team_member)
         }),
       )
   }
@@ -610,8 +610,8 @@ fn close_andon(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
-    use person <- decode.field("person", decode.string)
-    decode.success(#(station, person))
+    use team_member <- decode.field("person", decode.string)
+    decode.success(#(station, team_member))
   }
 
   case decode.run(body, decoder) {
@@ -619,10 +619,10 @@ fn close_andon(request: wisp.Request, database: String) -> wisp.Response {
       wisp.bad_request(
         "expected a body like {\"station\": \"ws-web\", \"person\": \"pe-bob\"}",
       )
-    Ok(#(station, person)) ->
+    Ok(#(station, team_member)) ->
       andon_response(
         db.with_connection_at(database, fn(connection) {
-          flow.close_andon(connection, station, person)
+          flow.close_andon(connection, station, team_member)
         }),
       )
   }
@@ -677,7 +677,7 @@ fn pull(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
-    use person <- decode.optional_field(
+    use team_member <- decode.optional_field(
       "person",
       None,
       decode.optional(decode.string),
@@ -687,16 +687,16 @@ fn pull(request: wisp.Request, database: String) -> wisp.Response {
       None,
       decode.optional(decode.string),
     )
-    decode.success(#(station, person, reason))
+    decode.success(#(station, team_member, reason))
   }
 
   case decode.run(body, decoder) {
     Error(_) ->
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
-    Ok(#(station, person, reason)) ->
+    Ok(#(station, team_member, reason)) ->
       flow_response(
         db.with_connection_at(database, fn(connection) {
-          flow.pull(connection, station, person, reason)
+          flow.pull(connection, station, team_member, reason)
         }),
       )
   }
@@ -847,7 +847,7 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
           #(
             "message",
             json.string(
-              "This Person repairs a Rework first. Repair it, or hand it to another Person of the Work Station, before pulling a new Piece.",
+              "This Team Member repairs a Rework first. Repair it, or hand it to another Team Member of the Work Station, before pulling a new Piece.",
             ),
           ),
         ],
@@ -860,7 +860,7 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
           #(
             "message",
             json.string(
-              "An Assignment goes only to a Person of the same Work Station.",
+              "An Assignment goes only to a Team Member of the same Work Station.",
             ),
           ),
         ],
@@ -982,18 +982,21 @@ fn repair_rework(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-fn people(database: String) -> wisp.Response {
-  case db.with_connection_at(database, assignment.people) {
-    Ok(people) ->
-      wisp.json_response(json.to_string(assignment.people_json(people)), 200)
+fn team_members(database: String) -> wisp.Response {
+  case db.with_connection_at(database, assignment.team_members) {
+    Ok(team_members) ->
+      wisp.json_response(
+        json.to_string(assignment.team_members_json(team_members)),
+        200,
+      )
     Error(_) -> wisp.internal_server_error()
   }
 }
 
-fn next_thing(person: String, database: String) -> wisp.Response {
+fn next_thing(team_member: String, database: String) -> wisp.Response {
   case
     db.with_connection_at(database, fn(connection) {
-      use view <- result.try(assignment.load(connection, person))
+      use view <- result.try(assignment.load(connection, team_member))
       use andons <- result.try(
         {
           use calendar <- result.try(calendar.load(connection))
@@ -1011,7 +1014,7 @@ fn next_thing(person: String, database: String) -> wisp.Response {
     })
   {
     Ok(body) -> wisp.json_response(json.to_string(body), 200)
-    Error(assignment.UnknownPerson) -> wisp.not_found()
+    Error(assignment.UnknownTeamMember) -> wisp.not_found()
     Error(assignment.ReadFailed) -> wisp.internal_server_error()
   }
 }
@@ -1021,12 +1024,14 @@ fn assign(request: wisp.Request, database: String) -> wisp.Response {
   let decoder = {
     use kind <- decode.field("kind", decode.string)
     use id <- decode.field("id", decode.string)
-    use person <- decode.field("person", decode.string)
-    decode.success(#(kind, id, person))
+    use team_member <- decode.field("person", decode.string)
+    decode.success(#(kind, id, team_member))
   }
   let parsed = case decode.run(body, decoder) {
-    Ok(#("piece", id, person)) -> Ok(#(flow.PieceAssignment, id, person))
-    Ok(#("rework", id, person)) -> Ok(#(flow.ReworkAssignment, id, person))
+    Ok(#("piece", id, team_member)) ->
+      Ok(#(flow.PieceAssignment, id, team_member))
+    Ok(#("rework", id, team_member)) ->
+      Ok(#(flow.ReworkAssignment, id, team_member))
     _ -> Error(Nil)
   }
 
@@ -1035,17 +1040,17 @@ fn assign(request: wisp.Request, database: String) -> wisp.Response {
       wisp.bad_request(
         "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"person\": \"pe-lila\"}",
       )
-    Ok(#(kind, id, person)) ->
+    Ok(#(kind, id, team_member)) ->
       case
         db.with_connection_at(database, fn(connection) {
-          flow.reassign(connection, kind, id, person)
+          flow.reassign(connection, kind, id, team_member)
         })
       {
         Ok(reassigned) ->
           json_body(
             [
               #("piece", json.string(reassigned.piece)),
-              #("person", json.string(reassigned.person)),
+              #("person", json.string(reassigned.team_member)),
             ],
             200,
           )

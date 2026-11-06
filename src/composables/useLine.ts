@@ -32,8 +32,8 @@ export function useLine() {
     return confirm
   }
 
-  const pull = (station: string, person?: string, reason?: string) =>
-    act("/api/pull", { station, person, reason })
+  const pull = (station: string, teamMember?: string, reason?: string) =>
+    act("/api/pull", { station, person: teamMember, reason })
 
   const finish = (station: string, piece: string, reason?: string) =>
     act("/api/finish", { station, piece, reason })
@@ -45,13 +45,14 @@ export function useLine() {
 
   const repairRework = (rework: string) => act("/api/rework/repair", { rework })
 
-  const assign = (kind: "piece" | "rework", id: string, person: string) =>
-    act("/api/assign", { kind, id, person })
+  const assign = (kind: "piece" | "rework", id: string, teamMember: string) =>
+    act("/api/assign", { kind, id, person: teamMember })
 
-  const raiseAndon = (station: string, person?: string) => act("/api/andon", { station, person })
+  const raiseAndon = (station: string, teamMember?: string) =>
+    act("/api/andon", { station, person: teamMember })
 
-  const closeAndon = (station: string, person: string) =>
-    act("/api/andon/close", { station, person })
+  const closeAndon = (station: string, teamMember: string) =>
+    act("/api/andon/close", { station, person: teamMember })
 
   /** The server trims the name, so its answer wins over ours. */
   async function renameStep(position: number, name: string) {

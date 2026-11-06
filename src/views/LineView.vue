@@ -100,7 +100,7 @@ const lastPosition = computed(() =>
   (line.value?.stations ?? []).reduce((last, station) => Math.max(last, station.position), 0),
 )
 
-/** The Piece each Person transforms now, with the position of its Work Station. */
+/** The Piece each Team Member transforms now, with the position of its Work Station. */
 const activePieces = computed(() => {
   const active = new Map<string, { piece: string; position: number }>()
   for (const station of line.value?.stations ?? []) {
@@ -250,7 +250,7 @@ const taktLabel = computed(() => {
                 @deliver="(piece) => run(() => deliver(piece))"
                 @rework="(piece) => openRework(station, piece)"
                 @repair="(rework) => run(() => repairRework(rework))"
-                @assign="(kind, id, person) => run(() => assign(kind, id, person))"
+                @assign="(kind, id, teamMember) => run(() => assign(kind, id, teamMember))"
               />
             </div>
             <p v-if="column.stations.length > 1" class="text-xs italic opacity-70">
@@ -265,8 +265,8 @@ const taktLabel = computed(() => {
     <AppModal v-if="raising" @close="raising = null">
       <h3 class="text-lg font-semibold">A defect in {{ raising.reference }}</h3>
       <p class="py-2 text-sm opacity-80">
-        The Piece stays here: name the Work Station that made the defect, and one of its People
-        comes to repair it.
+        The Piece stays here: name the Work Station that made the defect, and one of its Team
+        Members comes to repair it.
       </p>
       <label class="form-control">
         <span class="label-text text-sm">Made by</span>

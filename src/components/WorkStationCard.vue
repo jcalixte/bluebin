@@ -4,7 +4,7 @@ import type { Andon, Bottleneck, WorkStation } from "../types"
 
 const props = defineProps<{
   station: WorkStation
-  /** The Piece each Person transforms now, by Person id. */
+  /** The Piece each Team Member transforms now, by Team Member id. */
   activePieces: Map<string, { piece: string; position: number }>
   last?: boolean
   busy?: boolean
@@ -18,30 +18,30 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  pull: [person: string | undefined]
+  pull: [teamMember: string | undefined]
   finish: [piece: string]
   deliver: [piece: string]
   rework: [piece: string]
   repair: [rework: string]
-  assign: [kind: "piece" | "rework", id: string, person: string]
-  andon: [person: string | undefined]
-  closeAndon: [person: string]
+  assign: [kind: "piece" | "rework", id: string, teamMember: string]
+  andon: [teamMember: string | undefined]
+  closeAndon: [teamMember: string]
 }>()
 
-const person = ref("")
+const teamMember = ref("")
 
 function handOver(kind: "piece" | "rework", id: string, event: Event) {
-  const person = (event.target as HTMLSelectElement).value
-  if (person !== "") {
-    emit("assign", kind, id, person)
+  const teamMember = (event.target as HTMLSelectElement).value
+  if (teamMember !== "") {
+    emit("assign", kind, id, teamMember)
   }
 }
 
-/** Finishing beats starting: a Piece nearer to production keeps the Person's hands. */
+/** Finishing beats starting: a Piece nearer to production keeps the Team Member's hands. */
 const keptFirst = computed(() => {
-  const active = props.activePieces.get(person.value)
+  const active = props.activePieces.get(teamMember.value)
   if (!active || active.position < props.station.position) return null
-  const name = props.station.people.find((one) => one.id === person.value)?.name
+  const name = props.station.people.find((one) => one.id === teamMember.value)?.name
   return `${name} finishes ${active.piece} first: the new Piece starts paused`
 })
 
@@ -136,7 +136,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           class="btn btn-ghost btn-xs shrink-0 gap-1.5"
           :disabled="busy"
           title="Stop this Work Station and call its Team Leader"
-          @click="$emit('andon', person === '' ? undefined : person)"
+          @click="$emit('andon', teamMember === '' ? undefined : teamMember)"
         >
           <span class="size-2 rounded-full bg-andon" aria-hidden="true" />
           Andon
@@ -174,7 +174,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         <button
           class="btn btn-sm btn-primary w-full justify-between"
           :disabled="busy"
-          @click="$emit('pull', person === '' ? undefined : person)"
+          @click="$emit('pull', teamMember === '' ? undefined : teamMember)"
         >
           {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
           <span
@@ -191,9 +191,9 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         <label class="mt-1.5 flex items-center gap-2 text-xs">
           <span class="opacity-70">Taken by</span>
           <select
-            v-model="person"
+            v-model="teamMember"
             class="select select-ghost select-xs w-auto"
-            title="The Person who takes the Piece in hand. Also names who raises an Andon."
+            title="The Team Member who takes the Piece in hand. Also names who raises an Andon."
           >
             <option value="">Nobody</option>
             <option v-for="one in station.people" :key="one.id" :value="one.id">
@@ -235,7 +235,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 :value="item.assigneeId ?? ''"
                 :disabled="busy"
                 aria-label="Who repairs it"
-                title="Who repairs it: pick another Person to hand it over"
+                title="Who repairs it: pick another Team Member to hand it over"
                 @change="handOver('rework', item.id, $event)"
               >
                 <option value="" disabled>nobody repairs it</option>
@@ -281,7 +281,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               :value="item.personId ?? ''"
               :disabled="busy"
               aria-label="Who holds this Piece"
-              title="Who holds this Piece: pick another Person to hand it over"
+              title="Who holds this Piece: pick another Team Member to hand it over"
               @change="handOver('piece', item.id, $event)"
             >
               <option value="" disabled>unassigned</option>
@@ -292,7 +292,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <span
               v-if="item.paused"
               class="badge badge-xs badge-warning"
-              title="Paused: its Person finishes a Rework or a Piece nearer to production first"
+              title="Paused: its Team Member finishes a Rework or a Piece nearer to production first"
             >
               paused
             </span>
@@ -389,7 +389,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       </section>
 
       <footer class="flex flex-col gap-2 border-t border-base-300 pt-3">
-        <ul class="flex flex-wrap gap-1" aria-label="People">
+        <ul class="flex flex-wrap gap-1" aria-label="Team Members">
           <li
             v-for="one in station.people"
             :key="one.id"

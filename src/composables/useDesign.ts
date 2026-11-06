@@ -1,6 +1,6 @@
 import { computed, onMounted, ref } from "vue"
 import { api } from "../api"
-import type { Design, DesignInput, DesignPerson, DesignStationInput, Labels } from "../types"
+import type { Design, DesignInput, DesignTeamMember, DesignStationInput, Labels } from "../types"
 import { useLabels } from "./useLabels"
 import { useLiveUpdates } from "./useLiveUpdates"
 
@@ -21,13 +21,13 @@ export type DraftStep = {
 
 export type DesignDraft = {
   labels: Labels
-  people: DesignPerson[]
+  people: DesignTeamMember[]
   steps: DraftStep[]
 }
 
 type DesignShape = {
   labels: Labels
-  people: DesignPerson[]
+  people: DesignTeamMember[]
   steps: { name: string; stations: DesignStationInput[] }[]
 }
 
@@ -37,7 +37,7 @@ const newKey = () => `new-${nextKey++}`
 function toDraft(design: Design): DesignDraft {
   return {
     labels: { ...design.labels },
-    people: design.people.map((person) => ({ ...person })),
+    people: design.people.map((teamMember) => ({ ...teamMember })),
     steps: design.steps.map((step) => ({
       key: newKey(),
       name: step.name,
@@ -58,7 +58,10 @@ function toPayload(design: DesignShape): DesignInput {
       piece: design.labels.piece.trim(),
       pieces: design.labels.pieces.trim(),
     },
-    people: design.people.map((person) => ({ id: person.id, name: person.name.trim() })),
+    people: design.people.map((teamMember) => ({
+      id: teamMember.id,
+      name: teamMember.name.trim(),
+    })),
     steps: design.steps.map((step) => ({
       name: step.name.trim(),
       stations: step.stations.map((station) => ({
@@ -109,8 +112,8 @@ export function designProblems(draft: DesignDraft): string[] {
   if (labels.some((label) => label.trim() === "")) {
     problems.push("Give a name to each label.")
   }
-  if (draft.people.some((person) => person.name.trim() === "")) {
-    problems.push("Give a name to each Person.")
+  if (draft.people.some((teamMember) => teamMember.name.trim() === "")) {
+    problems.push("Give a name to each Team Member.")
   }
   if (steps.length === 0) {
     problems.push("The Line needs one step or more.")
@@ -156,9 +159,9 @@ export function designProblems(draft: DesignDraft): string[] {
         problems.push(`${label} needs ${station.minBlueBins} Blue Bins or more.`)
       }
       if (station.people.length === 0) {
-        problems.push(`${label} needs one Person or more.`)
+        problems.push(`${label} needs one Team Member or more.`)
       } else if (!station.people.includes(station.teamLeader)) {
-        problems.push(`Pick a Team Leader for ${label} from its People.`)
+        problems.push(`Pick a Team Leader for ${label} from its Team Members.`)
       }
     }
   })
@@ -237,7 +240,7 @@ export function useDesign() {
     }
   }
 
-  async function addPerson(name: string) {
+  async function addTeamMember(name: string) {
     try {
       const response = await fetch(api("/api/people"), {
         method: "POST",
@@ -247,20 +250,20 @@ export function useDesign() {
       if (!response.ok) {
         throw new Error((await response.text()) || `API answered ${response.status}`)
       }
-      const person = (await response.json()) as DesignPerson
-      saved.value?.people.push({ ...person })
-      draft.value?.people.push({ ...person })
+      const teamMember = (await response.json()) as DesignTeamMember
+      saved.value?.people.push({ ...teamMember })
+      draft.value?.people.push({ ...teamMember })
       return true
     } catch (cause) {
-      error.value = `The Person was not added: ${message(cause)}`
+      error.value = `The Team Member was not added: ${message(cause)}`
       return false
     }
   }
 
-  /** Saved with the other changes. Each Work Station lets the Person go too. */
-  function removePerson(id: string) {
+  /** Saved with the other changes. Each Work Station lets the Team Member go too. */
+  function removeTeamMember(id: string) {
     if (!draft.value) return
-    draft.value.people = draft.value.people.filter((person) => person.id !== id)
+    draft.value.people = draft.value.people.filter((teamMember) => teamMember.id !== id)
     for (const station of steps().flatMap((step) => step.stations)) {
       station.people = station.people.filter((one) => one !== id)
       if (station.teamLeader === id) {
@@ -359,8 +362,8 @@ export function useDesign() {
     load,
     save,
     discard,
-    addPerson,
-    removePerson,
+    addTeamMember,
+    removeTeamMember,
     addStepAfter,
     removeStep,
     canMove,

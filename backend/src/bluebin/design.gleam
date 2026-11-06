@@ -24,8 +24,8 @@ pub type Labels {
   Labels(demand: String, demands: String, piece: String, pieces: String)
 }
 
-pub type Person {
-  Person(id: String, name: String)
+pub type TeamMember {
+  TeamMember(id: String, name: String)
 }
 
 /// `id` is None for a Work Station the designer adds.
@@ -36,7 +36,7 @@ pub type Station {
     branch: Option(String),
     blue_bins: Int,
     team_leader: String,
-    people: List(String),
+    team_members: List(String),
   )
 }
 
@@ -45,7 +45,7 @@ pub type Step {
 }
 
 pub type Design {
-  Design(labels: Labels, people: List(Person), steps: List(Step))
+  Design(labels: Labels, team_members: List(TeamMember), steps: List(Step))
 }
 
 /// What the running flow holds at one Work Station. A locked Work Station holds
@@ -87,7 +87,7 @@ pub fn load(
   connection: sqlight.Connection,
 ) -> Result(#(Design, Dict(String, Held)), Nil) {
   use labels <- result.try(load_labels(connection))
-  use people <- result.try(
+  use team_members <- result.try(
     query(
       connection,
       "select id, name from person where removed_at is null order by rowid",
@@ -95,7 +95,7 @@ pub fn load(
       {
         use id <- decode.field(0, decode.string)
         use name <- decode.field(1, decode.string)
-        decode.success(Person(id:, name:))
+        decode.success(TeamMember(id:, name:))
       },
     ),
   )
@@ -147,7 +147,7 @@ pub fn load(
             branch:,
             blue_bins:,
             team_leader:,
-            people: list.filter_map(members, fn(member) {
+            team_members: list.filter_map(members, fn(member) {
               case member.0 == id {
                 True -> Ok(member.1)
                 False -> Error(Nil)
@@ -181,7 +181,7 @@ pub fn load(
     })
     |> dict.from_list
 
-  Ok(#(Design(labels:, people:, steps:), held))
+  Ok(#(Design(labels:, team_members:, steps:), held))
 }
 
 // --- Check -----------------------------------------------------------------
@@ -303,23 +303,25 @@ pub fn check_change(
   use _ <- result.try(check_structure(wanted.steps))
   use _ <- result.try(check_labels(wanted.labels))
   use _ <- result.try(
-    list.try_each(wanted.people, fn(person) {
-      check_name(person.name, "Each Person needs a name.")
+    list.try_each(wanted.team_members, fn(team_member) {
+      check_name(team_member.name, "Each Team Member needs a name.")
     }),
   )
 
-  let known_people = list.map(current.people, fn(person) { person.id })
-  // A Person left out of `wanted.people` is removed, so no Work Station can keep them.
-  let kept_people = list.map(wanted.people, fn(person) { person.id })
+  let known_team_members =
+    list.map(current.team_members, fn(team_member) { team_member.id })
+  // A Team Member left out of `wanted.team_members` is removed, so no Work Station can keep them.
+  let kept_team_members =
+    list.map(wanted.team_members, fn(team_member) { team_member.id })
   let placed = placed(wanted.steps)
   let current_stations = stations_by_id(current.steps)
   let wanted_ids = list.filter_map(placed, fn(entry) { entry.1 |> id_of })
 
   use _ <- result.try(
-    list.try_each(wanted.people, fn(person) {
-      case list.contains(known_people, person.id) {
+    list.try_each(wanted.team_members, fn(team_member) {
+      case list.contains(known_team_members, team_member.id) {
         True -> Ok(Nil)
-        False -> Error("Add a new Person before you use them.")
+        False -> Error("Add a new Team Member before you use them.")
       }
     }),
   )
@@ -332,7 +334,13 @@ pub fn check_change(
   use _ <- result.try(
     list.try_each(placed, fn(entry) {
       let #(position, station) = entry
-      check_station(station, position, current_stations, held, kept_people)
+      check_station(
+        station,
+        position,
+        current_stations,
+        held,
+        kept_team_members,
+      )
     }),
   )
 
@@ -354,17 +362,19 @@ pub fn check_change(
 
   use _ <- result.try(check_locked_order(placed, held))
 
-  // A Person with work in hand at a Work Station stays in it, so in the Line.
+  // A Team Member with work in hand at a Work Station stays in it, so in the Line.
   use _ <- result.try(
     list.try_each(busy, fn(pair) {
-      let #(station_id, person_id) = pair
+      let #(station_id, team_member_id) = pair
       let stays =
         list.find(placed, fn(entry) { id_of(entry.1) == Ok(station_id) })
-        |> result.map(fn(entry) { list.contains({ entry.1 }.people, person_id) })
+        |> result.map(fn(entry) {
+          list.contains({ entry.1 }.team_members, team_member_id)
+        })
       case stays {
         Ok(False) ->
           Error(
-            name_of(current.people, person_id)
+            name_of(current.team_members, team_member_id)
             <> " has work in hand at "
             <> name_of_station(current_stations, station_id)
             <> " and must stay in it.",
@@ -398,7 +408,7 @@ fn check_station(
   position: Int,
   current: Dict(String, Station),
   held: Dict(String, Held),
-  known_people: List(String),
+  known_team_members: List(String),
 ) -> Result(Nil, String) {
   let label = case string.trim(station.name) {
     "" -> "A Work Station of step " <> int.to_string(position)
@@ -412,23 +422,27 @@ fn check_station(
     True -> Ok(Nil)
     False -> Error(label <> " needs at least one Blue Bin.")
   })
-  use _ <- result.try(case station.people {
-    [] -> Error(label <> " needs at least one Person.")
+  use _ <- result.try(case station.team_members {
+    [] -> Error(label <> " needs at least one Team Member.")
     _ -> Ok(Nil)
   })
   use _ <- result.try(
-    list.try_each(station.people, fn(person) {
-      case list.contains(known_people, person) {
+    list.try_each(station.team_members, fn(team_member) {
+      case list.contains(known_team_members, team_member) {
         True -> Ok(Nil)
         False ->
-          Error(label <> " names a Person who is not in the Line any more.")
+          Error(
+            label <> " names a Team Member who is not in the Line any more.",
+          )
       }
     }),
   )
-  use _ <- result.try(case list.contains(station.people, station.team_leader) {
-    True -> Ok(Nil)
-    False -> Error(label <> " needs a Team Leader among its People.")
-  })
+  use _ <- result.try(
+    case list.contains(station.team_members, station.team_leader) {
+      True -> Ok(Nil)
+      False -> Error(label <> " needs a Team Leader among its Team Members.")
+    },
+  )
   case station.id {
     None -> Ok(Nil)
     Some(id) ->
@@ -491,13 +505,14 @@ fn check_locked_order(
 
 // --- Write -----------------------------------------------------------------
 
-pub fn add_person(
+pub fn add_team_member(
   connection: sqlight.Connection,
   name: String,
-) -> Result(Person, DesignError) {
+) -> Result(TeamMember, DesignError) {
   let trimmed = string.trim(name)
   use _ <- result.try(
-    check_name(trimmed, "A Person needs a name.") |> result.map_error(Invalid),
+    check_name(trimmed, "A Team Member needs a name.")
+    |> result.map_error(Invalid),
   )
   use rows <- result.try(
     query(
@@ -509,22 +524,22 @@ pub fn add_person(
       {
         use id <- decode.field(0, decode.string)
         use name <- decode.field(1, decode.string)
-        decode.success(Person(id:, name:))
+        decode.success(TeamMember(id:, name:))
       },
     )
     |> result.replace_error(StoreFailed),
   )
-  use person <- result.try(
+  use team_member <- result.try(
     list.first(rows) |> result.replace_error(StoreFailed),
   )
   use _ <- result.try(
     changed(connection, [
       #("change", json.string("person_added")),
-      #("person", json.string(person.id)),
-      #("name", json.string(person.name)),
+      #("person", json.string(team_member.id)),
+      #("name", json.string(team_member.name)),
     ]),
   )
-  Ok(person)
+  Ok(team_member)
 }
 
 /// Applies `wanted` in one transaction, or nothing at all.
@@ -587,7 +602,11 @@ fn save_inside(
   )
 
   use _ <- result.try(save_labels(connection, current.labels, wanted.labels))
-  use _ <- result.try(save_people(connection, current.people, wanted.people))
+  use _ <- result.try(save_team_members(
+    connection,
+    current.team_members,
+    wanted.team_members,
+  ))
   let current_stations = stations_by_id(current.steps)
   use _ <- result.try(
     list.try_each(placed(wanted.steps), fn(entry) {
@@ -652,30 +671,30 @@ fn save_labels(
   ])
 }
 
-fn save_people(
+fn save_team_members(
   connection: sqlight.Connection,
-  before: List(Person),
-  wanted: List(Person),
+  before: List(TeamMember),
+  wanted: List(TeamMember),
 ) -> Result(Nil, DesignError) {
   use _ <- result.try(
-    list.filter(before, fn(person) {
-      !list.any(wanted, fn(one) { one.id == person.id })
+    list.filter(before, fn(team_member) {
+      !list.any(wanted, fn(one) { one.id == team_member.id })
     })
-    |> list.try_each(remove_person(connection, _)),
+    |> list.try_each(remove_team_member(connection, _)),
   )
-  list.try_each(wanted, fn(person) {
-    let name = string.trim(person.name)
-    case list.find(before, fn(one) { one.id == person.id }) {
+  list.try_each(wanted, fn(team_member) {
+    let name = string.trim(team_member.name)
+    case list.find(before, fn(one) { one.id == team_member.id }) {
       Ok(found) if found.name != name -> {
         use _ <- result.try(
           run(connection, "update person set name = ?2 where id = ?1", [
-            sqlight.text(person.id),
+            sqlight.text(team_member.id),
             sqlight.text(name),
           ]),
         )
         changed(connection, [
           #("change", json.string("person_renamed")),
-          #("person", json.string(person.id)),
+          #("person", json.string(team_member.id)),
           #("name", json.string(name)),
         ])
       }
@@ -685,13 +704,13 @@ fn save_people(
 }
 
 /// The row stays, so the history keeps the name (F40).
-fn remove_person(
+fn remove_team_member(
   connection: sqlight.Connection,
-  person: Person,
+  team_member: TeamMember,
 ) -> Result(Nil, DesignError) {
   use _ <- result.try(
     run(connection, "delete from station_person where person_id = ?1", [
-      sqlight.text(person.id),
+      sqlight.text(team_member.id),
     ]),
   )
   use _ <- result.try(
@@ -699,13 +718,13 @@ fn remove_person(
       connection,
       "update person set removed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1",
-      [sqlight.text(person.id)],
+      [sqlight.text(team_member.id)],
     ),
   )
   changed(connection, [
     #("change", json.string("person_removed")),
-    #("person", json.string(person.id)),
-    #("name", json.string(person.name)),
+    #("person", json.string(team_member.id)),
+    #("name", json.string(team_member.name)),
   ])
 }
 
@@ -733,7 +752,7 @@ fn add_station(
     |> result.replace_error(StoreFailed),
   )
   use id <- result.try(list.first(rows) |> result.replace_error(StoreFailed))
-  use _ <- result.try(set_people(connection, id, station.people))
+  use _ <- result.try(set_team_members(connection, id, station.team_members))
   // Every Blue Bin of a new Work Station is empty: one Kanban for each (F7).
   use _ <- result.try(send_kanbans(connection, id, station.blue_bins))
   changed(connection, station_payload("station_added", id, position, station))
@@ -753,15 +772,15 @@ fn change_station(
       name: string.trim(wanted.name),
       branch: clean(wanted.branch),
     )
-  let same_people =
-    list.sort(wanted.people, string.compare)
-    == list.sort(before.people, string.compare)
+  let same_team_members =
+    list.sort(wanted.team_members, string.compare)
+    == list.sort(before.team_members, string.compare)
   let same =
     wanted.name == before.name
     && wanted.branch == clean(before.branch)
     && wanted.blue_bins == before.blue_bins
     && wanted.team_leader == before.team_leader
-    && same_people
+    && same_team_members
     && position == held.position
   use <- bool.guard(same, Ok(Nil))
 
@@ -782,9 +801,9 @@ fn change_station(
       ],
     ),
   )
-  use _ <- result.try(case same_people {
+  use _ <- result.try(case same_team_members {
     True -> Ok(Nil)
-    False -> set_people(connection, id, wanted.people)
+    False -> set_team_members(connection, id, wanted.team_members)
   })
   // Kanbans ≤ empty Blue Bins (F7): a new bin brings a Kanban, a removed empty
   // bin takes the newest one back.
@@ -833,22 +852,22 @@ fn remove_station(
   ])
 }
 
-fn set_people(
+fn set_team_members(
   connection: sqlight.Connection,
   station_id: String,
-  people: List(String),
+  team_members: List(String),
 ) -> Result(Nil, DesignError) {
   use _ <- result.try(
     run(connection, "delete from station_person where station_id = ?1", [
       sqlight.text(station_id),
     ]),
   )
-  list.unique(people)
-  |> list.try_each(fn(person) {
+  list.unique(team_members)
+  |> list.try_each(fn(team_member) {
     run(
       connection,
       "insert into station_person (station_id, person_id) values (?1, ?2)",
-      [sqlight.text(station_id), sqlight.text(person)],
+      [sqlight.text(station_id), sqlight.text(team_member)],
     )
   })
 }
@@ -968,7 +987,7 @@ fn station_payload(
     #("branch", json.nullable(clean(station.branch), json.string)),
     #("blueBins", json.int(station.blue_bins)),
     #("teamLeader", json.string(station.team_leader)),
-    #("people", json.array(station.people, json.string)),
+    #("people", json.array(station.team_members, json.string)),
   ]
 }
 
@@ -988,10 +1007,10 @@ pub fn to_json(design: Design, held: Dict(String, Held)) -> Json {
     #("labels", labels_json(design.labels)),
     #(
       "people",
-      json.array(design.people, fn(person) {
+      json.array(design.team_members, fn(team_member) {
         json.object([
-          #("id", json.string(person.id)),
-          #("name", json.string(person.name)),
+          #("id", json.string(team_member.id)),
+          #("name", json.string(team_member.name)),
         ])
       }),
     ),
@@ -1012,7 +1031,7 @@ pub fn to_json(design: Design, held: Dict(String, Held)) -> Json {
                 #("branch", json.nullable(station.branch, json.string)),
                 #("blueBins", json.int(station.blue_bins)),
                 #("teamLeader", json.string(station.team_leader)),
-                #("people", json.array(station.people, json.string)),
+                #("people", json.array(station.team_members, json.string)),
                 #(
                   "locked",
                   json.bool(result.map(found, fn(h) { h.locked }) == Ok(True)),
@@ -1041,10 +1060,10 @@ pub fn decoder() -> decode.Decoder(Design) {
     use pieces <- decode.field("pieces", decode.string)
     decode.success(Labels(demand:, demands:, piece:, pieces:))
   }
-  let person = {
+  let team_member = {
     use id <- decode.field("id", decode.string)
     use name <- decode.field("name", decode.string)
-    decode.success(Person(id:, name:))
+    decode.success(TeamMember(id:, name:))
   }
   let station = {
     use id <- decode.optional_field("id", None, decode.optional(decode.string))
@@ -1056,14 +1075,14 @@ pub fn decoder() -> decode.Decoder(Design) {
     )
     use blue_bins <- decode.field("blueBins", decode.int)
     use team_leader <- decode.field("teamLeader", decode.string)
-    use people <- decode.field("people", decode.list(decode.string))
+    use team_members <- decode.field("people", decode.list(decode.string))
     decode.success(Station(
       id:,
       name:,
       branch:,
       blue_bins:,
       team_leader:,
-      people:,
+      team_members:,
     ))
   }
   let step = {
@@ -1072,9 +1091,9 @@ pub fn decoder() -> decode.Decoder(Design) {
     decode.success(Step(name:, stations:))
   }
   use labels <- decode.field("labels", labels)
-  use people <- decode.field("people", decode.list(person))
+  use team_members <- decode.field("people", decode.list(team_member))
   use steps <- decode.field("steps", decode.list(step))
-  decode.success(Design(labels:, people:, steps:))
+  decode.success(Design(labels:, team_members:, steps:))
 }
 
 // --- Helpers ---------------------------------------------------------------
@@ -1115,10 +1134,10 @@ fn clean(branch: Option(String)) -> Option(String) {
   }
 }
 
-fn name_of(people: List(Person), id: String) -> String {
-  list.find(people, fn(person) { person.id == id })
-  |> result.map(fn(person) { person.name })
-  |> result.unwrap("A Person")
+fn name_of(team_members: List(TeamMember), id: String) -> String {
+  list.find(team_members, fn(team_member) { team_member.id == id })
+  |> result.map(fn(team_member) { team_member.name })
+  |> result.unwrap("A Team Member")
 }
 
 fn name_of_station(stations: Dict(String, Station), id: String) -> String {

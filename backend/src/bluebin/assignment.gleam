@@ -27,7 +27,7 @@ pub type PriorityList {
   PriorityList(
     station_id: String,
     station: String,
-    people: List(Member),
+    team_members: List(Member),
     items: List(Item),
   )
 }
@@ -61,7 +61,7 @@ pub type Next {
 
 pub type View {
   View(
-    person_id: String,
+    team_member_id: String,
     name: String,
     next: Next,
     assignments: List(Assignment),
@@ -70,17 +70,17 @@ pub type View {
 }
 
 pub type ReadError {
-  UnknownPerson
+  UnknownTeamMember
   ReadFailed
 }
 
-pub type Person {
-  Person(id: String, name: String, stations: List(String))
+pub type TeamMember {
+  TeamMember(id: String, name: String, stations: List(String))
 }
 
-pub fn people(
+pub fn team_members(
   connection: sqlight.Connection,
-) -> Result(List(Person), sqlight.Error) {
+) -> Result(List(TeamMember), sqlight.Error) {
   let decoder = {
     use id <- decode.field(0, decode.string)
     use name <- decode.field(1, decode.string)
@@ -102,42 +102,42 @@ pub fn people(
   |> list.filter_map(fn(rows) {
     case rows {
       [#(id, name, _), ..] ->
-        Ok(Person(id:, name:, stations: list.map(rows, fn(row) { row.2 })))
+        Ok(TeamMember(id:, name:, stations: list.map(rows, fn(row) { row.2 })))
       [] -> Error(Nil)
     }
   })
   |> Ok
 }
 
-pub fn people_json(people: List(Person)) -> Json {
-  json.array(people, fn(person) {
+pub fn team_members_json(team_members: List(TeamMember)) -> Json {
+  json.array(team_members, fn(team_member) {
     json.object([
-      #("id", json.string(person.id)),
-      #("name", json.string(person.name)),
-      #("stations", json.array(person.stations, json.string)),
+      #("id", json.string(team_member.id)),
+      #("name", json.string(team_member.name)),
+      #("stations", json.array(team_member.stations, json.string)),
     ])
   })
 }
 
 pub fn load(
   connection: sqlight.Connection,
-  person_id: String,
+  team_member_id: String,
 ) -> Result(View, ReadError) {
-  use name <- result.try(person_name(connection, person_id))
+  use name <- result.try(team_member_name(connection, team_member_id))
   use stations <- result.try(stations(connection) |> read)
   let mine =
     stations
-    |> list.filter(fn(one) { list.contains(one.people, person_id) })
+    |> list.filter(fn(one) { list.contains(one.team_members, team_member_id) })
     |> list.sort(fn(a, b) { nearest_first(a, b) })
-  use assignments <- result.try(assignments(connection, person_id) |> read)
+  use assignments <- result.try(assignments(connection, team_member_id) |> read)
   use lists <- result.try(
     list.try_map(mine, fn(station) {
       use items <- result.try(priority_list(connection, station.id))
-      use people <- result.try(members(connection, station.id))
+      use team_members <- result.try(members(connection, station.id))
       Ok(PriorityList(
         station_id: station.id,
         station: station.name,
-        people:,
+        team_members:,
         items:,
       ))
     })
@@ -150,7 +150,7 @@ pub fn load(
     mine,
     stations,
   ))
-  Ok(View(person_id:, name:, next:, assignments:, lists:))
+  Ok(View(team_member_id:, name:, next:, assignments:, lists:))
 }
 
 fn next_thing(
@@ -228,7 +228,7 @@ pub type Station {
     name: String,
     position: Int,
     branch: Option(String),
-    people: List(String),
+    team_members: List(String),
     free_bins: Int,
     stopped: Bool,
   )
@@ -311,20 +311,20 @@ fn read(found: Result(a, sqlight.Error)) -> Result(a, ReadError) {
   result.replace_error(found, ReadFailed)
 }
 
-fn person_name(
+fn team_member_name(
   connection: sqlight.Connection,
-  person_id: String,
+  team_member_id: String,
 ) -> Result(String, ReadError) {
   let found =
     sqlight.query(
       "select name from person where id = ?1",
       on: connection,
-      with: [sqlight.text(person_id)],
+      with: [sqlight.text(team_member_id)],
       expecting: decode.at([0], decode.string),
     )
   case found {
     Ok([name, ..]) -> Ok(name)
-    Ok([]) -> Error(UnknownPerson)
+    Ok([]) -> Error(UnknownTeamMember)
     Error(_) -> Error(ReadFailed)
   }
 }
@@ -337,7 +337,7 @@ pub fn stations(
     use name <- decode.field(1, decode.string)
     use position <- decode.field(2, decode.int)
     use branch <- decode.field(3, decode.optional(decode.string))
-    use people <- decode.field(4, decode.optional(decode.string))
+    use team_members <- decode.field(4, decode.optional(decode.string))
     use free_bins <- decode.field(5, decode.int)
     use stopped <- decode.field(6, decode.int)
     decode.success(Station(
@@ -345,7 +345,9 @@ pub fn stations(
       name:,
       position:,
       branch:,
-      people: people |> option.map(string.split(_, ",")) |> option.unwrap([]),
+      team_members: team_members
+        |> option.map(string.split(_, ","))
+        |> option.unwrap([]),
       free_bins:,
       stopped: stopped > 0,
     ))
@@ -425,7 +427,7 @@ fn members(
 
 fn assignments(
   connection: sqlight.Connection,
-  person_id: String,
+  team_member_id: String,
 ) -> Result(List(Assignment), sqlight.Error) {
   let repair_decoder = {
     use id <- decode.field(0, decode.string)
@@ -456,7 +458,7 @@ fn assignments(
       where r.assignee = ?1 and r.closed_at is null
       order by r.started_at is null, r.started_at, r.opened_at, r.rowid",
     on: connection,
-    with: [sqlight.text(person_id)],
+    with: [sqlight.text(team_member_id)],
     expecting: repair_decoder,
   ))
   let transform_decoder = {
@@ -480,7 +482,7 @@ fn assignments(
       where p.assignee = ?1 and p.state in ('in_flow', 'paused')
       order by p.state = 'in_flow' desc, w.position desc, p.since, p.rowid",
     on: connection,
-    with: [sqlight.text(person_id)],
+    with: [sqlight.text(team_member_id)],
     expecting: transform_decoder,
   ))
   // Only one Rework runs at a time; the ones after it wait.
@@ -494,14 +496,14 @@ fn assignments(
   Ok(list.append(repairs, pieces))
 }
 
-/// `andons` are those of the Person's Work Stations (DESIGN.md R2).
+/// `andons` are those of the Team Member's Work Stations (DESIGN.md R2).
 pub fn to_json(view: View, andons: Json) -> Json {
   json.object([
     #("andons", andons),
     #(
       "person",
       json.object([
-        #("id", json.string(view.person_id)),
+        #("id", json.string(view.team_member_id)),
         #("name", json.string(view.name)),
       ]),
     ),
@@ -515,7 +517,7 @@ pub fn to_json(view: View, andons: Json) -> Json {
           #("name", json.string(one.station)),
           #(
             "people",
-            json.array(one.people, fn(member) {
+            json.array(one.team_members, fn(member) {
               json.object([
                 #("id", json.string(member.id)),
                 #("name", json.string(member.name)),

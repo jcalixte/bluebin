@@ -13,7 +13,7 @@ import sqlight
 /// What calls for attention now. Computed on each read from the current state,
 /// the log and the Working Calendar; nothing here is stored.
 pub type Andon {
-  /// A Person stopped the Work Station; its Team Leader closes it (F42).
+  /// A Team Member stopped the Work Station; its Team Leader closes it (F42).
   Stop(
     station_id: String,
     station: String,
@@ -38,7 +38,7 @@ pub type Stale {
 }
 
 /// A Work Station that holds up the flow (F10, F29). `capacity` is the
-/// average Touch Time of its last passes divided by its People, in hours;
+/// average Touch Time of its last passes divided by its Team Members, in hours;
 /// `slower` says it is above the Takt Time of the Line.
 pub type Bottleneck {
   Bottleneck(
@@ -210,7 +210,9 @@ pub fn bottlenecks(
     let capacity =
       measured
       |> list.find(fn(one) { one.id == station.id })
-      |> result.try(fn(one) { capacity_hours(one, list.length(station.people)) })
+      |> result.try(fn(one) {
+        capacity_hours(one, list.length(station.team_members))
+      })
       |> option.from_result
     let slower = case capacity {
       Some(hours) -> takt_hours >. 0.0 && hours >. takt_hours
@@ -231,12 +233,12 @@ pub fn bottlenecks(
   |> Ok
 }
 
-/// Average Touch Time per Piece, divided by the People who share the work.
+/// Average Touch Time per Piece, divided by the Team Members who share the work.
 pub fn capacity_hours(
   station: measures.StationMeasure,
-  people: Int,
+  team_members: Int,
 ) -> Result(Float, Nil) {
-  case station.passes, people {
+  case station.passes, team_members {
     [], _ | _, 0 -> Error(Nil)
     passes, _ -> {
       let touch = list.fold(passes, 0, fn(total, span) { total + span.touch })
@@ -244,13 +246,13 @@ pub fn capacity_hours(
         int.to_float(touch)
         /. int.to_float(list.length(passes))
         /. 3600.0
-        /. int.to_float(people),
+        /. int.to_float(team_members),
       )
     }
   }
 }
 
-/// The Andons a Person sees on their own screen: those of their Work Stations
+/// The Andons a Team Member sees on their own screen: those of their Work Stations
 /// only (DESIGN.md R2).
 pub fn of_stations(andons: List(Andon), stations: List(String)) -> List(Andon) {
   list.filter(andons, fn(andon) { list.contains(stations, andon.station_id) })

@@ -62,8 +62,8 @@ never creates a file. The SPA keeps the Line in its URL,
 `/lines/<id>/<view>`, and opens the last one used at `/`.
 
 Only members of the authentik group `bluebin-users` get in. **Reset…** acts on
-the open Line only: demo data, or one Work Station and one Person to
-rename in Design.
+the open Line only: demo data, or one Work Station and one Team Member
+to rename in Design.
 
 <!-- docs:start -->
 

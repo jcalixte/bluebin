@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue"
 import { maxNameLength } from "../composables/useDesign"
-import type { DesignPerson } from "../types"
+import type { DesignTeamMember } from "../types"
 
-const people = defineModel<DesignPerson[]>({ required: true })
+const teamMembers = defineModel<DesignTeamMember[]>({ required: true })
 
 const props = defineProps<{ add: (name: string) => Promise<boolean> }>()
 
@@ -29,31 +29,31 @@ async function submit() {
 <template>
   <div class="card border border-base-300 bg-base-100 shadow-sm">
     <div class="card-body gap-4 p-5">
-      <h3 class="card-title text-base">People</h3>
+      <h3 class="card-title text-base">Team Members</h3>
       <p class="text-sm opacity-70">
-        A new Person is added now. A changed name or a removed Person is saved with the other
-        changes.
+        A new Team Member is added now. A changed name or a removed Team Member is saved with the
+        other changes.
       </p>
 
-      <p v-if="people.length === 0" class="text-sm opacity-70">No Person yet.</p>
+      <p v-if="teamMembers.length === 0" class="text-sm opacity-70">No Team Member yet.</p>
       <ul v-else class="flex flex-col gap-2">
-        <li v-for="(person, index) in people" :key="person.id" class="flex gap-2">
+        <li v-for="(teamMember, index) in teamMembers" :key="teamMember.id" class="flex gap-2">
           <label class="min-w-0 flex-1">
-            <span class="sr-only">Name of Person {{ index + 1 }}</span>
+            <span class="sr-only">Name of Team Member {{ index + 1 }}</span>
             <input
-              v-model="person.name"
+              v-model="teamMember.name"
               type="text"
               class="input input-sm w-full"
-              :class="person.name.trim() === '' ? 'input-warning' : ''"
+              :class="teamMember.name.trim() === '' ? 'input-warning' : ''"
               :maxlength="maxNameLength"
             />
           </label>
           <button
             type="button"
             class="btn btn-ghost btn-sm shrink-0"
-            title="Remove this Person from the Line and from each Work Station"
-            :aria-label="`Remove ${person.name || `Person ${index + 1}`}`"
-            @click="$emit('remove', person.id)"
+            title="Remove this Team Member from the Line and from each Work Station"
+            :aria-label="`Remove ${teamMember.name || `Team Member ${index + 1}`}`"
+            @click="$emit('remove', teamMember.id)"
           >
             Remove
           </button>
@@ -62,7 +62,7 @@ async function submit() {
 
       <form class="flex gap-2" @submit.prevent="submit">
         <label class="min-w-0 flex-1">
-          <span class="sr-only">Name of the new Person</span>
+          <span class="sr-only">Name of the new Team Member</span>
           <input
             v-model="name"
             type="text"
@@ -73,7 +73,7 @@ async function submit() {
         </label>
         <button type="submit" class="btn btn-sm" :disabled="adding || name.trim() === ''">
           <span v-if="adding" class="loading loading-spinner loading-xs" />
-          Add a Person
+          Add a Team Member
         </button>
       </form>
     </div>

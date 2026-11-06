@@ -40,8 +40,8 @@ pub type InProgress {
     id: String,
     piece: String,
     demand: String,
-    person: Option(String),
-    person_id: Option(String),
+    team_member: Option(String),
+    team_member_id: Option(String),
     paused: Bool,
   )
 }
@@ -146,8 +146,8 @@ fn station_json(
         #("id", json.string(piece.id)),
         #("piece", json.string(piece.piece)),
         #("demand", json.string(piece.demand)),
-        #("person", json.nullable(piece.person, json.string)),
-        #("personId", json.nullable(piece.person_id, json.string)),
+        #("person", json.nullable(piece.team_member, json.string)),
+        #("personId", json.nullable(piece.team_member_id, json.string)),
         #("paused", json.bool(piece.paused)),
       ])
     })
@@ -342,16 +342,16 @@ fn query_in_progress(
     use id <- decode.field(1, decode.string)
     use piece <- decode.field(2, decode.string)
     use demand <- decode.field(3, decode.string)
-    use person <- decode.field(4, decode.optional(decode.string))
+    use team_member <- decode.field(4, decode.optional(decode.string))
     use paused <- decode.field(5, decode.int)
-    use person_id <- decode.field(6, decode.optional(decode.string))
+    use team_member_id <- decode.field(6, decode.optional(decode.string))
     decode.success(InProgress(
       station_id:,
       id:,
       piece:,
       demand:,
-      person:,
-      person_id:,
+      team_member:,
+      team_member_id:,
       paused: paused > 0,
     ))
   }

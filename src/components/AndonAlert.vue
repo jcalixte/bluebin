@@ -3,8 +3,8 @@ import type { Andon } from "../types"
 
 defineProps<{
   andons: Andon[]
-  /** The Person who looks: they close the stops they are Team Leader of. */
-  personId?: string
+  /** The Team Member who looks: they close the stops they are Team Leader of. */
+  teamMemberId?: string
   busy?: boolean
 }>()
 
@@ -37,7 +37,7 @@ function time(at: string) {
             >
           </span>
           <button
-            v-if="personId && personId === andon.teamLeaderId"
+            v-if="teamMemberId && teamMemberId === andon.teamLeaderId"
             class="btn btn-xs ml-auto"
             :disabled="busy"
             @click="$emit('close', andon.station)"

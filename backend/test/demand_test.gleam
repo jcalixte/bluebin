@@ -309,14 +309,14 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
     == "From the Backlog"
 
   let assert Ok(#(found, _)) = design.load(connection)
-  let assert [person] = found.people
-  assert person.name == "Person 1"
+  let assert [team_member] = found.team_members
+  assert team_member.name == "Team Member 1"
   let assert [design.Step(stations: [station], ..)] = found.steps
   assert station.name == "Work Station 1"
   assert station.blue_bins == 1
   assert station.branch == None
-  assert station.team_leader == person.id
-  assert station.people == [person.id]
+  assert station.team_leader == team_member.id
+  assert station.team_members == [team_member.id]
   assert count(connection, "select count(*) from kanban") == 1
   assert count(
       connection,

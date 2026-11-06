@@ -533,7 +533,7 @@ pub fn a_repaired_rework_lets_the_work_station_pull_again_test() {
 
 pub fn finishing_a_piece_records_who_transformed_it_test() {
   use connection <- with_seeded_database()
-  // Karim is a Person of iOS, not of Web.
+  // Karim is a Team Member of iOS, not of Web.
   let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
   let assert Ok(_) = flow.pull(connection, "ws-web", Some("pe-karim"), None)
   assert count(
@@ -603,22 +603,25 @@ fn assignee(
   table: String,
   id: String,
 ) -> String {
-  let assert Ok([person]) =
+  let assert Ok([team_member]) =
     sqlight.query(
       "select coalesce(assignee, '') from " <> table <> " where id = ?1",
       on: connection,
       with: [sqlight.text(id)],
       expecting: decode.at([0], decode.string),
     )
-  person
+  team_member
 }
 
-fn next_of(connection: sqlight.Connection, person: String) -> assignment.Next {
-  let assert Ok(view) = assignment.load(connection, person)
+fn next_of(
+  connection: sqlight.Connection,
+  team_member: String,
+) -> assignment.Next {
+  let assert Ok(view) = assignment.load(connection, team_member)
   view.next
 }
 
-pub fn a_person_repairs_their_rework_before_pulling_test() {
+pub fn a_team_member_repairs_their_rework_before_pulling_test() {
   use connection <- with_seeded_database()
   // Alice holds the seeded Rework.
   assert flow.pull(connection, "ws-ios", Some("pe-alice"), None)
@@ -655,13 +658,13 @@ pub fn a_new_piece_waits_behind_the_one_in_hand_test() {
 
 fn pieces_of(
   connection: sqlight.Connection,
-  person: String,
+  team_member: String,
   station: String,
   state: String,
 ) -> Int {
   count(
     connection,
-    "select count(*) from piece where assignee = '" <> person <> "'
+    "select count(*) from piece where assignee = '" <> team_member <> "'
        and station_id = '" <> station <> "' and state = '" <> state <> "'",
   )
 }
@@ -734,7 +737,7 @@ pub fn a_second_rework_waits_behind_the_first_test() {
     == 1
 }
 
-pub fn a_piece_in_hand_goes_to_another_person_of_the_work_station_test() {
+pub fn a_piece_in_hand_goes_to_another_team_member_of_the_work_station_test() {
   use connection <- with_seeded_database()
   let assert Ok(handed) =
     flow.reassign(
@@ -743,7 +746,7 @@ pub fn a_piece_in_hand_goes_to_another_person_of_the_work_station_test() {
       "p-checkout-8-web",
       "pe-lila",
     )
-  assert handed.person == "Lila"
+  assert handed.team_member == "Lila"
   assert assignee(connection, "piece", "p-checkout-8-web") == "pe-lila"
   // Karim is not of Web.
   assert flow.reassign(
@@ -822,7 +825,7 @@ pub fn a_rework_nobody_repairs_comes_before_any_kanban_test() {
     next_of(connection, "pe-karim")
 }
 
-pub fn without_a_kanban_a_person_helps_downstream_test() {
+pub fn without_a_kanban_a_team_member_helps_downstream_test() {
   use connection <- with_seeded_database()
   // QA iOS waits on the seeded Rework it raised.
   exec(connection, "delete from kanban where station_id = 'ws-ios'")
@@ -830,16 +833,16 @@ pub fn without_a_kanban_a_person_helps_downstream_test() {
     next_of(connection, "pe-karim")
 }
 
-pub fn with_nothing_to_take_or_help_a_person_waits_test() {
+pub fn with_nothing_to_take_or_help_a_team_member_waits_test() {
   use connection <- with_seeded_database()
   // Tom's Kanban at QA Web has no Piece upstream, and nothing downstream of
   // his Work Stations holds up the flow.
   assert next_of(connection, "pe-tom") == assignment.Wait
   assert assignment.load(connection, "pe-nobody")
-    == Error(assignment.UnknownPerson)
+    == Error(assignment.UnknownTeamMember)
 }
 
-pub fn the_person_payload_carries_the_shape_the_screen_reads_test() {
+pub fn the_team_member_payload_carries_the_shape_the_screen_reads_test() {
   use connection <- with_seeded_database()
   let assert Ok(view) = assignment.load(connection, "pe-alice")
   let text =
@@ -847,11 +850,11 @@ pub fn the_person_payload_carries_the_shape_the_screen_reads_test() {
   assert string.contains(text, "\"next\":{\"kind\":\"continue\"")
   assert string.contains(text, "\"kind\":\"rework\",\"id\":\"rw-1\"")
   assert string.contains(text, "\"priorityLists\":[{\"station\":\"ws-ios\"")
-  let assert Ok(people) = assignment.people(connection)
+  let assert Ok(team_members) = assignment.team_members(connection)
   // Nearest to production first.
   assert list.contains(
-    people,
-    assignment.Person(id: "pe-marc", name: "Marc", stations: [
+    team_members,
+    assignment.TeamMember(id: "pe-marc", name: "Marc", stations: [
       "Tech Conception", "Analysis",
     ]),
   )
@@ -1205,7 +1208,7 @@ pub fn a_stopped_work_station_holds_one_andon_test() {
   assert count(connection, "select count(*) from andon") == 1
 }
 
-pub fn a_person_not_of_the_work_station_is_not_recorded_as_raising_test() {
+pub fn a_team_member_not_of_the_work_station_is_not_recorded_as_raising_test() {
   use connection <- with_seeded_database()
   let assert Ok(Nil) = flow.raise_andon(connection, "ws-web", Some("pe-tom"))
   let assert [andon.Stop(raised_by: None, ..)] = andons_now(connection)
@@ -1306,7 +1309,7 @@ pub fn a_new_event_freshens_a_stale_assignment_test() {
   let assert Ok(#([], _)) = andon.stale(connection, always_working, now)
 }
 
-pub fn capacity_is_the_average_touch_time_shared_by_the_people_test() {
+pub fn capacity_is_the_average_touch_time_shared_by_the_team_members_test() {
   let station =
     measures.StationMeasure(
       id: "ws-web",
@@ -1325,7 +1328,7 @@ pub fn capacity_is_the_average_touch_time_shared_by_the_people_test() {
       pulls: 2,
       deviations: 0,
     )
-  // 3 hours a Piece on average, shared by 2 People.
+  // 3 hours a Piece on average, shared by 2 Team Members.
   assert andon.capacity_hours(station, 2) == Ok(1.5)
   assert andon.capacity_hours(station, 0) == Error(Nil)
   assert andon.capacity_hours(measures.StationMeasure(..station, passes: []), 2)

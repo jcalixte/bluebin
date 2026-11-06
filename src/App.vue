@@ -137,8 +137,8 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             Load the demo data
           </button>
           <p class="mt-2 text-sm opacity-80">
-            Example {{ labels.demands }}, {{ labels.pieces }}, People and Work Stations, to try
-            Bluebin.
+            Example {{ labels.demands }}, {{ labels.pieces }}, Team Members and Work Stations, to
+            try Bluebin.
           </p>
         </div>
         <div class="rounded-box border border-base-300 p-4">
@@ -146,9 +146,9 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             Start empty
           </button>
           <p class="mt-2 text-sm opacity-80">
-            Removes every {{ labels.demand }}, {{ labels.piece }}, Person and Work Station. Keeps
-            the Working Calendar and the labels. Leaves one Work Station and one Person to rename in
-            Design.
+            Removes every {{ labels.demand }}, {{ labels.piece }}, Team Member and Work Station.
+            Keeps the Working Calendar and the labels. Leaves one Work Station and one Team Member
+            to rename in Design.
           </p>
         </div>
       </div>

@@ -85,7 +85,7 @@ fn release_step() -> Step {
       branch: None,
       blue_bins: 2,
       team_leader: "pe-ines",
-      people: ["pe-ines"],
+      team_members: ["pe-ines"],
     ),
   ])
 }
@@ -98,7 +98,7 @@ fn trunk(name: String) -> Step {
       branch: None,
       blue_bins: 1,
       team_leader: "pe-ines",
-      people: ["pe-ines"],
+      team_members: ["pe-ines"],
     ),
   ])
 }
@@ -113,7 +113,7 @@ fn split(name: String, branches: List(String)) -> Step {
         branch: Some(branch),
         blue_bins: 1,
         team_leader: "pe-ines",
-        people: ["pe-ines"],
+        team_members: ["pe-ines"],
       )
     }),
   )
@@ -195,12 +195,12 @@ pub fn saving_the_same_design_changes_nothing_test() {
   assert changes(connection) == 0
 }
 
-pub fn the_order_of_the_people_is_not_a_change_test() {
+pub fn the_order_of_the_team_members_is_not_a_change_test() {
   use connection <- with_seeded_database()
   let wanted =
     current(connection)
     |> change_station("ws-analysis", fn(s) {
-      Station(..s, people: list.reverse(s.people))
+      Station(..s, team_members: list.reverse(s.team_members))
     })
   let assert Ok(_) = design.save(connection, wanted)
   assert changes(connection) == 0
@@ -307,17 +307,17 @@ pub fn a_blue_bin_that_holds_a_piece_cannot_go_test() {
   let assert Error(Invalid(_)) = design.save(connection, wanted)
 }
 
-pub fn a_person_with_work_in_hand_stays_in_the_work_station_test() {
+pub fn a_team_member_with_work_in_hand_stays_in_the_work_station_test() {
   use connection <- with_seeded_database()
   let wanted =
     current(connection)
     |> change_station("ws-analysis", fn(s) {
-      Station(..s, people: ["pe-ines"], team_leader: "pe-ines")
+      Station(..s, team_members: ["pe-ines"], team_leader: "pe-ines")
     })
   assert refused(design.save(connection, wanted), "work in hand")
 }
 
-pub fn the_team_leader_is_one_of_the_people_test() {
+pub fn the_team_leader_is_one_of_the_team_members_test() {
   use connection <- with_seeded_database()
   let wanted =
     current(connection)
@@ -358,26 +358,32 @@ pub fn the_demo_reset_puts_back_the_labels_test() {
   assert design.load_labels(connection) == Ok(before.labels)
 }
 
-pub fn a_new_person_can_join_a_work_station_test() {
+pub fn a_new_team_member_can_join_a_work_station_test() {
   use connection <- with_seeded_database()
-  let assert Ok(person) = design.add_person(connection, "  Zoé ")
-  assert person.name == "Zoé"
+  let assert Ok(team_member) = design.add_team_member(connection, "  Zoé ")
+  assert team_member.name == "Zoé"
   let wanted =
     current(connection)
     |> change_station("ws-uat", fn(s) {
-      Station(..s, people: [person.id, ..s.people], team_leader: person.id)
+      Station(
+        ..s,
+        team_members: [team_member.id, ..s.team_members],
+        team_leader: team_member.id,
+      )
     })
   let assert Ok(_) = design.save(connection, wanted)
   assert count(connection, "select count(*) from work_station
-        where id = 'ws-uat' and team_leader = '" <> person.id <> "'") == 1
-  assert refused(design.add_person(connection, " "), "name")
+        where id = 'ws-uat' and team_leader = '" <> team_member.id <> "'") == 1
+  assert refused(design.add_team_member(connection, " "), "name")
 }
 
-fn without_person(wanted: Design, id: String) -> Design {
+fn without_team_member(wanted: Design, id: String) -> Design {
   let wanted =
     Design(
       ..wanted,
-      people: list.filter(wanted.people, fn(person) { person.id != id }),
+      team_members: list.filter(wanted.team_members, fn(team_member) {
+        team_member.id != id
+      }),
     )
   Design(
     ..wanted,
@@ -387,7 +393,9 @@ fn without_person(wanted: Design, id: String) -> Design {
         stations: list.map(step.stations, fn(station) {
           Station(
             ..station,
-            people: list.filter(station.people, fn(person) { person != id }),
+            team_members: list.filter(station.team_members, fn(team_member) {
+              team_member != id
+            }),
           )
         }),
       )
@@ -395,11 +403,13 @@ fn without_person(wanted: Design, id: String) -> Design {
   )
 }
 
-pub fn a_person_with_no_work_in_hand_can_go_test() {
+pub fn a_team_member_with_no_work_in_hand_can_go_test() {
   use connection <- with_seeded_database()
-  let wanted = current(connection) |> without_person("pe-karim")
+  let wanted = current(connection) |> without_team_member("pe-karim")
   let assert Ok(saved) = design.save(connection, wanted)
-  assert !list.any(saved.people, fn(person) { person.id == "pe-karim" })
+  assert !list.any(saved.team_members, fn(team_member) {
+    team_member.id == "pe-karim"
+  })
   assert current(connection) == saved
   assert count(
       connection,
@@ -421,20 +431,22 @@ pub fn a_person_with_no_work_in_hand_can_go_test() {
     == 1
 }
 
-pub fn a_removed_person_cannot_stay_in_a_work_station_test() {
+pub fn a_removed_team_member_cannot_stay_in_a_work_station_test() {
   use connection <- with_seeded_database()
   let before = current(connection)
   let wanted =
     Design(
       ..before,
-      people: list.filter(before.people, fn(person) { person.id != "pe-karim" }),
+      team_members: list.filter(before.team_members, fn(team_member) {
+        team_member.id != "pe-karim"
+      }),
     )
   assert refused(design.save(connection, wanted), "not in the Line any more")
   assert current(connection) == before
 }
 
-pub fn a_person_with_work_in_hand_cannot_go_test() {
+pub fn a_team_member_with_work_in_hand_cannot_go_test() {
   use connection <- with_seeded_database()
-  let wanted = current(connection) |> without_person("pe-marc")
+  let wanted = current(connection) |> without_team_member("pe-marc")
   assert refused(design.save(connection, wanted), "work in hand")
 }

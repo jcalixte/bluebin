@@ -1,38 +1,40 @@
 import { onMounted, ref, watch, type Ref } from "vue"
 import { api, postAction } from "../api"
-import type { FlowConfirm, Person, PersonView } from "../types"
+import type { FlowConfirm, TeamMember, TeamMemberView } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 
-export function useNextThing(personId: Ref<string>) {
-  const people = ref<Person[]>([])
-  const view = ref<PersonView | null>(null)
+export function useNextThing(teamMemberId: Ref<string>) {
+  const teamMembers = ref<TeamMember[]>([])
+  const view = ref<TeamMemberView | null>(null)
   const error = ref<string | null>(null)
   const loading = ref(true)
 
-  async function loadPeople() {
+  async function loadTeamMembers() {
     const response = await fetch(api("/api/people"))
     if (!response.ok) {
       throw new Error(`API answered ${response.status}`)
     }
-    people.value = (await response.json()) as Person[]
+    teamMembers.value = (await response.json()) as TeamMember[]
   }
 
   async function load() {
     loading.value = true
     error.value = null
     try {
-      if (people.value.length === 0) {
-        await loadPeople()
+      if (teamMembers.value.length === 0) {
+        await loadTeamMembers()
       }
-      if (personId.value === "") {
+      if (teamMemberId.value === "") {
         view.value = null
         return
       }
-      const response = await fetch(api(`/api/people/${encodeURIComponent(personId.value)}/next`))
+      const response = await fetch(
+        api(`/api/people/${encodeURIComponent(teamMemberId.value)}/next`),
+      )
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
-      view.value = (await response.json()) as PersonView
+      view.value = (await response.json()) as TeamMemberView
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
@@ -49,27 +51,27 @@ export function useNextThing(personId: Ref<string>) {
   }
 
   const pull = (station: string, reason?: string) =>
-    act("/api/pull", { station, person: personId.value, reason })
+    act("/api/pull", { station, person: teamMemberId.value, reason })
 
   const finish = (station: string, piece: string, reason?: string) =>
     act("/api/finish", { station, piece, reason })
 
   const repair = (rework: string) => act("/api/rework/repair", { rework })
 
-  const assign = (kind: "piece" | "rework", id: string, person: string) =>
-    act("/api/assign", { kind, id, person })
+  const assign = (kind: "piece" | "rework", id: string, teamMember: string) =>
+    act("/api/assign", { kind, id, person: teamMember })
 
-  const raiseAndon = (station: string) => act("/api/andon", { station, person: personId.value })
+  const raiseAndon = (station: string) => act("/api/andon", { station, person: teamMemberId.value })
 
   const closeAndon = (station: string) =>
-    act("/api/andon/close", { station, person: personId.value })
+    act("/api/andon/close", { station, person: teamMemberId.value })
 
-  watch(personId, load)
+  watch(teamMemberId, load)
   onMounted(load)
   useLiveUpdates(load)
 
   return {
-    people,
+    teamMembers,
     view,
     error,
     loading,

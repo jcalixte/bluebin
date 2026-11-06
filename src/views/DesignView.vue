@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import DesignPeopleCard from "../components/DesignPeopleCard.vue"
+import DesignTeamMembersCard from "../components/DesignTeamMembersCard.vue"
 import DesignStationCard from "../components/DesignStationCard.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
@@ -17,8 +17,8 @@ const {
   load,
   save,
   discard,
-  addPerson,
-  removePerson,
+  addTeamMember,
+  removeTeamMember,
   addStepAfter,
   removeStep,
   canMove,
@@ -78,7 +78,7 @@ function confirmDiscard() {
       <div>
         <h2 class="text-xl font-semibold">Design</h2>
         <p class="text-sm opacity-70">
-          Change the steps, Work Stations, People and labels. Nothing changes until you save.
+          Change the steps, Work Stations, Team Members and labels. Nothing changes until you save.
         </p>
       </div>
       <div v-if="draft" class="flex flex-wrap items-center gap-3">
@@ -216,7 +216,7 @@ function confirmDiscard() {
               v-for="(station, stationIndex) in step.stations"
               :key="station.key"
               v-model="step.stations[stationIndex]"
-              :people="draft.people"
+              :team-members="draft.people"
               @remove="removeStation(index, stationIndex)"
             />
 
@@ -231,7 +231,11 @@ function confirmDiscard() {
       </div>
 
       <div class="grid gap-6 xl:grid-cols-3">
-        <DesignPeopleCard v-model="draft.people" :add="addPerson" @remove="removePerson" />
+        <DesignTeamMembersCard
+          v-model="draft.people"
+          :add="addTeamMember"
+          @remove="removeTeamMember"
+        />
 
         <div class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body gap-4 p-5">

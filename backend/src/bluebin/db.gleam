@@ -277,7 +277,7 @@ update line_label set name = 'Line' where name = 'Value Stream';
 update flow_event set kind = 'line_changed' where kind = 'stream_changed';
 "
 
-/// A Person removed in Design keeps their row, so the history still shows
+/// A Team Member removed in Design keeps their row, so the history still shows
 /// their name. A new nullable column, so the old code still runs.
 const schema_v14 = "
 alter table person add column removed_at text;
@@ -619,7 +619,7 @@ pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   seed(connection)
 }
 
-/// Starts a Line from scratch: no Demand, Piece or history, one Person
+/// Starts a Line from scratch: no Demand, Piece or history, one Team Member
 /// in one Work Station. The Working Calendar and the labels stay.
 pub fn reset_empty(
   connection: sqlight.Connection,
@@ -670,7 +670,7 @@ update line_label
 /// The one Blue Bin is empty, so the Work Station holds its one Kanban.
 const start_empty_sql = "
 insert into person (id, name)
-values ('pe-' || lower(hex(randomblob(6))), 'Person 1');
+values ('pe-' || lower(hex(randomblob(6))), 'Team Member 1');
 
 insert into work_station (id, name, position, branch, blue_bins, team_leader)
 select 'ws-' || lower(hex(randomblob(6))), 'Work Station 1', 1, null, 1, id

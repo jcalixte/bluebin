@@ -121,7 +121,7 @@ async function saveName() {
         {{ naming === "create" ? "New Line" : "Rename this Line" }}
       </h3>
       <p v-if="naming === 'create'" class="py-2 text-sm opacity-80">
-        It starts empty, with one Work Station and one Person to rename in Design. The other Value
+        It starts empty, with one Work Station and one Team Member to rename in Design. The other
         Lines do not change.
       </p>
       <label class="floating-label mt-4 block">

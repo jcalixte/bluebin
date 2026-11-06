@@ -8,21 +8,21 @@ import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
 import type { Assignment, FlowConfirm, NextThing } from "../types"
 
-/** People differ from one Line to the next. */
+/** Team Members differ from one Line to the next. */
 const storageKey = `bluebin.person.${lineId}`
-const personId = ref(
+const teamMemberId = ref(
   new URLSearchParams(location.search).get("person") ?? localStorage.getItem(storageKey) ?? "",
 )
 
-watch(personId, (id) => {
+watch(teamMemberId, (id) => {
   localStorage.setItem(storageKey, id)
   const url = new URL(location.href)
   url.searchParams.set("person", id)
   history.replaceState(null, "", url)
 })
 
-const { people, view, error, loading, pull, finish, repair, assign, raiseAndon, closeAndon } =
-  useNextThing(personId)
+const { teamMembers, view, error, loading, pull, finish, repair, assign, raiseAndon, closeAndon } =
+  useNextThing(teamMemberId)
 
 function stopped(station: string) {
   return (view.value?.andons ?? []).some((one) => one.kind === "stop" && one.station === station)
@@ -37,14 +37,14 @@ function handOverTo(assignment: Assignment) {
   return (
     view.value?.priorityLists
       .find((list) => list.station === assignment.station)
-      ?.people.filter((one) => one.id !== personId.value) ?? []
+      ?.people.filter((one) => one.id !== teamMemberId.value) ?? []
   )
 }
 
 function handOver(assignment: Assignment, event: Event) {
-  const person = (event.target as HTMLSelectElement).value
-  if (person !== "") {
-    void run(() => assign(assignment.kind, assignment.id, person))
+  const teamMember = (event.target as HTMLSelectElement).value
+  if (teamMember !== "") {
+    void run(() => assign(assignment.kind, assignment.id, teamMember))
   }
 }
 
@@ -58,7 +58,7 @@ function doing(now: NextThing): (reason?: string) => Promise<FlowConfirm | null>
           ? repair(now.assignment.id)
           : finish(now.assignment.station, now.assignment.id, reason)
       case "take_rework":
-        return assign("rework", now.rework, personId.value)
+        return assign("rework", now.rework, teamMemberId.value)
       case "take_kanban":
         return pull(now.station, reason)
       default:
@@ -160,9 +160,9 @@ function since(at: string) {
       </div>
       <label class="flex items-center gap-3">
         <span class="text-xs font-semibold uppercase tracking-wide opacity-70">I am</span>
-        <select v-model="personId" class="select select-bordered h-11 w-auto min-w-56">
+        <select v-model="teamMemberId" class="select select-bordered h-11 w-auto min-w-56">
           <option value="" disabled>Pick your name</option>
-          <option v-for="one in people" :key="one.id" :value="one.id">
+          <option v-for="one in teamMembers" :key="one.id" :value="one.id">
             {{ one.name }} · {{ one.stations.join(", ") }}
           </option>
         </select>
@@ -181,7 +181,7 @@ function since(at: string) {
     </div>
 
     <p
-      v-else-if="personId === ''"
+      v-else-if="teamMemberId === ''"
       class="rounded-box border border-dashed border-base-content/30 p-8 text-center opacity-70"
     >
       Pick your name above to see your next thing.
@@ -190,7 +190,7 @@ function since(at: string) {
     <template v-else-if="view && next">
       <AndonAlert
         :andons="view.andons"
-        :person-id="personId"
+        :team-member-id="teamMemberId"
         :busy="busy"
         @close="(station) => run(() => closeAndon(station))"
       />
@@ -347,8 +347,8 @@ function since(at: string) {
                 v-if="handOverTo(one).length > 0"
                 class="select select-bordered select-sm ml-auto w-40"
                 :disabled="busy"
-                :aria-label="`Hand ${one.piece} over to another Person`"
-                title="Hand this Assignment to another Person of the Work Station"
+                :aria-label="`Hand ${one.piece} over to another Team Member`"
+                title="Hand this Assignment to another Team Member of the Work Station"
                 @change="handOver(one, $event)"
               >
                 <option value="" selected>Hand over to…</option>
