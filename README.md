@@ -73,5 +73,7 @@ rename in Design.
 - [DESIGN.md](./DESIGN.md) — the QFD design: goals, functions, components and trade-offs
 - [ADR-0001](./docs/adr/0001-pieces-never-move-backward.md) — a Piece never moves backward; Rework happens where the defect is found
 - [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) — flow event log and current state, written in one transaction
+- [ADR-0003](./docs/adr/0003-link-team-members-to-accounts-by-email.md) — Team Members link to Accounts by email, only when SSO is on
+- [ADR-0004](./docs/adr/0004-account-links-live-in-one-shared-accounts-db.md) — Accounts and their links live in one shared accounts.db, outside the Line files
 
 <!-- docs:end -->
