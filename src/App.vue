@@ -2,9 +2,11 @@
 import { onBeforeUnmount, ref } from "vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
+import DesignView from "./views/DesignView.vue"
 import MeasuresView from "./views/MeasuresView.vue"
 import NextThingView from "./views/NextThingView.vue"
 import ValueStreamView from "./views/ValueStreamView.vue"
+import { useLabels } from "./composables/useLabels"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
@@ -12,9 +14,12 @@ const views = [
   { id: "value-stream", label: "Value Stream", path: "/value-stream" },
   { id: "next", label: "My next thing", path: "/next" },
   { id: "measures", label: "Measures", path: "/measures" },
+  { id: "design", label: "Design", path: "/design" },
 ] as const
 
 type View = (typeof views)[number]
+
+const { labels } = useLabels()
 
 function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
@@ -76,7 +81,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
               :aria-current="current.id === view.id ? 'page' : undefined"
               @click.exact.prevent="open(view)"
             >
-              {{ view.label }}
+              {{ view.id === "demands" ? labels.demands : view.label }}
             </a>
           </nav>
           <button
@@ -97,6 +102,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
       <BacklogView v-else-if="current.id === 'backlog'" />
       <ValueStreamView v-else-if="current.id === 'value-stream'" />
       <MeasuresView v-else-if="current.id === 'measures'" />
+      <DesignView v-else-if="current.id === 'design'" />
       <NextThingView v-else />
     </main>
   </div>

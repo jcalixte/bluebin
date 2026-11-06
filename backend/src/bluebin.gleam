@@ -3,6 +3,7 @@ import bluebin/assignment
 import bluebin/calendar
 import bluebin/db
 import bluebin/demand
+import bluebin/design
 import bluebin/flow
 import bluebin/heijunka
 import bluebin/live
@@ -154,9 +155,25 @@ fn route(request: wisp.Request, database: String) -> wisp.Response {
       use <- wisp.require_method(request, http.Post)
       assign(request, database)
     }
-    ["api", "people"] -> {
+    ["api", "people"] ->
+      case request.method {
+        http.Post -> add_person(request, database)
+        _ -> {
+          use <- wisp.require_method(request, http.Get)
+          people(database)
+        }
+      }
+    ["api", "design"] ->
+      case request.method {
+        http.Put -> save_design(request, database)
+        _ -> {
+          use <- wisp.require_method(request, http.Get)
+          design_of(database)
+        }
+      }
+    ["api", "labels"] -> {
       use <- wisp.require_method(request, http.Get)
-      people(database)
+      labels(database)
     }
     ["api", "people", person, "next"] -> {
       use <- wisp.require_method(request, http.Get)
@@ -252,6 +269,70 @@ fn save_calendar(request: wisp.Request, database: String) -> wisp.Response {
         Error(calendar.Invalid(message)) -> wisp.bad_request(message)
         Error(calendar.StoreFailed) -> wisp.internal_server_error()
       }
+  }
+}
+
+fn design_of(database: String) -> wisp.Response {
+  case db.with_connection_at(database, design.load) {
+    Ok(#(found, held)) ->
+      wisp.json_response(json.to_string(design.to_json(found, held)), 200)
+    Error(Nil) -> wisp.internal_server_error()
+  }
+}
+
+fn save_design(request: wisp.Request, database: String) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  case decode.run(body, design.decoder()) {
+    Error(_) ->
+      wisp.bad_request(
+        "expected the body of GET /api/design: {\"labels\", \"people\", \"steps\"}",
+      )
+    Ok(wanted) ->
+      case
+        db.with_connection_at(database, fn(connection) {
+          use _ <- result.try(design.save(connection, wanted))
+          design.load(connection) |> result.replace_error(design.StoreFailed)
+        })
+      {
+        Ok(#(saved, held)) ->
+          wisp.json_response(json.to_string(design.to_json(saved, held)), 200)
+        Error(design.Invalid(reason)) -> wisp.bad_request(reason)
+        Error(design.StoreFailed) -> wisp.internal_server_error()
+      }
+  }
+}
+
+fn add_person(request: wisp.Request, database: String) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  case decode.run(body, decode.field("name", decode.string, decode.success)) {
+    Error(_) -> wisp.bad_request("expected a body like {\"name\": \"Inès\"}")
+    Ok(name) ->
+      case
+        db.with_connection_at(database, fn(connection) {
+          design.add_person(connection, name)
+        })
+      {
+        Ok(person) ->
+          wisp.json_response(
+            json.to_string(
+              json.object([
+                #("id", json.string(person.id)),
+                #("name", json.string(person.name)),
+              ]),
+            ),
+            201,
+          )
+        Error(design.Invalid(reason)) -> wisp.bad_request(reason)
+        Error(design.StoreFailed) -> wisp.internal_server_error()
+      }
+  }
+}
+
+fn labels(database: String) -> wisp.Response {
+  case db.with_connection_at(database, design.load_labels) {
+    Ok(found) ->
+      wisp.json_response(json.to_string(design.labels_json(found)), 200)
+    Error(Nil) -> wisp.internal_server_error()
   }
 }
 

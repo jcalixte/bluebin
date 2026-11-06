@@ -177,6 +177,21 @@ check "the Product Mix has one row per active Demand" assert_json \
 check "a Product Mix cell is on plan within one Piece" assert_json \
   '[.mix[].cells[]] | all(.onPlan == (((.real - .planned) | fabs) <= 1))' "$backlog"
 
+design=$(curl -fsS "$BASE/api/design")
+check "the design lists the steps of the Value Stream" assert_json \
+  '.steps | length > 0 and all(.stations | length > 0)' "$design"
+check "each Work Station of the design has its Team Leader among its People" assert_json \
+  '[.steps[].stations[]] | all(.teamLeader as $t | .people | index($t) != null)' "$design"
+check "saving the same design answers 200" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H 'content-type: application/json' \
+    -d "$design" "$BASE/api/design")" = 200
+check "a design without steps is refused" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H 'content-type: application/json' \
+    -d "$(printf '%s' "$design" | jq -c '.steps = []')" "$BASE/api/design")" = 400
+labels=$(curl -fsS "$BASE/api/labels")
+check "the labels name the Demands and the Pieces" assert_json \
+  'all(.demand, .demands, .piece, .pieces; length > 0)' "$labels"
+
 events=$(curl -s -N --max-time 2 -D - -o /dev/null "$BASE/api/events" || true)
 check "the event stream opens as Server-Sent Events" \
   sh -c 'printf "%s" "$1" | grep -qi "^content-type: text/event-stream"' _ "$events"

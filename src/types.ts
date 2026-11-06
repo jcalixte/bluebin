@@ -316,3 +316,59 @@ export type WorkingCalendar = {
   end: string
   holidays: Holiday[]
 }
+
+/** The names a Value Stream gives to its Demands and Pieces (F41). */
+export type Labels = {
+  demand: string
+  demands: string
+  piece: string
+  pieces: string
+}
+
+export type DesignPerson = {
+  id: string
+  name: string
+}
+
+/**
+ * `locked`: the Work Station holds a Piece, an open Rework or an open Andon.
+ * `minBlueBins`: max(1, Pieces in its Blue Bins).
+ */
+export type DesignStation = {
+  id: string
+  name: string
+  branch: string | null
+  blueBins: number
+  teamLeader: string
+  people: string[]
+  locked: boolean
+  minBlueBins: number
+}
+
+/** Steps are in flow order: the first step pulls from the Backlog. */
+export type DesignStep = {
+  name: string
+  stations: DesignStation[]
+}
+
+export type Design = {
+  labels: Labels
+  people: DesignPerson[]
+  steps: DesignStep[]
+}
+
+/** `id` is null for a new Work Station. */
+export type DesignStationInput = {
+  id: string | null
+  name: string
+  branch: string | null
+  blueBins: number
+  teamLeader: string
+  people: string[]
+}
+
+export type DesignInput = {
+  labels: Labels
+  people: DesignPerson[]
+  steps: { name: string; stations: DesignStationInput[] }[]
+}

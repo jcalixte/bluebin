@@ -10,7 +10,7 @@ import sqlight
 pub const workspaces_directory = "data/workspaces"
 
 /// The highest migration step; raise it when you append a step to `migrate`.
-const latest_version = 9
+const latest_version = 10
 
 const schema_v1 = "
 pragma journal_mode = wal;
@@ -222,6 +222,19 @@ create table if not exists andon (
 );
 create unique index if not exists andon_open on andon(station_id)
   where closed_at is null;
+"
+
+/// The names each Value Stream gives its Demands and Pieces (F41).
+const schema_v10 = "
+create table if not exists stream_label (
+  id      integer primary key check (id = 1),
+  demand  text not null,
+  demands text not null,
+  piece   text not null,
+  pieces  text not null
+);
+insert or ignore into stream_label (id, demand, demands, piece, pieces)
+values (1, 'Feature', 'Features', 'User Story', 'User Stories');
 "
 
 const schema_v3 = "
@@ -497,6 +510,7 @@ pub fn migrate_to(
     #(7, schema_v7),
     #(8, schema_v8),
     #(9, schema_v9),
+    #(10, schema_v10),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
@@ -570,6 +584,9 @@ delete from stream_step;
 delete from holiday;
 delete from sqlite_sequence;
 update working_calendar set days = '12345', day_start = '09:00', day_end = '16:00';
+update stream_label
+   set demand = 'Feature', demands = 'Features',
+       piece = 'User Story', pieces = 'User Stories';
 "
 
 fn seed_when_empty(

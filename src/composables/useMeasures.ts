@@ -1,6 +1,7 @@
 import { onMounted, reactive, ref, watch } from "vue"
-import type { Measures, WorkingCalendar } from "../types"
+import type { Measures } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
+import { useWorkingCalendar } from "./useWorkingCalendar"
 
 export type Period = { from: string; to: string }
 
@@ -54,37 +55,10 @@ export function useMeasures() {
     }
   }
 
-  const calendar = ref<WorkingCalendar | null>(null)
-  const calendarError = ref<string | null>(null)
-
-  async function loadCalendar() {
-    calendarError.value = null
-    try {
-      const response = await fetch("/api/calendar")
-      if (!response.ok) {
-        throw new Error(`API answered ${response.status}`)
-      }
-      calendar.value = (await response.json()) as WorkingCalendar
-    } catch (cause) {
-      calendarError.value = cause instanceof Error ? cause.message : String(cause)
-    }
-  }
-
-  async function saveCalendar(next: WorkingCalendar) {
-    const response = await fetch("/api/calendar", {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(next),
-    })
-    if (!response.ok) {
-      throw new Error((await response.text()) || `API answered ${response.status}`)
-    }
-    calendar.value = (await response.json()) as WorkingCalendar
-    await load()
-  }
+  const { calendar, calendarError, saveCalendar } = useWorkingCalendar(load)
 
   watch([before, after], load)
-  onMounted(() => Promise.all([load(), loadCalendar()]))
+  onMounted(load)
   useLiveUpdates(load)
 
   return { before, after, measures, error, loading, calendar, calendarError, saveCalendar }

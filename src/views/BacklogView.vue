@@ -3,9 +3,11 @@ import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import { useBacklog } from "../composables/useBacklog"
 import { useFlowRunner } from "../composables/useFlowRunner"
+import { useLabels } from "../composables/useLabels"
 
 const { backlog, error, loading, makeUrgent } = useBacklog()
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
+const { labels } = useLabels()
 
 function urgent(piece: string) {
   run((reason) => makeUrgent(piece, reason))
@@ -21,7 +23,8 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
     <header class="mb-6">
       <h2 class="text-xl font-semibold">Backlog</h2>
       <p class="text-sm opacity-70">
-        Pieces leave in Heijunka Sequence, one for each Kanban of the first Work Station
+        {{ labels.pieces }} leave in Heijunka Sequence, one for each Kanban of the first Work
+        Station
       </p>
     </header>
 

@@ -3,8 +3,10 @@ import { computed } from "vue"
 import AndonAlert from "../components/AndonAlert.vue"
 import DemandRow from "../components/DemandRow.vue"
 import { useDemands } from "../composables/useDemands"
+import { useLabels } from "../composables/useLabels"
 
 const { demands, andons, error, loading } = useDemands()
+const { labels } = useLabels()
 
 /** The Demand furthest behind its Takt Time comes first, then the earliest due. */
 const sorted = computed(() =>
@@ -28,19 +30,21 @@ const pieces = computed(() =>
   <section>
     <header class="mb-6 flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
       <div>
-        <h2 class="text-xl font-semibold">Active Demands</h2>
+        <h2 class="text-xl font-semibold">Active {{ labels.demands }}</h2>
         <p class="text-sm opacity-70">
           Each Demand against its own Takt Time. The line marks where it must be today.
         </p>
       </div>
       <dl v-if="demands.length > 0" class="flex flex-wrap gap-x-8 gap-y-3">
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Demands</dt>
+          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
+            {{ labels.demands }}
+          </dt>
           <dd class="text-2xl font-semibold tabular-nums">{{ demands.length }}</dd>
         </div>
         <div>
           <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
-            Demands behind Takt
+            {{ labels.demands }} behind Takt
           </dt>
           <dd class="flex items-center gap-2 text-2xl font-semibold tabular-nums">
             <span v-if="behind > 0" class="size-2.5 rounded-full bg-andon" aria-hidden="true" />
@@ -48,7 +52,9 @@ const pieces = computed(() =>
           </dd>
         </div>
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Pieces</dt>
+          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
+            {{ labels.pieces }}
+          </dt>
           <dd class="text-2xl font-semibold tabular-nums">
             {{ pieces.produced }}
             <span class="text-sm font-normal opacity-70">

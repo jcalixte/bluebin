@@ -201,6 +201,8 @@ _Avoid_: tenant, organization, board
 - A **Work Station** has exactly one **Team Leader**; a **Person** can be **Team Leader** of several **Work Stations**
 - A **Team Leader** answers **Andons** and never pushes **Assignments**
 - A **Value Stream** has exactly one **Working Calendar**
+- A **Value Stream** can change while it runs: only an empty **Blue Bin** or a **Work Station** with no **Piece**, open **Rework** or open **Andon** can go, and each change is dated in the flow log
+- A new **Blue Bin** brings one **Kanban** to its **Work Station**; a removed empty **Blue Bin** takes one back
 - **Starvation Time** belongs to a **Work Station**, never to a **Piece**, and is not part of the **Lead Time**
 - The **Andon Time** of a **Value Stream** is the time at least one of its **Work Stations** is stopped; stops at the same time count once
 - A **Person** transforms at most one **Piece** at a time; when another **Piece** comes into their hands, the one nearest to production stays active and the other pauses, and the paused time is **Stagnation Time**. On a tie, the new **Piece** waits: finishing beats starting
