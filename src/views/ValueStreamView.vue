@@ -5,6 +5,7 @@ import AppModal from "../components/AppModal.vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
+import ErrorToast from "../components/ErrorToast.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useValueStream } from "../composables/useValueStream"
@@ -55,7 +56,7 @@ async function rename(position: number, name: string) {
   try {
     await renameStep(position, name)
   } catch (cause) {
-    renameError.value = cause instanceof Error ? cause.message : String(cause)
+    renameError.value = `The step was not renamed: ${cause instanceof Error ? cause.message : String(cause)}`
     await load()
   }
 }
@@ -203,13 +204,8 @@ const taktLabel = computed(() => {
 
     <AndonAlert v-if="valueStream" :andons="valueStream.andons" />
 
-    <div v-if="renameError" role="alert" class="alert alert-error mb-4">
-      <span>The step was not renamed: {{ renameError }}</span>
-    </div>
-
-    <div v-if="actionError" role="alert" class="alert alert-warning mb-4">
-      <span>{{ actionError }}</span>
-    </div>
+    <ErrorToast v-model="renameError" tone="error" />
+    <ErrorToast v-model="actionError" />
 
     <!-- Only the first load shows the spinner: a reload after an action keeps the
          stream on screen, so the page keeps its scroll position. -->

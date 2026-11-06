@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DeviationDialog from "../components/DeviationDialog.vue"
+import ErrorToast from "../components/ErrorToast.vue"
 import { useBacklog } from "../composables/useBacklog"
 import { useFlowRunner } from "../composables/useFlowRunner"
 
@@ -41,9 +42,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
             Each Piece has a slot at a multiple of its Demand's Takt Time: the earliest slot goes
             first, then the earliest due date, then first in.
           </p>
-          <div v-if="actionError" class="alert alert-error text-sm">
-            <span>{{ actionError }}</span>
-          </div>
+          <ErrorToast v-model="actionError" tone="error" />
           <p v-if="backlog.sequence.length === 0" class="opacity-70">The Backlog is empty.</p>
           <ol v-else class="divide-y divide-base-300">
             <li

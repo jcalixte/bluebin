@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue"
 import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
+import ErrorToast from "../components/ErrorToast.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
 import type { Assignment, FlowConfirm, NextThing } from "../types"
@@ -166,9 +167,7 @@ function since(at: string) {
       </label>
     </header>
 
-    <div v-if="actionError" role="alert" class="alert alert-warning mb-4">
-      <span>{{ actionError }}</span>
-    </div>
+    <ErrorToast v-model="actionError" />
 
     <p v-if="loading && !view && !error" class="flex items-center gap-3 opacity-70">
       <span class="loading loading-spinner loading-sm" />
@@ -233,10 +232,36 @@ function since(at: string) {
             <p v-else-if="next.kind === 'help_downstream'" class="opacity-80">
               It holds up the flow: {{ next.because }}. Do not start a new Piece.
             </p>
-            <p v-else class="opacity-80">
-              Nothing downstream asks for a Piece, and nothing downstream holds up the flow.
-              Starting a Piece now would be a Deviation.
-            </p>
+            <template v-else>
+              <p class="opacity-80">
+                Nothing downstream asks for a Piece, and nothing downstream holds up the flow.
+                Starting a Piece now would be a Deviation.
+              </p>
+              <div class="rounded-box border border-base-300 bg-base-200/50 px-4 py-3">
+                <p class="text-sm font-semibold">Use the wait to improve the flow</p>
+                <ul class="mt-2 space-y-1.5 text-sm">
+                  <li>
+                    <span class="font-medium">5S</span>
+                    <span class="opacity-80">
+                      · sort, set in order and clean your Work Station: tools, branches, docs.
+                    </span>
+                  </li>
+                  <li>
+                    <span class="font-medium">Problem solving</span>
+                    <span class="opacity-80">
+                      · find the root cause of a recent Rework or Andon.
+                    </span>
+                  </li>
+                  <li>
+                    <span class="font-medium">Kaizen</span>
+                    <span class="opacity-80">
+                      · improve one step of your method, so the next Piece flows faster or with
+                      fewer defects.
+                    </span>
+                  </li>
+                </ul>
+              </div>
+            </template>
 
             <div v-if="focus.action" class="mt-auto pt-2">
               <button
