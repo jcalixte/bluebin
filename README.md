@@ -45,8 +45,13 @@ Traefik forward auth sends each request to authentik (`auth.apoena.dev`,
 provider and app `bluebin`) and copies the `X-authentik-uid` header from its
 answer, which replaces any value the client sends. The API trusts only that
 header: each uid gets its own SQLite file, `data/workspaces/<uid>.db`, seeded
-on the first request. A request without it gets `401`; `/api/health` stays
-open for the healthcheck. In dev, the Vite proxy sends `X-authentik-uid: dev`.
+on the first request. A request without it uses the shared `public` Workspace,
+`data/workspaces/public.db`; a uid that is not a safe file name gets `401`.
+In dev, the Vite proxy sends `X-authentik-uid: dev`.
+
+SSO is off for now, so bluebin.app is public: every visitor shares the `public`
+Workspace. Without forward auth, a client can set `X-authentik-uid` itself, so
+the header separates data but protects nothing until SSO is back.
 
 <!-- docs:start -->
 

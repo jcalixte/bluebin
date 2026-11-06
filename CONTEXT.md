@@ -157,7 +157,7 @@ The link between one item of a Work Station's Priority List and the one Person o
 _Avoid_: allocation, dispatch, affectation, ownership
 
 **Workspace**:
-All the data of one Value Stream, private to the signed-in account that owns it.
+All the data of one Value Stream, private to the signed-in account that owns it. Visitors who are not signed in share the one public Workspace.
 _Avoid_: tenant, organization, board
 
 ## Relationships

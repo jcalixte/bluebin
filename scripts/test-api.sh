@@ -4,9 +4,8 @@
 #   scripts/test-api.sh                        against a local backend
 #   scripts/test-api.sh http://localhost:8000  the same, explicit
 #
-# bluebin.app sits behind authentik SSO, so a script cannot reach its API.
 # Each call acts as the workspace in $WORKSPACE (default "smoke"), the way
-# Traefik forward auth sends the authentik user id in production.
+# Traefik forward auth sends the authentik user id when SSO is on.
 #
 # Needs curl and jq only, no Erlang.
 set -eu
@@ -39,8 +38,8 @@ echo "Bluebin API smoke test against $BASE"
 
 health=$(curl -fsS "$BASE/api/health" || true)
 check "GET /api/health answers OK" test "$health" = "OK"
-check "a request without an identity is refused" test \
-  "$(command curl -s -o /dev/null -w '%{http_code}' "$BASE/api/demands")" = 401
+check "a request without an identity uses the public workspace" test \
+  "$(command curl -s -o /dev/null -w '%{http_code}' "$BASE/api/demands")" = 200
 check "an identity that could leave the workspaces directory is refused" test \
   "$(command curl -s -o /dev/null -w '%{http_code}' -H 'X-authentik-uid: ../app' "$BASE/api/demands")" = 401
 

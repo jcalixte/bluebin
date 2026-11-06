@@ -21,8 +21,11 @@ pub fn the_workspace_is_the_authentik_uid_test() {
   assert workspace.from_request(with_uid(uid)) == Ok(uid)
 }
 
-pub fn no_identity_means_no_workspace_test() {
-  assert workspace.from_request(request.new()) == Error(Nil)
+pub fn no_identity_means_the_public_workspace_test() {
+  assert workspace.from_request(request.new()) == Ok(workspace.public)
+}
+
+pub fn an_empty_identity_is_refused_test() {
   assert workspace.from_request(with_uid("")) == Error(Nil)
 }
 
@@ -92,10 +95,12 @@ fn remove_workspace(uid: String) {
   Nil
 }
 
-pub fn the_api_refuses_a_request_without_identity_test() {
+pub fn the_api_refuses_an_unsafe_identity_test() {
   let assert Ok(hub) = live.start()
   let response =
-    bluebin.handle_request(simulate.request(http.Get, "/api/demands"), hub)
+    simulate.request(http.Get, "/api/demands")
+    |> simulate.header("x-authentik-uid", "../app")
+    |> bluebin.handle_request(hub)
   assert response.status == 401
 }
 

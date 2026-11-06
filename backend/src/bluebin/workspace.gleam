@@ -4,14 +4,18 @@ import gleam/string
 
 /// The authentik user id. Traefik forward auth copies it from authentik's
 /// answer (`authResponseHeaders`) and so replaces any value a client sends.
-/// The API trusts it only because no request reaches the container without
-/// that middleware.
+/// With SSO off, nothing replaces it: the header then only picks a file.
 const header = "x-authentik-uid"
+
+/// The Workspace of a request without an identity, shared by everyone while
+/// the app is public. Not hex, so no authentik uid can collide with it.
+pub const public = "public"
 
 const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
 
 /// The workspace of the signed-in user; a user has one workspace for now.
-/// `Error(Nil)` when the header is missing or unsafe as a file name.
+/// No header means the `public` workspace; `Error(Nil)` when the header is
+/// unsafe as a file name.
 pub fn from_request(request: Request(body)) -> Result(String, Nil) {
   case request.get_header(request, header) {
     Ok(uid) ->
@@ -19,7 +23,7 @@ pub fn from_request(request: Request(body)) -> Result(String, Nil) {
         True -> Ok(uid)
         False -> Error(Nil)
       }
-    Error(Nil) -> Error(Nil)
+    Error(Nil) -> Ok(public)
   }
 }
 
