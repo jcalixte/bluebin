@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
+import { useLabels } from "../composables/useLabels"
 import { isValidPeriod, useMeasures, type Period } from "../composables/useMeasures"
 import type { DemandMeasures, Duration, StationMeasures, TimeView } from "../types"
 
 const { before, after, measures, error, loading, calendar, calendarError, saveCalendar } =
   useMeasures()
+
+const { labels } = useLabels()
 
 const view = ref<TimeView>("calendar")
 const timeViews = [
@@ -122,6 +125,30 @@ const summary = computed(() => {
       change: hoursChange(stoppedA, stoppedB),
     },
   ]
+})
+
+/** The share of Demands to deliver by their due date. */
+const onTimeTarget = 0.9
+
+const onTime = computed(() => {
+  if (!measures.value) return []
+  const { before, after } = measures.value
+  return [
+    { name: "Before", period: before },
+    { name: "After", period: after },
+  ].map(({ name, period }) => {
+    const { delivered, onTime: count } = period.onTime
+    const share = delivered === 0 ? null : count / delivered
+    return {
+      name,
+      period: periodLabel(period),
+      delivered,
+      onTime: count,
+      // Floor, so a share under the target never reads as the target.
+      percent: share === null ? null : Math.floor(share * 100),
+      met: share !== null && share >= onTimeTarget,
+    }
+  })
 })
 
 type Paired<T> = { id: string; first: T; before?: T; after?: T }
@@ -274,6 +301,41 @@ const deviationList = computed(() =>
           <span>The Working Calendar did not load: {{ calendarError }}</span>
         </div>
         <WorkingCalendarCard v-else-if="calendar" :calendar="calendar" :save="saveCalendar" />
+      </div>
+
+      <div class="card border border-base-300 bg-base-100 shadow-sm">
+        <div class="card-body gap-3 p-5">
+          <h3 class="card-title text-base">On-time delivery</h3>
+          <p class="text-sm opacity-70">
+            The share of {{ labels.demands }} delivered by their due date, among those delivered in
+            the period. Target: {{ onTimeTarget * 100 }} % or more.
+          </p>
+          <div class="grid gap-4 md:grid-cols-2">
+            <div v-for="row in onTime" :key="row.name" class="rounded-box bg-base-200 p-4">
+              <p class="text-xs font-semibold uppercase tracking-wide opacity-70">
+                {{ row.name }} · {{ row.period }}
+              </p>
+              <p v-if="row.percent === null" class="mt-2 opacity-70">
+                No {{ labels.demand }} delivered in this period.
+              </p>
+              <template v-else>
+                <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span class="text-3xl font-semibold tabular-nums">{{ row.percent }} %</span>
+                  <span
+                    class="badge font-medium whitespace-nowrap"
+                    :class="row.met ? 'badge-success' : 'badge-error'"
+                  >
+                    {{ row.met ? "On target" : "Below target" }}
+                  </span>
+                </p>
+                <p class="mt-1 text-sm tabular-nums">
+                  {{ row.onTime }} of {{ row.delivered }}
+                  <span class="opacity-70">{{ labels.demands }} on time</span>
+                </p>
+              </template>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="card border border-base-300 bg-base-100 shadow-sm">

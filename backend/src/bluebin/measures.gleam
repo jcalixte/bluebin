@@ -341,6 +341,10 @@ pub type Measures {
     /// count once.
     andon: Int,
     andon_working: Int,
+    /// Demands delivered in the period, and those of them delivered on or
+    /// before their due date.
+    delivered: Int,
+    on_time: Int,
   )
 }
 
@@ -451,6 +455,17 @@ pub fn load(
       },
     ),
   )
+  use delivery_rows <- result.try(
+    query(connection, on_time_sql, [sqlight.text(from), sqlight.text(to)], {
+      use delivered <- decode.field(0, decode.int)
+      use on_time <- decode.field(1, decode.int)
+      decode.success(#(delivered, on_time))
+    }),
+  )
+  let #(delivered, on_time) = case delivery_rows {
+    [row, ..] -> row
+    [] -> #(0, 0)
+  }
   use deviations <- result.try(query(
     connection,
     deviations_sql,
@@ -629,6 +644,8 @@ pub fn load(
     deviations:,
     andon:,
     andon_working:,
+    delivered:,
+    on_time:,
   ))
 }
 
@@ -669,6 +686,17 @@ select p.id, p.parent_id, p.demand_id,
        cast(strftime('%s', coalesce(p.entered_at, d.started_on)) as integer),
        cast(strftime('%s', p.produced_at) as integer)
   from piece p join demand d on d.id = p.demand_id
+"
+
+/// A Demand is delivered on the day of its last Piece in production.
+const on_time_sql = "
+select count(*), coalesce(sum(delivered_on <= due_on), 0)
+  from (select d.due_on,
+               (select date(max(p.produced_at)) from piece p
+                 where p.demand_id = d.id and p.parent_id is null) as delivered_on
+          from demand d
+         where d.state = 'delivered')
+ where delivered_on between ?1 and ?2
 "
 
 const deviations_sql = "
@@ -791,6 +819,13 @@ pub fn to_json(measures: Measures) -> json.Json {
       }),
     ),
     #("andonTime", duration(Some(measures.andon), Some(measures.andon_working))),
+    #(
+      "onTime",
+      json.object([
+        #("delivered", json.int(measures.delivered)),
+        #("onTime", json.int(measures.on_time)),
+      ]),
+    ),
     #(
       "deviations",
       json.object([

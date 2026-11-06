@@ -103,10 +103,14 @@ fn require_workspace(
 
 fn route(request: wisp.Request, database: String) -> wisp.Response {
   case wisp.path_segments(request) {
-    ["api", "demands"] -> {
-      use <- wisp.require_method(request, http.Get)
-      demands(database)
-    }
+    ["api", "demands"] ->
+      case request.method {
+        http.Post -> create_demand(request, database)
+        _ -> {
+          use <- wisp.require_method(request, http.Get)
+          demands(database)
+        }
+      }
     ["api", "value-stream"] -> {
       use <- wisp.require_method(request, http.Get)
       value_stream(database)
@@ -197,7 +201,7 @@ fn route(request: wisp.Request, database: String) -> wisp.Response {
       }
     ["api", "reset"] -> {
       use <- wisp.require_method(request, http.Post)
-      reset(database)
+      reset(request, database)
     }
     _ -> wisp.not_found()
   }
@@ -336,8 +340,20 @@ fn labels(database: String) -> wisp.Response {
   }
 }
 
-fn reset(database: String) -> wisp.Response {
-  case db.with_connection_at(database, db.reset) {
+/// `{"mode": "empty"}` starts from scratch; anything else, or no body at all
+/// as the SPA sent before, puts back the demo data.
+fn reset(request: wisp.Request, database: String) -> wisp.Response {
+  let mode =
+    wisp.read_body_bits(request)
+    |> result.try(fn(body) {
+      json.parse_bits(body, decode.field("mode", decode.string, decode.success))
+      |> result.replace_error(Nil)
+    })
+  let run = case mode {
+    Ok("empty") -> db.reset_empty
+    _ -> db.reset
+  }
+  case db.with_connection_at(database, run) {
     Ok(Nil) -> wisp.no_content()
     Error(_) -> wisp.internal_server_error()
   }
@@ -368,12 +384,43 @@ fn announce_change(
 fn demands(database: String) -> wisp.Response {
   let result =
     db.with_connection_at(database, fn(connection) {
-      demand.list_active(connection)
+      use demands <- result.try(demand.list_active(connection))
+      use calendar <- result.try(calendar.load(connection))
+      use now <- result.try(andon.now(connection))
+      Ok(demand.to_json(demands, calendar, now / 86_400))
     })
 
   case result {
-    Ok(demands) -> wisp.json_response(demand.to_json(demands), 200)
+    Ok(body) -> wisp.json_response(body, 200)
     Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  let decoder = {
+    use label <- decode.field("label", decode.string)
+    use client <- decode.field("client", decode.string)
+    use due_on <- decode.field("dueOn", decode.string)
+    use pieces <- decode.field("pieces", decode.int)
+    decode.success(#(label, client, due_on, pieces))
+  }
+
+  case decode.run(body, decoder) {
+    Error(_) ->
+      wisp.bad_request(
+        "expected a body like {\"label\": \"Checkout redesign\", \"client\": \"Retail\", \"dueOn\": \"2026-12-31\", \"pieces\": 8}",
+      )
+    Ok(#(label, client, due_on, pieces)) ->
+      case
+        db.with_connection_at(database, fn(connection) {
+          demand.create(connection, label, client, due_on, pieces)
+        })
+      {
+        Ok(id) -> json_body([#("id", json.string(id))], 201)
+        Error(demand.Invalid(reason)) -> wisp.bad_request(reason)
+        Error(demand.StoreFailed) -> wisp.internal_server_error()
+      }
   }
 }
 

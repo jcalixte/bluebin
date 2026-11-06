@@ -168,10 +168,8 @@ fn sum_days(
   case midnight >= to {
     True -> total
     False -> {
-      // 1970-01-01 was a Thursday, day 4 in `strftime('%w')` numbers.
-      let weekday = int.modulo(day + 4, 7) |> result.unwrap(0)
       let counted = case
-        set.contains(days, weekday) && !set.contains(holidays, day)
+        set.contains(days, weekday(day)) && !set.contains(holidays, day)
       {
         False -> 0
         True ->
@@ -184,6 +182,124 @@ fn sum_days(
       sum_days(calendar, days, holidays, from, to, day + 1, total + counted)
     }
   }
+}
+
+/// 1970-01-01 was a Thursday, day 4 in `strftime('%w')` numbers.
+fn weekday(day: Int) -> Int {
+  int.modulo(day + 4, 7) |> result.unwrap(0)
+}
+
+/// `day` counts days since 1970-01-01, like `Holiday.index`.
+pub fn is_working_day(calendar: Calendar, day: Int) -> Bool {
+  list.contains(calendar.days, weekday(day))
+  && !list.any(calendar.holidays, fn(holiday) { holiday.index == day })
+}
+
+/// The `count`-th working day after `day`, which itself does not count; `day`
+/// when `count` is 0. Error past `limit`, so a slow pace cannot search for
+/// ever.
+pub fn add_working_days(
+  calendar: Calendar,
+  day: Int,
+  count: Int,
+  limit: Int,
+) -> Result(Int, Nil) {
+  case count <= 0, day >= limit {
+    True, _ -> Ok(day)
+    False, True -> Error(Nil)
+    False, False -> {
+      let next = day + 1
+      case is_working_day(calendar, next) {
+        True -> add_working_days(calendar, next, count - 1, limit)
+        False -> add_working_days(calendar, next, count, limit)
+      }
+    }
+  }
+}
+
+/// The working days after `from` up to `to` included; negative when `to`
+/// comes first.
+pub fn working_days_between(calendar: Calendar, from: Int, to: Int) -> Int {
+  case to < from {
+    True -> 0 - working_days_between(calendar, to, from)
+    False -> count_working_days(calendar, from + 1, to, 0)
+  }
+}
+
+fn count_working_days(calendar: Calendar, day: Int, last: Int, total: Int) {
+  case day > last {
+    True -> total
+    False ->
+      count_working_days(
+        calendar,
+        day + 1,
+        last,
+        case is_working_day(calendar, day) {
+          True -> total + 1
+          False -> total
+        },
+      )
+  }
+}
+
+/// "2026-11-09" is day 20_766 since 1970-01-01 (proleptic Gregorian).
+pub fn day_number(text: String) -> Result(Int, Nil) {
+  case string.split(text, "-") {
+    [year, month, day] -> {
+      use year <- result.try(int.parse(year))
+      use month <- result.try(int.parse(month))
+      use day <- result.try(int.parse(day))
+      let year = case month <= 2 {
+        True -> year - 1
+        False -> year
+      }
+      let era = int.floor_divide(year, 400) |> result.unwrap(0)
+      let year_of_era = year - era * 400
+      let shifted_month = case month > 2 {
+        True -> month - 3
+        False -> month + 9
+      }
+      let day_of_year = { 153 * shifted_month + 2 } / 5 + day - 1
+      let day_of_era =
+        year_of_era * 365 + year_of_era / 4 - year_of_era / 100 + day_of_year
+      Ok(era * 146_097 + day_of_era - 719_468)
+    }
+    _ -> Error(Nil)
+  }
+}
+
+/// The inverse of `day_number`.
+pub fn day_text(day: Int) -> String {
+  let shifted = day + 719_468
+  let era = int.floor_divide(shifted, 146_097) |> result.unwrap(0)
+  let day_of_era = shifted - era * 146_097
+  let year_of_era =
+    {
+      day_of_era
+      - day_of_era
+      / 1460
+      + day_of_era
+      / 36_524
+      - day_of_era
+      / 146_096
+    }
+    / 365
+  let day_of_year =
+    day_of_era - { 365 * year_of_era + year_of_era / 4 - year_of_era / 100 }
+  let shifted_month = { 5 * day_of_year + 2 } / 153
+  let day = day_of_year - { 153 * shifted_month + 2 } / 5 + 1
+  let month = case shifted_month < 10 {
+    True -> shifted_month + 3
+    False -> shifted_month - 9
+  }
+  let year = case month <= 2 {
+    True -> year_of_era + era * 400 + 1
+    False -> year_of_era + era * 400
+  }
+  let pad = fn(value, width) {
+    string.pad_start(int.to_string(value), width, "0")
+  }
+  pad(year, 4) <> "-" <> pad(month, 2) <> "-" <> pad(day, 2)
 }
 
 fn floor_day(seconds: Int) -> Int {

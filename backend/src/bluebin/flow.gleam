@@ -238,12 +238,48 @@ pub fn deliver(
     json.object([#("station", json.string(piece.station_id))]),
   ))
 
+  use _ <- result.try(deliver_demand_when_complete(connection, piece.id))
+
   Ok(Flowed(
     piece: piece.reference,
     demand: piece.demand,
     deviations: [],
     kanbans_sent_to: sent,
   ))
+}
+
+/// The last Piece of a Demand in production delivers the Demand.
+fn deliver_demand_when_complete(
+  connection: sqlight.Connection,
+  piece_id: String,
+) -> Result(Nil, FlowError) {
+  let delivered =
+    sqlight.query(
+      "update demand set state = 'delivered'
+        where id = (select demand_id from piece where id = ?1)
+          and state = 'active'
+          and (select count(*) from piece p
+                where p.demand_id = demand.id and p.parent_id is null
+                  and p.state = 'produced') >= pieces_asked
+       returning id",
+      on: connection,
+      with: [sqlight.text(piece_id)],
+      expecting: decode.at([0], decode.string),
+    )
+  case delivered {
+    Error(_) -> Error(StoreFailed)
+    Ok([]) -> Ok(Nil)
+    Ok([demand, ..]) ->
+      record_event(
+        connection,
+        "demand_delivered",
+        None,
+        json.object([
+          #("demand", json.string(demand)),
+          #("piece", json.string(piece_id)),
+        ]),
+      )
+  }
 }
 
 /// Moves the next Piece of a Demand to the top of the Backlog, behind the

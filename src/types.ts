@@ -10,6 +10,10 @@ export type Demand = {
   taktTimeHours: number
   taktGap: number
   andon: boolean
+  /** `YYYY-MM-DD`; null until a Piece of the Demand reached production. */
+  forecastOn: string | null
+  /** Working days from `dueOn` to `forecastOn`: above 0 is late, 0 or less is on time. */
+  forecastLateDays: number | null
 }
 
 export type BlueBin = {
@@ -298,6 +302,8 @@ export type Measures = {
   stations: StationMeasures[]
   /** The time at least one Work Station is stopped by an Andon; stops at the same time count once. */
   andonTime: Duration | null
+  /** Demands delivered in the period, and those delivered by their due date. */
+  onTime: { delivered: number; onTime: number }
   deviations: {
     byRule: { rule: string; count: number }[]
     list: RecordedDeviation[]

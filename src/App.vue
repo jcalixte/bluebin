@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue"
+import AppModal from "./components/AppModal.vue"
+import ErrorToast from "./components/ErrorToast.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
 import DesignView from "./views/DesignView.vue"
@@ -34,17 +36,26 @@ function open(view: View) {
   current.value = view
 }
 
+const choosingReset = ref(false)
 const resetting = ref(false)
+const resetError = ref<string | null>(null)
 
-async function resetDemo() {
-  if (!confirm("Reset all the demo data? Every change made on Bluebin will be lost.")) return
+async function reset(mode: "demo" | "empty") {
   resetting.value = true
-  const response = await fetch("/api/reset", { method: "POST" })
-  if (response.ok) {
+  try {
+    const response = await fetch("/api/reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ mode }),
+    })
+    if (!response.ok) {
+      throw new Error((await response.text()) || `API answered ${response.status}`)
+    }
     location.reload()
-  } else {
+  } catch (cause) {
     resetting.value = false
-    alert("The reset failed. Try again.")
+    choosingReset.value = false
+    resetError.value = `The reset failed: ${cause instanceof Error ? cause.message : String(cause)}`
   }
 }
 
@@ -88,10 +99,10 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             type="button"
             class="btn btn-sm btn-ghost"
             :disabled="resetting"
-            title="Put back the demo data"
-            @click="resetDemo"
+            title="Load the demo data, or start empty"
+            @click="choosingReset = true"
           >
-            Reset demo
+            Reset…
           </button>
         </div>
       </div>
@@ -105,5 +116,43 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
       <DesignView v-else-if="current.id === 'design'" />
       <NextThingView v-else />
     </main>
+
+    <AppModal v-if="choosingReset" @close="choosingReset = false">
+      <h3 class="text-lg font-semibold">Reset the Value Stream</h3>
+      <p class="py-2 text-sm opacity-80">
+        Every change made on Bluebin is lost. Pick what to start from.
+      </p>
+      <div class="grid gap-3">
+        <div class="rounded-box border border-base-300 p-4">
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="resetting"
+            @click="reset('demo')"
+          >
+            Load the demo data
+          </button>
+          <p class="mt-2 text-sm opacity-80">
+            Example {{ labels.demands }}, {{ labels.pieces }}, People and Work Stations, to try
+            Bluebin.
+          </p>
+        </div>
+        <div class="rounded-box border border-base-300 p-4">
+          <button type="button" class="btn btn-sm" :disabled="resetting" @click="reset('empty')">
+            Start empty
+          </button>
+          <p class="mt-2 text-sm opacity-80">
+            Removes every {{ labels.demand }}, {{ labels.piece }}, Person and Work Station. Keeps
+            the Working Calendar and the labels. Leaves one Work Station and one Person to rename in
+            Design.
+          </p>
+        </div>
+      </div>
+      <div class="modal-action">
+        <button type="button" class="btn btn-ghost" @click="choosingReset = false">Cancel</button>
+      </div>
+    </AppModal>
+
+    <ErrorToast v-model="resetError" tone="error" />
   </div>
 </template>

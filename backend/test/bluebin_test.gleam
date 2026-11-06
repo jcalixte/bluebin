@@ -866,8 +866,11 @@ pub fn the_demands_payload_carries_the_takt_numbers_test() {
   assert list.length(demands) == 3
   assert list.all(demands, fn(one) { demand.takt_time_hours(one) >. 0.0 })
 
-  let payload = demand.to_json(demands)
+  let assert Ok(working) = calendar.load(connection)
+  let payload = demand.to_json(demands, working, 20_763)
   assert payload != "[]"
+  assert string.contains(payload, "\"forecastOn\":")
+  assert string.contains(payload, "\"forecastLateDays\":")
 }
 
 pub fn the_value_stream_payload_lists_every_work_station_test() {

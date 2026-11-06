@@ -76,6 +76,14 @@ _Avoid_: velocity, cycle time
 The number of Pieces that a Demand is ahead of (+) or behind (−) its Takt Time at a given moment.
 _Avoid_: delay, slippage, burn-down, variance
 
+**Forecast**:
+The day a Demand will reach production at its current pace: the Pieces it has left, at the rate of Pieces it has produced per working day since it started.
+_Avoid_: ETA, estimate, projection
+
+**On-Time Delivery**:
+The share of Demands delivered by their due date. A Demand is delivered when its last Piece reaches production.
+_Avoid_: success rate, SLA
+
 **Andon**:
 A signal, visible to all People of a Value Stream, that the flow has a problem, for example a Demand behind its Takt Time.
 _Avoid_: alert, alarm, notification
@@ -170,6 +178,7 @@ _Avoid_: tenant, organization, board
 - A **Demand** is decomposed into one or more **Pieces**; a **Piece** belongs to exactly one **Demand**
 - A **Demand** comes from exactly one **Client**; a **Client** can have many **Demands**
 - A **Demand** has one **Takt Time**: its available Working Time divided by its number of **Pieces**
+- A **Demand** has no **Forecast** until one of its **Pieces** reaches production; it is late when its **Forecast** falls after its due date
 - The **Takt Time** of the **Value Stream** combines all active **Demands**: 1 ÷ (sum of 1 ÷ **Takt Time** of each active **Demand**); it changes when a **Demand** enters or ends
 - A **Work Station** compares its **Touch Time** per **Piece** with the **Takt Time** of the **Value Stream**, not of one **Demand**
 - A **Piece** waits in the **Backlog**, then flows alone through the **Value Stream** (one-piece flow)

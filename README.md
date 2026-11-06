@@ -49,9 +49,9 @@ on the first request. A request without it uses the shared `public` Workspace,
 `data/workspaces/public.db`; a uid that is not a safe file name gets `401`.
 In dev, the Vite proxy sends `X-authentik-uid: dev`.
 
-SSO is off for now, so bluebin.app is public: every visitor shares the `public`
-Workspace. Without forward auth, a client can set `X-authentik-uid` itself, so
-the header separates data but protects nothing until SSO is back.
+Only members of the authentik group `bluebin-users` get in. Each new Workspace
+starts with the demo data; **Reset… → Start empty** replaces it with one Work
+Station and one Person to rename in Design.
 
 <!-- docs:start -->
 

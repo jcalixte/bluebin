@@ -10,7 +10,11 @@ import sqlight
 pub const workspaces_directory = "data/workspaces"
 
 /// The highest migration step; raise it when you append a step to `migrate`.
-const latest_version = 10
+const latest_version = 11
+
+/// From this version a Workspace can be empty on purpose (`reset_empty`), so
+/// only an older database gets the demo data.
+const empty_on_purpose_since = 11
 
 const schema_v1 = "
 pragma journal_mode = wal;
@@ -235,6 +239,27 @@ create table if not exists stream_label (
 );
 insert or ignore into stream_label (id, demand, demands, piece, pieces)
 values (1, 'Feature', 'Features', 'User Story', 'User Stories');
+"
+
+/// A Demand whose Pieces are all in production is delivered (F5), on the day
+/// of its last Piece. Data only, so the old code still runs during the deploy.
+const schema_v11 = "
+insert into flow_event (at, kind, payload)
+select coalesce((select max(p.produced_at) from piece p
+                  where p.demand_id = d.id and p.parent_id is null),
+                strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+       'demand_delivered', json_object('demand', d.id)
+  from demand d
+ where d.state = 'active'
+   and (select count(*) from piece p
+         where p.demand_id = d.id and p.parent_id is null
+           and p.state = 'produced') >= d.pieces_asked;
+
+update demand set state = 'delivered'
+ where state = 'active'
+   and (select count(*) from piece p
+         where p.demand_id = demand.id and p.parent_id is null
+           and p.state = 'produced') >= pieces_asked;
 "
 
 const schema_v3 = "
@@ -485,8 +510,12 @@ pub fn with_connection_at(
 }
 
 pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+  use version <- result.try(user_version(connection))
   use _ <- result.try(migrate(connection))
-  seed(connection)
+  case version < empty_on_purpose_since {
+    True -> seed(connection)
+    False -> Ok(Nil)
+  }
 }
 
 /// Each step runs at most once per database, tracked in `pragma user_version`:
@@ -511,6 +540,7 @@ pub fn migrate_to(
     #(8, schema_v8),
     #(9, schema_v9),
     #(10, schema_v10),
+    #(11, schema_v11),
   ]
   |> list.try_fold(Nil, fn(_, step) {
     let #(step_version, sql) = step
@@ -557,8 +587,29 @@ pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 
 /// Empties every table and seeds the demo data again, in one transaction.
 pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  use _ <- result.try(sqlight.exec("begin;" <> empty_sql, connection))
-  case seed(connection) {
+  use <- in_transaction(connection)
+  use _ <- result.try(sqlight.exec(
+    empty_sql <> default_calendar_and_labels_sql,
+    connection,
+  ))
+  seed(connection)
+}
+
+/// Starts a Value Stream from scratch: no Demand, Piece or history, one Person
+/// in one Work Station. The Working Calendar and the labels stay.
+pub fn reset_empty(
+  connection: sqlight.Connection,
+) -> Result(Nil, sqlight.Error) {
+  use <- in_transaction(connection)
+  sqlight.exec(empty_sql <> start_empty_sql, connection)
+}
+
+fn in_transaction(
+  connection: sqlight.Connection,
+  run: fn() -> Result(Nil, sqlight.Error),
+) -> Result(Nil, sqlight.Error) {
+  use _ <- result.try(sqlight.exec("begin immediate;", connection))
+  case run() {
     Ok(Nil) -> sqlight.exec("commit;", connection)
     Error(error) -> {
       let _ = sqlight.exec("rollback;", connection)
@@ -581,12 +632,36 @@ delete from demand;
 delete from work_station;
 delete from person;
 delete from stream_step;
-delete from holiday;
 delete from sqlite_sequence;
+"
+
+const default_calendar_and_labels_sql = "
+delete from holiday;
 update working_calendar set days = '12345', day_start = '09:00', day_end = '16:00';
 update stream_label
    set demand = 'Feature', demands = 'Features',
        piece = 'User Story', pieces = 'User Stories';
+"
+
+/// The one Blue Bin is empty, so the Work Station holds its one Kanban.
+const start_empty_sql = "
+insert into person (id, name)
+values ('pe-' || lower(hex(randomblob(6))), 'Person 1');
+
+insert into work_station (id, name, position, branch, blue_bins, team_leader)
+select 'ws-' || lower(hex(randomblob(6))), 'Work Station 1', 1, null, 1, id
+  from person;
+
+insert into station_person (station_id, person_id)
+select w.id, p.id from work_station w, person p;
+
+insert into kanban (id, station_id)
+select 'kb-' || lower(hex(randomblob(6))), id from work_station;
+
+insert into flow_event (at, kind, payload)
+select created_at, 'kanban_sent', json_object('station', station_id) from kanban;
+
+insert into stream_step (position, name) values (1, 'From the Backlog');
 "
 
 fn seed_when_empty(

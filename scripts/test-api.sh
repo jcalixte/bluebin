@@ -196,6 +196,37 @@ events=$(curl -s -N --max-time 2 -D - -o /dev/null "$BASE/api/events" || true)
 check "the event stream opens as Server-Sent Events" \
   sh -c 'printf "%s" "$1" | grep -qi "^content-type: text/event-stream"' _ "$events"
 
+check "every forecast is a day with its late days, or none of both" assert_json \
+  'all((.forecastOn == null) == (.forecastLateDays == null))' "$demands"
+
+# The checks below change the data, so they come last and end on the demo data.
+due=$(date -u -d '+30 day' +%Y-%m-%d)
+created=$(curl -s -w '\n%{http_code}' -H 'content-type: application/json' \
+  -d "{\"label\": \"Smoke\", \"client\": \"Smoke test\", \"dueOn\": \"$due\", \"pieces\": 2}" \
+  "$BASE/api/demands")
+check "a new Demand answers 201" test "$(printf '%s' "$created" | tail -n 1)" = 201
+created_id=$(printf '%s' "$created" | head -n 1 | jq -r '.id')
+check "a new Demand that asks for no Piece is refused" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
+     -d "{\"label\": \"Smoke\", \"client\": \"Smoke test\", \"dueOn\": \"$due\", \"pieces\": 0}" \
+     "$BASE/api/demands")" = 400
+check "the new Demand waits in the Backlog" assert_json \
+  "[.sequence[] | select(.demand == \"$created_id\")] | length == 2" \
+  "$(curl -fsS "$BASE/api/backlog")"
+
+check "an empty start answers 204" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' \
+     -d '{"mode": "empty"}' "$BASE/api/reset")" = 204
+check "an empty start has no Demand" assert_json 'length == 0' \
+  "$(curl -fsS "$BASE/api/demands")"
+check "an empty start has one Work Station holding one Kanban" assert_json \
+  '.stations | length == 1 and .[0].kanbans == 1' \
+  "$(curl -fsS "$BASE/api/value-stream")"
+check "a reset without a body puts back the demo data" test \
+  "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BASE/api/reset")" = 204
+check "the demo data has Demands again" assert_json 'length > 0' \
+  "$(curl -fsS "$BASE/api/demands")"
+
 echo
 if [ "$failures" -eq 0 ]; then
   echo "All checks passed."

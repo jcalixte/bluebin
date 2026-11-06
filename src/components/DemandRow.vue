@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue"
+import { useLabels } from "../composables/useLabels"
 import type { Demand } from "../types"
 
 const props = defineProps<{ demand: Demand }>()
+
+const { labels } = useLabels()
 
 /** Past this count, one tick per Piece is too dense to read. */
 const maxTicks = 60
@@ -47,13 +50,28 @@ const taktLabel = computed(() => {
   return hours >= 7 ? `${round(hours / 7)} working days` : `${round(hours)} h`
 })
 
-const dueLabel = computed(() =>
-  new Date(props.demand.dueOn).toLocaleDateString(undefined, {
+/** Noon keeps a `YYYY-MM-DD` day on the same date in every time zone. */
+function dayLabel(day: string) {
+  return new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
     year: "numeric",
-  }),
-)
+  })
+}
+
+const dueLabel = computed(() => dayLabel(props.demand.dueOn))
+
+const forecast = computed(() => {
+  const { forecastOn, forecastLateDays } = props.demand
+  if (forecastOn === null || forecastLateDays === null) return null
+  const days = `${forecastLateDays} working ${forecastLateDays === 1 ? "day" : "days"}`
+  return {
+    on: forecastOn,
+    label: dayLabel(forecastOn),
+    late: forecastLateDays > 0,
+    status: forecastLateDays > 0 ? `Late by ${days}` : "On time",
+  }
+})
 
 const barLabel = computed(
   () =>
@@ -74,6 +92,21 @@ const barLabel = computed(
         <h3 class="text-base font-semibold leading-tight">{{ demand.label }}</h3>
         <p class="mt-1 text-sm opacity-70">
           {{ demand.client }} · due <time :datetime="demand.dueOn">{{ dueLabel }}</time>
+        </p>
+        <p v-if="forecast" class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+          <span>
+            Forecast <time :datetime="forecast.on" class="font-medium">{{ forecast.label }}</time>
+          </span>
+          <span
+            class="badge badge-sm font-medium whitespace-nowrap"
+            :class="forecast.late ? 'badge-error' : 'badge-success'"
+            title="The forecast against the due date, by the Working Calendar"
+          >
+            {{ forecast.status }}
+          </span>
+        </p>
+        <p v-else class="mt-2 text-sm opacity-70">
+          No forecast yet: no {{ labels.piece }} produced
         </p>
         <p class="mt-1 text-xs opacity-70">
           Takt Time <span class="font-medium tabular-nums">{{ taktLabel }}</span> per Piece
