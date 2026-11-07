@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import type { Andon, Bottleneck, WorkStation } from "../types"
 
 const props = defineProps<{
@@ -30,7 +30,16 @@ const emit = defineEmits<{
   closeAndon: [teamMember: string]
 }>()
 
-const teamMember = ref("")
+/** A Work Station of one Team Member gives each pulled Piece to that Team Member. */
+const soleTeamMember = computed(() => {
+  const [only, ...others] = props.station.teamMembers
+  return only && others.length === 0 && props.canActAs(only.id) ? only.id : ""
+})
+
+const teamMember = ref(soleTeamMember.value)
+watch(soleTeamMember, (id) => {
+  teamMember.value = id
+})
 
 /** Who looks may hand over only to a Team Member they act as. */
 const handsOver = computed(() => props.station.teamMembers.some((one) => props.canActAs(one.id)))

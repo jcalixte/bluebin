@@ -249,6 +249,7 @@ _Avoid_: hidden Line, secret Line
 - Stage 2: an **Assignment** gives one item of a **Priority List** to one **Team Member** of that **Work Station**
 - A **Team Member** sees the **Assignments** they hold in all their **Work Stations**; the **Assignment** in the **Work Station** nearest to production comes first
 - For a **Kanban**, a free **Team Member** takes the top item of the **Priority List** of their **Work Station** nearest to production; nobody pushes a **Kanban** to a **Team Member**
+- A **Piece** pulled at a **Work Station** of one **Team Member** goes by default to that **Team Member**
 - For **Rework**, the **Assignment** goes by default to the **Team Member** who transformed the **Piece** at that **Work Station**
 - Any **Team Member** of a **Work Station** can reassign an **Assignment** to another **Team Member** of the same **Work Station**
 - A **Team Member** has at most one active **Assignment**; the others are paused
