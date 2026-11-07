@@ -69,6 +69,11 @@ pub fn database(workspace: String, line: String) -> Result(String, LineError) {
   |> result.replace_error(StoreFailed)
 }
 
+/// Never makes a file: a link into another Workspace must not create it.
+pub fn exists(workspace: String, line: String) -> Bool {
+  is_id(line) && simplifile.is_file(path(workspace, line)) == Ok(True)
+}
+
 fn guard_known(
   workspace: String,
   line: String,

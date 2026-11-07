@@ -63,6 +63,17 @@ file each, so no query can read across two of them:
 never creates a file. The SPA keeps the Line in its URL,
 `/lines/<id>/<view>`, and opens the last one used at `/`.
 
+With `BLUEBIN_SSO=on`, a signed-in Account also opens the Lines of other
+Workspaces at `/api/w/<owner-uid>/lines/<id>/…` (SPA `/w/<owner-uid>/lines/<id>/<view>`):
+the Lines where its email is on a Team Member, and the **Shared** Lines of
+those Workspaces, look only. `GET /api/workspaces` lists every Line it can
+open, by Workspace, with its `role` (`owner`, `member`, `viewer`). The guard
+in `backend/src/bluebin/access.gleam` runs before each Line route and the live
+stream: a Line the Account may not open answers `404`, a route it may not use
+`403`, and a route missing from the role table is refused. The owner makes a
+Line Shared or Private with `PUT …/sharing {"shared"}`, kept as a dated log in
+`data/accounts.db`.
+
 With `BLUEBIN_SSO=on`, Traefik also copies `X-authentik-email` and
 `X-authentik-name`, and each uid is an **Account** in `data/accounts.db`,
 shared by every Workspace. `GET /api/account` answers `signedIn`, `named`,

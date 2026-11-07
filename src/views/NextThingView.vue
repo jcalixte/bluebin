@@ -1,17 +1,28 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import { lineId } from "../api"
+import { lineId, workspaceOwner } from "../api"
 import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
+import { useWorkspaces } from "../composables/useWorkspaces"
 import type { Assignment, FlowConfirm, NextThing } from "../types"
 
-/** Team Members differ from one Line to the next. */
-const storageKey = `bluebin.teamMember.${lineId}`
+/** Team Members differ from one Line to the next, and Line ids from one Workspace to the next. */
+const storageKey = `bluebin.teamMember.${workspaceOwner ? `${workspaceOwner}/` : ""}${lineId}`
 const teamMemberId = ref(
   new URLSearchParams(location.search).get("teamMember") ?? localStorage.getItem(storageKey) ?? "",
+)
+
+/** A Team Member with an Account sees their own work first. */
+const { current } = useWorkspaces()
+watch(
+  () => current.value?.teamMember,
+  (own) => {
+    if (own && teamMemberId.value === "") teamMemberId.value = own
+  },
+  { immediate: true },
 )
 
 watch(teamMemberId, (id) => {

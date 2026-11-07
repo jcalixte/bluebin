@@ -4,14 +4,24 @@ import type { FlowConfirm } from "./types"
 export const firstLine = "main"
 
 const lastLineKey = "bluebin.line"
-const lineUrl = /^\/lines\/([a-z0-9-]+)(\/.*)?$/
+/** `/lines/<id>/<view>` in the Account's own Workspace, `/w/<owner-uid>/lines/<id>/<view>` in another (H12). */
+const lineUrl = /^(?:\/w\/([A-Za-z0-9_-]+))?\/lines\/([a-z0-9-]+)(\/.*)?$/
 
-function lineOfPage(): { id: string; view: string } {
+type Page = { owner: string | null; id: string; view: string }
+
+/** The last Line opened: a bare id in the own Workspace, `<owner-uid>/<id>` in another. */
+function rememberedLine(): { owner: string | null; id: string } {
+  const remembered = localStorage.getItem(lastLineKey) ?? firstLine
+  const [owner, id] = remembered.includes("/") ? remembered.split("/", 2) : [null, remembered]
+  return { owner, id }
+}
+
+function lineOfPage(): Page {
   const match = lineUrl.exec(location.pathname)
   if (match) {
-    return { id: match[1], view: match[2] ?? "/" }
+    return { owner: match[1] ?? null, id: match[2], view: match[3] ?? "/" }
   }
-  return { id: localStorage.getItem(lastLineKey) ?? firstLine, view: location.pathname }
+  return { ...rememberedLine(), view: location.pathname }
 }
 
 const page = lineOfPage()
@@ -19,13 +29,16 @@ const page = lineOfPage()
 /** The Line this page shows, read once: switching reloads the page. */
 export const lineId = page.id
 
-/** The view part of the URL, without the `/lines/<id>` prefix. */
+/** The owner of the Workspace this page shows; `null` for the Account's own. */
+export const workspaceOwner = page.owner
+
+/** The view part of the URL, without the Line prefix. */
 export function viewPath(): string {
-  return lineUrl.exec(location.pathname)?.[2] ?? location.pathname
+  return lineUrl.exec(location.pathname)?.[3] ?? location.pathname
 }
 
-export function pageUrl(view: string, line = lineId): string {
-  return `/lines/${line}${view}`
+export function pageUrl(view: string, line = lineId, owner = workspaceOwner): string {
+  return `${owner ? `/w/${owner}` : ""}/lines/${line}${view}`
 }
 
 /** Puts the Line in the URL of a page opened without it, as `/demands`. */
@@ -35,14 +48,17 @@ export function settleLineUrl() {
   }
 }
 
-export function rememberLine(line: string | null) {
-  if (line) localStorage.setItem(lastLineKey, line)
+export function rememberLine(line: string | null, owner: string | null = null) {
+  if (line) localStorage.setItem(lastLineKey, owner ? `${owner}/${line}` : line)
   else localStorage.removeItem(lastLineKey)
 }
 
+/** The API root of the Line of this page. */
+export const lineApi = `/api${pageUrl("", lineId, workspaceOwner)}`
+
 /** `/api/demands` → the same route inside the Line of this page. */
 export function api(path: string): string {
-  return `/api/lines/${lineId}${path.slice("/api".length)}`
+  return `${lineApi}${path.slice("/api".length)}`
 }
 
 export async function postAction(

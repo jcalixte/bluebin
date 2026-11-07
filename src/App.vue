@@ -15,6 +15,7 @@ import NextThingView from "./views/NextThingView.vue"
 import LineView from "./views/LineView.vue"
 import { useAccount } from "./composables/useAccount"
 import { useLabels } from "./composables/useLabels"
+import { useWorkspaces } from "./composables/useWorkspaces"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
@@ -29,6 +30,12 @@ type View = (typeof views)[number]
 
 const { labels } = useLabels()
 const { account, checked } = useAccount()
+const { role } = useWorkspaces()
+
+/** Only the owner redesigns or resets a Line (F49). */
+const shownViews = computed(() =>
+  role.value === "owner" ? views : views.filter((view) => view.id !== "design"),
+)
 
 const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
@@ -124,7 +131,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
         <div class="flex flex-wrap items-center gap-3">
           <nav class="tabs tabs-box">
             <a
-              v-for="view in views"
+              v-for="view in shownViews"
               :key="view.id"
               :href="pageUrl(view.path)"
               class="tab"
@@ -149,6 +156,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             Invite…
           </button>
           <button
+            v-if="role === 'owner'"
             type="button"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             :disabled="resetting"
@@ -163,6 +171,9 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
     </header>
 
     <main class="mx-auto max-w-[110rem] px-6 py-8">
+      <p v-if="role === 'viewer'" role="status" class="alert alert-info mb-6">
+        You look at this Shared Line. Only its Team Members act in it.
+      </p>
       <DemandsView v-if="current.id === 'demands'" />
       <BacklogView v-else-if="current.id === 'backlog'" />
       <LineView v-else-if="current.id === 'line'" />

@@ -1,3 +1,4 @@
+import bluebin/access
 import bluebin/accounts
 import bluebin/andon
 import bluebin/assignment
@@ -60,8 +61,10 @@ pub fn main() {
   let assert Ok(_) =
     fn(request) {
       case request.path_segments(request) {
-        ["api", "events"] -> events(request, hub, lines.first)
-        ["api", "lines", line, "events"] -> events(request, hub, line)
+        ["api", "events"] -> events(request, context, None, lines.first)
+        ["api", "lines", line, "events"] -> events(request, context, None, line)
+        ["api", "w", owner, "lines", line, "events"] ->
+          events(request, context, Some(owner), line)
         _ -> api(request)
       }
     }
@@ -73,19 +76,57 @@ pub fn main() {
   process.sleep_forever()
 }
 
+/// `owner` is the Workspace named in the URL; `None` for the caller's own.
+/// A Line the caller may not read answers `404`, like the API (F48).
 fn events(
   request: request.Request(mist.Connection),
-  hub: live.Hub,
+  context: Context,
+  owner: Option(String),
   line: String,
 ) -> response.Response(mist.ResponseData) {
   let empty = fn(status) {
     response.new(status) |> response.set_body(mist.Bytes(bytes_tree.new()))
   }
-  case workspace.from_request(request), lines.is_id(line) {
-    Error(Nil), _ -> empty(401)
-    Ok(_), False -> empty(404)
-    Ok(workspace), True ->
-      live.stream(request, hub, lines.channel(workspace, line))
+  let target = case owner {
+    None -> workspace.from_request(request)
+    Some(owner) -> workspace.parse(owner)
+  }
+  case workspace.from_request(request), target, lines.is_id(line) {
+    Error(Nil), _, _ -> empty(401)
+    Ok(_), Error(Nil), _ | Ok(_), _, False -> empty(404)
+    Ok(caller), Ok(workspace), True ->
+      case role_of(request, context, caller, workspace, line) {
+        Error(Nil) -> empty(500)
+        Ok(role) ->
+          case access.allows(role, access.Read) {
+            True ->
+              live.stream(request, context.hub, lines.channel(workspace, line))
+            False -> empty(404)
+          }
+      }
+  }
+}
+
+fn role_of(
+  request: request.Request(body),
+  context: Context,
+  caller: String,
+  workspace: String,
+  line: String,
+) -> Result(access.Role, Nil) {
+  access.role(
+    context.accounts,
+    caller,
+    signed_in_email(identity_of(request, context, caller)),
+    workspace,
+    line,
+  )
+}
+
+fn signed_in_email(identity: Identity) -> Option(String) {
+  case identity {
+    SignedIn(email:, ..) -> Some(email)
+    SignedOut | NoEmail -> None
   }
 }
 
@@ -150,6 +191,10 @@ pub fn handle_request(
           use <- wisp.require_method(request, http.Post)
           create_invitation(request, context, workspace)
         }
+        ["api", "workspaces"] -> {
+          use <- wisp.require_method(request, http.Get)
+          list_workspaces(request, context, workspace)
+        }
         ["api", "lines"] ->
           case request.method {
             http.Post -> create_line(request, workspace)
@@ -158,16 +203,18 @@ pub fn handle_request(
               list_lines(workspace)
             }
           }
-        ["api", "lines", line] -> {
-          use <- wisp.require_method(request, http.Put)
-          rename_line(request, workspace, line)
-        }
         ["api", "lines", line, ..rest] ->
-          in_line(request, context, workspace, line, ["api", ..rest])
+          in_line(request, context, workspace, workspace, line, ["api", ..rest])
+        ["api", "w", owner, "lines", line, ..rest] ->
+          case workspace.parse(owner) {
+            Ok(owner) ->
+              in_line(request, context, workspace, owner, line, ["api", ..rest])
+            Error(Nil) -> wisp.not_found()
+          }
         // Legacy routes of the first Line: scripts and SPAs open during a
         // deploy still call them.
         ["api", ..] ->
-          in_line(request, context, workspace, lines.first, segments)
+          in_line(request, context, workspace, workspace, lines.first, segments)
         _ -> wisp.not_found()
       }
     }
@@ -175,10 +222,47 @@ pub fn handle_request(
 }
 
 /// `segments` is the path inside the Line, `["api", "demands"]` for
-/// both `/api/demands` and `/api/lines/<id>/demands`.
+/// `/api/demands`, `/api/lines/<id>/demands` and
+/// `/api/w/<owner>/lines/<id>/demands`. `caller` is the signed-in Account's
+/// uid, `workspace` the owner's. The guard (H10) runs before any handler.
 fn in_line(
   request: wisp.Request,
   context: Context,
+  caller: String,
+  workspace: String,
+  line: String,
+  segments: List(String),
+) -> wisp.Response {
+  case role_of(request, context, caller, workspace, line) {
+    Error(Nil) -> wisp.internal_server_error()
+    // A Private Line does not show it exists (F48).
+    Ok(access.NoRole) -> wisp.not_found()
+    Ok(role) ->
+      case access.need(request.method, segments) {
+        Error(Nil) -> wisp.response(403)
+        Ok(need) ->
+          case access.allows(role, need) {
+            False -> wisp.response(403)
+            True ->
+              open_line(
+                request,
+                context,
+                caller,
+                role,
+                workspace,
+                line,
+                segments,
+              )
+          }
+      }
+  }
+}
+
+fn open_line(
+  request: wisp.Request,
+  context: Context,
+  caller: String,
+  role: access.Role,
   workspace: String,
   line: String,
   segments: List(String),
@@ -193,11 +277,92 @@ fn in_line(
         lines.channel(workspace, line),
         segments,
       )
-      let linking = case identity_of(request, context, workspace) {
+      let identity = identity_of(request, context, caller)
+      let linking = case identity {
         SignedIn(..) -> Some(Linking(context.accounts, workspace, line))
         SignedOut | NoEmail -> None
       }
-      route(request, segments, database, linking)
+      let act_as = fn(wanted) {
+        access.actor(role, wanted, linked_elsewhere(
+          context,
+          identity,
+          workspace,
+          line,
+          _,
+        ))
+      }
+      case segments {
+        ["api"] -> rename_line(request, workspace, line)
+        ["api", "sharing"] ->
+          share_line(request, context, identity, workspace, line)
+        _ -> route(request, segments, database, linking, act_as)
+      }
+    }
+  }
+}
+
+/// The Team Member a flow action acts as, or `Error` when the Account may
+/// not act as the one in the request (F50).
+type ActAs =
+  fn(Option(String)) -> Result(Option(String), Nil)
+
+/// Whether `team_member` is linked to an Account other than the caller's:
+/// then only that Account acts as them (R7). A read failure says yes.
+fn linked_elsewhere(
+  context: Context,
+  identity: Identity,
+  workspace: String,
+  line: String,
+  team_member: String,
+) -> Bool {
+  case identity {
+    SignedOut | NoEmail -> False
+    SignedIn(email:, ..) ->
+      case accounts.links(context.accounts, workspace, line) {
+        Error(Nil) -> True
+        Ok(links) ->
+          list.any(links, fn(link) {
+            case link.team_member == team_member, link.account {
+              True, Some(account) ->
+                string.lowercase(account.email) != string.lowercase(email)
+              _, _ -> False
+            }
+          })
+      }
+  }
+}
+
+fn not_yours() -> wisp.Response {
+  wisp.response(403)
+  |> wisp.string_body(
+    "You act only as your own Team Member; the owner acts for those with no Account.",
+  )
+}
+
+/// Sharing lives in `accounts.db`, so it needs SSO on (F52).
+fn share_line(
+  request: wisp.Request,
+  context: Context,
+  identity: Identity,
+  workspace: String,
+  line: String,
+) -> wisp.Response {
+  case identity {
+    SignedOut | NoEmail ->
+      wisp.response(403)
+      |> wisp.string_body("A Line is shared only with sign-in on.")
+    SignedIn(..) -> {
+      use body <- wisp.require_json(request)
+      case
+        decode.run(body, decode.field("shared", decode.bool, decode.success))
+      {
+        Error(_) -> wisp.bad_request("expected a body like {\"shared\": true}")
+        Ok(shared) ->
+          case accounts.share(context.accounts, workspace, line, shared) {
+            Ok(Nil) -> json_body([#("shared", json.bool(shared))], 200)
+            Error(Nil) -> wisp.internal_server_error()
+          }
+      }
     }
   }
 }
@@ -217,7 +382,7 @@ type Identity {
 /// With SSO off any client sends any header, so nobody is signed in and no
 /// Account is made (F52).
 fn identity_of(
-  request: wisp.Request,
+  request: request.Request(body),
   context: Context,
   workspace: String,
 ) -> Identity {
@@ -386,6 +551,139 @@ fn create_invitation(
   }
 }
 
+/// Every Line the Account can open, by Workspace, its own first (F46).
+/// With SSO off only its own Workspace opens (F52).
+fn list_workspaces(
+  request: wisp.Request,
+  context: Context,
+  caller: String,
+) -> wisp.Response {
+  let identity = identity_of(request, context, caller)
+  let shared = fn(workspace, line) {
+    case identity {
+      SignedIn(..) -> accounts.is_shared(context.accounts, workspace, line)
+      SignedOut | NoEmail -> Ok(False)
+    }
+  }
+  let found = {
+    use own <- result.try(lines.list(caller) |> result.replace_error(Nil))
+    use own <- result.try(
+      list.try_map(own, fn(line) {
+        use shared <- result.map(shared(caller, line.id))
+        line_entry_json(line, shared, access.Owner)
+      }),
+    )
+    use name <- result.try(case identity {
+      SignedIn(..) -> accounts.name_of_uid(context.accounts, caller)
+      SignedOut | NoEmail -> Ok(None)
+    })
+    use others <- result.map(case identity {
+      SignedIn(email:, ..) -> other_workspaces(context, caller, email)
+      SignedOut | NoEmail -> Ok([])
+    })
+    [workspace_json(caller, name, True, own), ..others]
+  }
+  case found {
+    Ok(workspaces) ->
+      wisp.json_response(
+        json.to_string(json.preprocessed_array(workspaces)),
+        200,
+      )
+    Error(Nil) -> wisp.internal_server_error()
+  }
+}
+
+/// The Workspaces where `email` is a Team Member: its Lines there, and the
+/// Shared Lines of those Workspaces.
+fn other_workspaces(
+  context: Context,
+  caller: String,
+  email: String,
+) -> Result(List(json.Json), Nil) {
+  use links <- result.try(accounts.links_of(context.accounts, email))
+  let workspaces =
+    list.map(links, fn(link) { link.0 })
+    |> list.unique
+    |> list.filter(fn(workspace) { workspace != caller })
+  use found <- result.map(
+    list.try_map(workspaces, fn(workspace) {
+      use held <- result.try(access.live_links(
+        context.accounts,
+        email,
+        workspace,
+      ))
+      case held {
+        [] -> Ok(None)
+        _ -> {
+          use all <- result.try(
+            lines.list(workspace) |> result.replace_error(Nil),
+          )
+          use entries <- result.try(
+            list.try_map(all, fn(line) {
+              use shared <- result.map(accounts.is_shared(
+                context.accounts,
+                workspace,
+                line.id,
+              ))
+              case list.key_find(held, line.id), shared {
+                Ok(team_member), _ ->
+                  Some(line_entry_json(line, shared, access.Member(team_member)))
+                Error(Nil), True ->
+                  Some(line_entry_json(line, shared, access.Viewer))
+                Error(Nil), False -> None
+              }
+            }),
+          )
+          use name <- result.map(accounts.name_of_uid(
+            context.accounts,
+            workspace,
+          ))
+          Some(#(
+            option.unwrap(name, ""),
+            workspace_json(workspace, name, False, option.values(entries)),
+          ))
+        }
+      }
+    }),
+  )
+  option.values(found)
+  |> list.sort(fn(one, other) { string.compare(one.0, other.0) })
+  |> list.map(fn(pair) { pair.1 })
+}
+
+fn workspace_json(
+  owner: String,
+  name: Option(String),
+  own: Bool,
+  entries: List(json.Json),
+) -> json.Json {
+  json.object([
+    #("owner", json.string(owner)),
+    #("name", json.nullable(name, json.string)),
+    #("own", json.bool(own)),
+    #("lines", json.preprocessed_array(entries)),
+  ])
+}
+
+fn line_entry_json(
+  line: lines.Line,
+  shared: Bool,
+  role: access.Role,
+) -> json.Json {
+  let #(role, team_member) = case role {
+    access.Member(team_member) -> #("member", Some(team_member))
+    access.Viewer -> #("viewer", None)
+    access.Owner | access.NoRole -> #("owner", None)
+  }
+  json.object([
+    #("id", json.string(line.id)),
+    #("name", json.string(line.name)),
+    #("shared", json.bool(shared)),
+    #("role", json.string(role)),
+    #("teamMember", json.nullable(team_member, json.string)),
+  ])
+}
+
 fn list_lines(workspace: String) -> wisp.Response {
   case lines.list(workspace) {
     Ok(found) ->
@@ -459,6 +757,7 @@ fn route(
   segments: List(String),
   database: String,
   linking: Option(Linking),
+  act_as: ActAs,
 ) -> wisp.Response {
   case segments {
     ["api", "demands"] ->
@@ -483,7 +782,7 @@ fn route(
     }
     ["api", "pull"] -> {
       use <- wisp.require_method(request, http.Post)
-      pull(request, database)
+      pull(request, database, act_as)
     }
     ["api", "finish"] -> {
       use <- wisp.require_method(request, http.Post)
@@ -507,15 +806,15 @@ fn route(
     }
     ["api", "andon"] -> {
       use <- wisp.require_method(request, http.Post)
-      raise_andon(request, database)
+      raise_andon(request, database, act_as)
     }
     ["api", "andon", "close"] -> {
       use <- wisp.require_method(request, http.Post)
-      close_andon(request, database)
+      close_andon(request, database, act_as)
     }
     ["api", "assign"] -> {
       use <- wisp.require_method(request, http.Post)
-      assign(request, database)
+      assign(request, database, act_as)
     }
     ["api", "team-members"] ->
       case request.method {
@@ -980,7 +1279,11 @@ fn andons(database: String) -> wisp.Response {
   }
 }
 
-fn raise_andon(request: wisp.Request, database: String) -> wisp.Response {
+fn raise_andon(
+  request: wisp.Request,
+  database: String,
+  act_as: ActAs,
+) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -996,15 +1299,23 @@ fn raise_andon(request: wisp.Request, database: String) -> wisp.Response {
     Error(_) ->
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
     Ok(#(station, team_member)) ->
-      andon_response(
-        db.with_connection_at(database, fn(connection) {
-          flow.raise_andon(connection, station, team_member)
-        }),
-      )
+      case act_as(team_member) {
+        Error(Nil) -> not_yours()
+        Ok(team_member) ->
+          andon_response(
+            db.with_connection_at(database, fn(connection) {
+              flow.raise_andon(connection, station, team_member)
+            }),
+          )
+      }
   }
 }
 
-fn close_andon(request: wisp.Request, database: String) -> wisp.Response {
+fn close_andon(
+  request: wisp.Request,
+  database: String,
+  act_as: ActAs,
+) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -1018,11 +1329,15 @@ fn close_andon(request: wisp.Request, database: String) -> wisp.Response {
         "expected a body like {\"station\": \"ws-web\", \"teamMember\": \"pe-bob\"}",
       )
     Ok(#(station, team_member)) ->
-      andon_response(
-        db.with_connection_at(database, fn(connection) {
-          flow.close_andon(connection, station, team_member)
-        }),
-      )
+      case act_as(Some(team_member)) {
+        Ok(Some(team_member)) ->
+          andon_response(
+            db.with_connection_at(database, fn(connection) {
+              flow.close_andon(connection, station, team_member)
+            }),
+          )
+        _ -> not_yours()
+      }
   }
 }
 
@@ -1071,7 +1386,11 @@ fn make_urgent(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-fn pull(request: wisp.Request, database: String) -> wisp.Response {
+fn pull(
+  request: wisp.Request,
+  database: String,
+  act_as: ActAs,
+) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
@@ -1092,11 +1411,15 @@ fn pull(request: wisp.Request, database: String) -> wisp.Response {
     Error(_) ->
       wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
     Ok(#(station, team_member, reason)) ->
-      flow_response(
-        db.with_connection_at(database, fn(connection) {
-          flow.pull(connection, station, team_member, reason)
-        }),
-      )
+      case act_as(team_member) {
+        Error(Nil) -> not_yours()
+        Ok(team_member) ->
+          flow_response(
+            db.with_connection_at(database, fn(connection) {
+              flow.pull(connection, station, team_member, reason)
+            }),
+          )
+      }
   }
 }
 
@@ -1417,7 +1740,11 @@ fn next_thing(team_member: String, database: String) -> wisp.Response {
   }
 }
 
-fn assign(request: wisp.Request, database: String) -> wisp.Response {
+fn assign(
+  request: wisp.Request,
+  database: String,
+  act_as: ActAs,
+) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use kind <- decode.field("kind", decode.string)
@@ -1439,21 +1766,33 @@ fn assign(request: wisp.Request, database: String) -> wisp.Response {
         "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"teamMember\": \"pe-lila\"}",
       )
     Ok(#(kind, id, team_member)) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          flow.reassign(connection, kind, id, team_member)
-        })
-      {
-        Ok(reassigned) ->
-          json_body(
-            [
-              #("piece", json.string(reassigned.piece)),
-              #("teamMember", json.string(reassigned.team_member)),
-            ],
-            200,
-          )
-        Error(failure) -> flow_response(Error(failure))
+      case act_as(Some(team_member)) {
+        Ok(Some(team_member)) -> reassign(database, kind, id, team_member)
+        _ -> not_yours()
       }
+  }
+}
+
+fn reassign(
+  database: String,
+  kind: flow.AssignmentKind,
+  id: String,
+  team_member: String,
+) -> wisp.Response {
+  case
+    db.with_connection_at(database, fn(connection) {
+      flow.reassign(connection, kind, id, team_member)
+    })
+  {
+    Ok(reassigned) ->
+      json_body(
+        [
+          #("piece", json.string(reassigned.piece)),
+          #("teamMember", json.string(reassigned.team_member)),
+        ],
+        200,
+      )
+    Error(failure) -> flow_response(Error(failure))
   }
 }
 

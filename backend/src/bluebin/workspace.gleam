@@ -13,7 +13,8 @@ pub const public = "public"
 
 const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
 
-/// The workspace of the signed-in user; a user has one workspace for now.
+/// The caller's own Workspace. Another owner's comes from the URL (`parse`),
+/// behind the guard of `bluebin/access`.
 /// No header means the `public` workspace; `Error(Nil)` when the header is
 /// unsafe as a file name.
 pub fn from_request(request: Request(body)) -> Result(String, Nil) {
@@ -24,6 +25,15 @@ pub fn from_request(request: Request(body)) -> Result(String, Nil) {
         False -> Error(Nil)
       }
     Error(Nil) -> Ok(public)
+  }
+}
+
+/// The owner's uid in a URL (H12), checked like the header: it names a
+/// directory.
+pub fn parse(uid: String) -> Result(String, Nil) {
+  case is_safe(uid) {
+    True -> Ok(uid)
+    False -> Error(Nil)
   }
 }
 

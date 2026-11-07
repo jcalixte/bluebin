@@ -63,6 +63,14 @@ create table if not exists link_change (
   team_member text not null,
   email       text
 );
+create table if not exists line_share_change (
+  at        text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  workspace text not null,
+  line      text not null,
+  shared    integer not null
+);
+create index if not exists line_share_change_by_line
+  on line_share_change (workspace, line);
 "
 
 /// Traefik forward auth copies these from authentik's answer, so they are
@@ -381,6 +389,68 @@ pub fn links_of(
     },
   )
   |> result.replace_error(Nil)
+}
+
+/// A Line is Private until its owner shares it. The last dated change wins,
+/// so the log is the state.
+pub fn is_shared(
+  database: String,
+  workspace: String,
+  line: String,
+) -> Result(Bool, Nil) {
+  use connection <- open(database)
+  case
+    sqlight.query(
+      "select shared from line_share_change
+        where workspace = ?1 and line = ?2
+        order by rowid desc limit 1",
+      on: connection,
+      with: [sqlight.text(workspace), sqlight.text(line)],
+      expecting: decode.field(0, decode.int, decode.success),
+    )
+  {
+    Ok([shared, ..]) -> Ok(shared == 1)
+    Ok([]) -> Ok(False)
+    Error(_) -> Error(Nil)
+  }
+}
+
+pub fn share(
+  database: String,
+  workspace: String,
+  line: String,
+  shared: Bool,
+) -> Result(Nil, Nil) {
+  use connection <- open(database)
+  sqlight.query(
+    "insert into line_share_change (workspace, line, shared)
+     values (?1, ?2, ?3)",
+    on: connection,
+    with: [sqlight.text(workspace), sqlight.text(line), sqlight.bool(shared)],
+    expecting: decode.success(Nil),
+  )
+  |> result.replace(Nil)
+  |> result.replace_error(Nil)
+}
+
+/// The owner's name, to title a Workspace; `None` before the first sign-in.
+pub fn name_of_uid(
+  database: String,
+  uid: String,
+) -> Result(Option(String), Nil) {
+  use connection <- open(database)
+  case
+    sqlight.query(
+      "select email, first_name, last_name from account where uid = ?1",
+      on: connection,
+      with: [sqlight.text(uid)],
+      expecting: account_decoder(),
+    )
+  {
+    Ok([account, ..]) -> Ok(Some(full_name(account)))
+    Ok([]) -> Ok(None)
+    Error(_) -> Error(Nil)
+  }
 }
 
 pub fn full_name(account: Account) -> String {
