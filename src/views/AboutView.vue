@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref } from "vue"
 import BrandMark from "../components/BrandMark.vue"
 import ThemeToggle from "../components/ThemeToggle.vue"
 
@@ -17,6 +18,39 @@ type SectionId = (typeof sections)[number]["id"]
 const section = Object.fromEntries(
   sections.map((s, i) => [s.id, { ...s, number: String(i + 1).padStart(2, "0") }]),
 ) as Record<SectionId, { id: SectionId; title: string; number: string }>
+
+const active = ref<SectionId | null>(null)
+let pinned = false
+
+/** The active section is the last one whose heading is above the top third of the window. */
+function updateActive() {
+  if (pinned) return
+  const scroller = document.documentElement
+  if (scroller.scrollTop + innerHeight >= scroller.scrollHeight - 1) {
+    // The last sections are too short to reach the line at the bottom of the page.
+    active.value = sections[sections.length - 1].id
+    return
+  }
+  let current: SectionId | null = null
+  for (const s of sections) {
+    const heading = document.getElementById(s.id)
+    if (heading && heading.getBoundingClientRect().top <= innerHeight / 3) current = s.id
+  }
+  active.value = current
+}
+
+/** A click marks its section at once and ignores the scroll of the jump, which can end at the bottom. */
+function pick(id: SectionId) {
+  active.value = id
+  pinned = true
+  requestAnimationFrame(() => requestAnimationFrame(() => (pinned = false)))
+}
+
+onMounted(() => {
+  updateActive()
+  addEventListener("scroll", updateActive, { passive: true })
+})
+onBeforeUnmount(() => removeEventListener("scroll", updateActive))
 
 /** One Blue Bin glyph. Full and empty differ by fill and border style, not by colour alone. */
 const fullBin = "size-7 rounded-field border-2 border-primary bg-primary"
@@ -287,7 +321,14 @@ const readings = [
               v-for="s in sections"
               :key="s.id"
               :href="`#${s.id}`"
-              class="flex gap-3 rounded-field px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-300 hover:text-base-content"
+              class="flex gap-3 rounded-r-field border-l-2 px-3 py-2 text-sm transition-colors hover:bg-base-300 hover:text-base-content"
+              :class="
+                active === s.id
+                  ? 'border-primary bg-base-100 font-semibold text-base-content'
+                  : 'border-transparent text-base-content/80'
+              "
+              :aria-current="active === s.id ? 'location' : undefined"
+              @click="pick(s.id)"
             >
               <span class="font-semibold tabular-nums text-primary">{{
                 section[s.id].number
