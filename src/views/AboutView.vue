@@ -40,7 +40,7 @@ const line: Node[] = [
 const cycle = [
   "Development finishes a Piece and puts it in a Blue Bin.",
   "QA pulls the Piece out of the Blue Bin when it is ready to work on it.",
-  "Development gets a Kanban: a signal that it can make one more Piece.",
+  "The empty Blue Bin gives Development a Kanban.",
   "Development makes the next Piece. With no Kanban, it does not start one.",
 ]
 
@@ -131,12 +131,12 @@ const readings = [
   {
     href: "https://thinking-people-system.house/",
     name: "Explorable Thinking People System",
-    text: "The house of the Toyota Production System, the source of Bluebin: Just-in-Time, Jidoka, Heijunka, and how they help people improve their work.",
+    text: "The Toyota Production System that Bluebin comes from, drawn as a house with Just-in-Time and Jidoka as its two pillars.",
   },
   {
     href: "https://thinking-people-system.house/pull-system",
     name: "Exploring Pull System",
-    text: "How a pull system helps a team succeed, and why each step waits for the next one to ask.",
+    text: "How a pull system helps a team finish more of what it starts.",
   },
 ]
 </script>
