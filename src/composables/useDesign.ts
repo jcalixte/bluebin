@@ -61,6 +61,7 @@ function toPayload(design: DesignShape): DesignInput {
     teamMembers: design.teamMembers.map((teamMember) => ({
       id: teamMember.id,
       name: teamMember.name.trim(),
+      email: teamMember.email.trim(),
     })),
     steps: design.steps.map((step) => ({
       name: step.name.trim(),
@@ -250,7 +251,8 @@ export function useDesign() {
       if (!response.ok) {
         throw new Error((await response.text()) || `API answered ${response.status}`)
       }
-      const teamMember = (await response.json()) as DesignTeamMember
+      const added = (await response.json()) as Pick<DesignTeamMember, "id" | "name">
+      const teamMember: DesignTeamMember = { ...added, email: "", account: null }
       saved.value?.teamMembers.push({ ...teamMember })
       draft.value?.teamMembers.push({ ...teamMember })
       return true

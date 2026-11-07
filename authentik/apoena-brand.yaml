@@ -1,6 +1,6 @@
 # Look of every flow on auth.apoena.dev (sign-in, sign-up, recovery), for
-# authentik 2025.10: the apoena.dev style and its toucan. Flows whose slug
-# starts with "bluebin-" get the Bluebin style instead.
+# authentik 2025.10: the apoena.dev style and its toucan. Bluebin flows have
+# their own brand on auth.bluebin.app (bluebin-brand.yaml).
 # Import: authentik admin > Flows and Stages > Flows > Import.
 #
 # The sign-in flow "apoena-authentication" reuses the stages of
@@ -73,8 +73,6 @@ entries:
           --apoena-primary: #071f88;
           --apoena-primary-hover: #05165f;
           --apoena-on-primary: #ffffff;
-          --apoena-title-weight: 700;
-          --apoena-logo-size: 80px;
         }
         :host([flowslug][theme="dark"]) {
           --apoena-bg: #181818;
@@ -82,22 +80,6 @@ entries:
           --apoena-primary: #99acff;
           --apoena-primary-hover: #b8c5ff;
           --apoena-on-primary: #181818;
-        }
-
-        :host([flowslug^="bluebin-"]) {
-          --apoena-font: "Inter", ui-sans-serif, system-ui, sans-serif;
-          --apoena-text: #18181b;
-          --apoena-primary: #1e3799;
-          --apoena-primary-hover: #182c7a;
-          --apoena-title-weight: 600;
-          --apoena-logo-size: 4rem;
-        }
-        :host([flowslug^="bluebin-"][theme="dark"]) {
-          --apoena-bg: #1d232a;
-          --apoena-text: #e5e7eb;
-          --apoena-primary: #7289e3;
-          --apoena-primary-hover: #8c9feb;
-          --apoena-on-primary: #0d1117;
         }
 
         :host([flowslug]) {
@@ -114,19 +96,22 @@ entries:
           --pf-global--link--Color--light: var(--apoena-primary);
           --pf-global--link--Color--light--hover: var(--apoena-primary-hover);
           --pf-global--spacer--form-element: 0.625rem;
+          --pf-global--FontSize--3xl: clamp(1.75rem, 1.4rem + 1.5vw, 2.25rem);
+          --pf-global--FontSize--sm: 0.9375rem;
           display: block;
           min-height: 100dvh;
           color: var(--apoena-text);
           font-family: var(--apoena-font);
+          background-color: var(--apoena-bg);
         }
         :host([flowslug]) .ak-brand img {
-          width: var(--apoena-logo-size);
-          height: var(--apoena-logo-size);
+          width: 80px;
+          height: 80px;
           padding: 0;
         }
         .pf-c-login__main-header .pf-c-title {
           color: var(--apoena-primary);
-          font-weight: var(--apoena-title-weight);
+          font-weight: 700;
           line-height: 1.2;
         }
         .pf-c-button {
@@ -136,30 +121,15 @@ entries:
           --pf-c-button--m-primary--active--Color: var(--apoena-on-primary, var(--pf-global--Color--light-100));
         }
 
-        :host([flowslug]:not([flowslug^="bluebin-"])) {
-          --pf-global--FontSize--3xl: clamp(1.75rem, 1.4rem + 1.5vw, 2.25rem);
-          --pf-global--FontSize--sm: 0.9375rem;
-          background-color: var(--apoena-bg);
-        }
-        :host([flowslug]:not([flowslug^="bluebin-"])) .pf-c-background-image {
+        :host([flowslug]) .pf-c-background-image {
           display: none;
         }
-        :host([flowslug]:not([flowslug^="bluebin-"])) .pf-c-login__main {
+        :host([flowslug]) .pf-c-login__main {
           margin-top: 0;
           box-shadow: none;
         }
-        :host([flowslug]:not([flowslug^="bluebin-"])) .ak-brand {
+        :host([flowslug]) .ak-brand {
           justify-content: flex-start;
           padding-top: 2rem;
           padding-bottom: 0;
-        }
-
-        :host([flowslug^="bluebin-"]) .ak-brand img {
-          display: none;
-        }
-        :host([flowslug^="bluebin-"]) .ak-brand::before {
-          content: "";
-          width: var(--apoena-logo-size);
-          height: var(--apoena-logo-size);
-          background: url("https://git.apoena.dev/julien/bluebin/raw/branch/main/public/favicon.svg") center / contain no-repeat;
         }

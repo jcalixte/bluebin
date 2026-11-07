@@ -1,0 +1,92 @@
+# Bluebin on its own authentik domain, auth.bluebin.app, for authentik 2025.10.
+# Import: authentik admin > Flows and Stages > Flows > Import, after
+# bluebin-authentication.yaml and bluebin-invitation.yaml.
+#
+# The brand gives every flow on auth.bluebin.app the Bluebin look, light or
+# dark from the OS, and the Bluebin sign-in.
+#
+# The outpost "bluebin" serves the forward auth of bluebin.app. authentik runs
+# it as the container ak-outpost-bluebin on the Docker network "coolify", where
+# Traefik reaches it. Its authentik_host is auth.bluebin.app, so the browser
+# signs in there and the session cookie belongs to auth.bluebin.app: a new user
+# who signs up through an invitation is already signed in to Bluebin.
+# Do not set authentik_host_browser: the outpost then expects that host as the
+# token issuer, but authentik signs the token with the host the outpost calls.
+version: 1
+metadata:
+  name: Bluebin - Brand and outpost
+entries:
+  - model: authentik_brands.brand
+    identifiers:
+      domain: auth.bluebin.app
+    attrs:
+      default: false
+      flow_authentication: !Find [authentik_flows.flow, [slug, bluebin-authentication]]
+      branding_title: Bluebin
+      branding_logo: https://git.apoena.dev/julien/bluebin/raw/branch/main/public/favicon.svg
+      branding_favicon: https://git.apoena.dev/julien/bluebin/raw/branch/main/public/favicon.svg
+      branding_custom_css: |
+        :host([flowslug]) {
+          --bluebin-font: "Inter", ui-sans-serif, system-ui, sans-serif;
+          --bluebin-bg: #ffffff;
+          --bluebin-text: #18181b;
+          --bluebin-primary: #1e3799;
+          --bluebin-primary-hover: #182c7a;
+          --bluebin-on-primary: #ffffff;
+        }
+        :host([flowslug][theme="dark"]) {
+          --bluebin-bg: #1d232a;
+          --bluebin-text: #e5e7eb;
+          --bluebin-primary: #7289e3;
+          --bluebin-primary-hover: #8c9feb;
+          --bluebin-on-primary: #0d1117;
+        }
+
+        :host([flowslug]) {
+          --pf-global--FontFamily--sans-serif: var(--bluebin-font);
+          --pf-global--FontFamily--heading--sans-serif: var(--bluebin-font);
+          --pf-global--BackgroundColor--light-100: var(--bluebin-bg);
+          --ak-dark-background: var(--bluebin-bg);
+          --pf-global--Color--100: var(--bluebin-text);
+          --ak-dark-foreground: var(--bluebin-text);
+          --pf-global--primary-color--100: var(--bluebin-primary);
+          --pf-global--primary-color--200: var(--bluebin-primary-hover);
+          --pf-global--link--Color: var(--bluebin-primary);
+          --pf-global--link--Color--hover: var(--bluebin-primary-hover);
+          --pf-global--link--Color--light: var(--bluebin-primary);
+          --pf-global--link--Color--light--hover: var(--bluebin-primary-hover);
+          --pf-global--spacer--form-element: 0.625rem;
+          display: block;
+          min-height: 100dvh;
+          color: var(--bluebin-text);
+          font-family: var(--bluebin-font);
+        }
+        :host([flowslug]) .ak-brand img {
+          width: 4rem;
+          height: 4rem;
+          padding: 0;
+        }
+        .pf-c-login__main-header .pf-c-title {
+          color: var(--bluebin-primary);
+          font-weight: 600;
+          line-height: 1.2;
+        }
+        .pf-c-button {
+          --pf-c-button--m-primary--Color: var(--bluebin-on-primary, var(--pf-global--Color--light-100));
+          --pf-c-button--m-primary--hover--Color: var(--bluebin-on-primary, var(--pf-global--Color--light-100));
+          --pf-c-button--m-primary--focus--Color: var(--bluebin-on-primary, var(--pf-global--Color--light-100));
+          --pf-c-button--m-primary--active--Color: var(--bluebin-on-primary, var(--pf-global--Color--light-100));
+        }
+
+  - model: authentik_outposts.outpost
+    identifiers:
+      name: bluebin
+    attrs:
+      type: proxy
+      service_connection: !Find [authentik_outposts.dockerserviceconnection, [local, true]]
+      providers:
+        - !Find [authentik_providers_proxy.proxyprovider, [name, bluebin]]
+      config:
+        authentik_host: https://auth.bluebin.app
+        docker_network: coolify
+        docker_map_ports: false

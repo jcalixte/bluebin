@@ -27,7 +27,7 @@ fn authentik(request: request.Request(String)) -> Result(#(Int, String), Nil) {
 pub fn an_invitation_is_a_single_use_link_to_the_bluebin_flow_test() {
   let assert Ok(invitation) = invitations.create("secret", authentik, 0)
   assert invitation.link
-    == "https://auth.apoena.dev/if/flow/bluebin-invitation/?itoken=dee58273-8435-43de-a789-1a7f3de09497"
+    == "https://auth.bluebin.app/if/flow/bluebin-invitation/?itoken=dee58273-8435-43de-a789-1a7f3de09497"
   assert invitation.expires == "1970-01-08T00:00:00Z"
 }
 
@@ -93,7 +93,7 @@ pub fn only_akadmin_makes_an_invitation_test() {
   assert response.status == 201
   assert string.contains(
     simulate.read_body(response),
-    "\"link\":\"https://auth.apoena.dev/if/flow/bluebin-invitation/?itoken=dee58273-8435-43de-a789-1a7f3de09497\"",
+    "\"link\":\"https://auth.bluebin.app/if/flow/bluebin-invitation/?itoken=dee58273-8435-43de-a789-1a7f3de09497\"",
   )
 
   assert call(context(True, path), signed_in("ada")).status == 403

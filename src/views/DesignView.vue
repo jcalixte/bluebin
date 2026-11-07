@@ -4,6 +4,7 @@ import DesignStationCard from "../components/DesignStationCard.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
 import { isBranchStep, maxNameLength, useDesign, type DraftStep } from "../composables/useDesign"
+import { useAccount } from "../composables/useAccount"
 import { useWorkingCalendar } from "../composables/useWorkingCalendar"
 import type { Labels } from "../types"
 
@@ -29,6 +30,7 @@ const {
 } = useDesign()
 
 const { calendar, calendarError, saveCalendar } = useWorkingCalendar()
+const { account } = useAccount()
 
 const labelFields: { key: keyof Labels; label: string; example: string }[] = [
   { key: "demand", label: "One Demand", example: "Feature" },
@@ -234,6 +236,7 @@ function confirmDiscard() {
         <DesignTeamMembersCard
           v-model="draft.teamMembers"
           :add="addTeamMember"
+          :can-link="account?.signedIn === true"
           @remove="removeTeamMember"
         />
 

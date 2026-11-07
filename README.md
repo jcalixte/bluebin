@@ -43,9 +43,9 @@ file at any other version is refused, never read.
 
 ### Sign-in and Workspaces
 
-Traefik forward auth sends each request to authentik (`auth.apoena.dev`,
-provider and app `bluebin`) and copies the `X-authentik-uid` header from its
-answer, which replaces any value the client sends. The API trusts only that
+Traefik forward auth sends each request to the authentik outpost `bluebin`
+(provider and app `bluebin`), which signs people in on `auth.bluebin.app`. It
+copies the `X-authentik-uid` header from the outpost's answer, which replaces any value the client sends. The API trusts only that
 header: each uid is one Workspace. A request without it uses the shared
 `public` Workspace; a uid that is not a safe file name gets `401`. In dev, the
 Vite proxy sends `X-authentik-uid: dev`.
@@ -87,17 +87,27 @@ the `sidebar_left` layout and
 [`authentik/bluebin-background.svg`](./authentik/bluebin-background.svg).
 A user who already has an authentik session skips the sign-in page.
 
-The authentik brand is shared by every app on `auth.apoena.dev`.
+Bluebin has its own authentik domain, `auth.bluebin.app`: the same authentik
+as `auth.apoena.dev`, with a second domain on the Coolify service `Auth`.
+Import [`authentik/bluebin-brand.yaml`](./authentik/bluebin-brand.yaml) after
+the two flows. It makes the brand of `auth.bluebin.app` (the Bluebin icon,
+colours and sign-in) and the outpost `bluebin`, which authentik runs as the
+container `ak-outpost-bluebin` on the Docker network `coolify`. The
+forward-auth label of the app points at
+`http://ak-outpost-bluebin:9000/outpost.goauthentik.io/auth/traefik`. The
+outpost uses `auth.bluebin.app` for both its API calls and the browser, so the
+session that the invitation sign-up makes is the one that bluebin.app asks
+for.
+
+The default authentik brand is shared by every other app on `auth.apoena.dev`.
 [`authentik/apoena-brand.yaml`](./authentik/apoena-brand.yaml) gives it the
 apoena.dev look: the toucan
 ([`authentik/apoena-toucan.svg`](./authentik/apoena-toucan.svg)), a monospace
 font and the apoena.dev colours, light or dark from the OS. It also makes the
 sign-in flow `apoena-authentication` ("Hi! Sign in to apoena.") from the stages
 of `default-authentication-flow` and sets it as the brand's authentication
-flow, so an authentik upgrade cannot bring back "Welcome to authentik!". Its custom CSS gives
-every flow whose slug starts with `bluebin-` the Bluebin look instead: the
-Bluebin icon and colours. authentik loads the SVGs from the public Gitea raw
-URLs of `main`, so push them before you import. Custom CSS cannot load web
+flow, so an authentik upgrade cannot bring back "Welcome to authentik!".
+authentik loads the SVGs from the public Gitea raw URLs of `main`, so push them before you import. Custom CSS cannot load web
 fonts, so Cascadia Mono and Inter show only where the OS has them.
 
 `akadmin` makes each link with **Invite…** in the header: `POST /api/invitations`

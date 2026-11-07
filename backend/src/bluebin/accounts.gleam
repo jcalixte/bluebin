@@ -1,6 +1,8 @@
 import bluebin/db
+import gleam/dict
 import gleam/dynamic/decode
 import gleam/http/request.{type Request}
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
@@ -23,6 +25,19 @@ pub type AccountError {
   StoreFailed
 }
 
+/// The email the owner typed on a Team Member, and the Account that has it.
+/// The link holds once such an Account exists (ADR-0003).
+pub type Link {
+  Link(team_member: String, email: String, account: Option(Account))
+}
+
+pub type LinkError {
+  EmailTaken(email: String)
+  LinkStoreFailed
+}
+
+pub const max_email_length = 254
+
 /// Additive only: during a rolling deploy the old code runs on this file too.
 const schema = "
 create table if not exists account (
@@ -31,6 +46,22 @@ create table if not exists account (
   first_name text not null,
   last_name  text not null,
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+create table if not exists team_member_link (
+  workspace   text not null,
+  line        text not null,
+  team_member text not null,
+  email       text not null,
+  primary key (workspace, line, team_member),
+  unique (workspace, line, email)
+);
+create index if not exists team_member_link_by_email on team_member_link (email);
+create table if not exists link_change (
+  at          text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  workspace   text not null,
+  line        text not null,
+  team_member text not null,
+  email       text
 );
 "
 
@@ -126,6 +157,234 @@ pub fn save(
     Ok(_) -> Ok(Account(email:, first_name:, last_name:))
     Error(Nil) -> Error(StoreFailed)
   }
+}
+
+/// Lowercase, so a link does not depend on how the owner types the email.
+/// An empty email means no link.
+pub fn normal_email(email: String) -> Result(String, Nil) {
+  let email = string.trim(email) |> string.lowercase
+  let shaped = case string.split(email, "@") {
+    [name, domain] -> name != "" && string.contains(domain, ".")
+    _ -> False
+  }
+  case email {
+    "" -> Ok("")
+    _ ->
+      case
+        shaped
+        && string.length(email) <= max_email_length
+        && !string.contains(email, " ")
+      {
+        True -> Ok(email)
+        False -> Error(Nil)
+      }
+  }
+}
+
+/// The links of one Line. A link to a Team Member who left the Line grants
+/// nothing: the caller keeps only the Team Members it knows (ADR-0004).
+pub fn links(
+  database: String,
+  workspace: String,
+  line: String,
+) -> Result(List(Link), Nil) {
+  use connection <- open(database)
+  sqlight.query(
+    "select l.team_member, l.email, a.email, a.first_name, a.last_name
+       from team_member_link l
+       left join account a
+         on a.uid = (select uid from account
+                      where lower(email) = l.email
+                      order by created_at limit 1)
+      where l.workspace = ?1 and l.line = ?2",
+    on: connection,
+    with: [sqlight.text(workspace), sqlight.text(line)],
+    expecting: {
+      use team_member <- decode.field(0, decode.string)
+      use email <- decode.field(1, decode.string)
+      use account <- decode.field(2, decode.optional(decode.string))
+      use first_name <- decode.field(3, decode.optional(decode.string))
+      use last_name <- decode.field(4, decode.optional(decode.string))
+      let account = case account, first_name, last_name {
+        Some(email), Some(first_name), Some(last_name) ->
+          Some(Account(email:, first_name:, last_name:))
+        _, _, _ -> None
+      }
+      decode.success(Link(team_member:, email:, account:))
+    },
+  )
+  |> result.replace_error(Nil)
+}
+
+/// Sets the email of each Team Member in `wanted` (an empty one removes the
+/// link) and removes the links of every Team Member not in `kept`. Each
+/// change goes to the dated log (R8), in the same transaction.
+pub fn save_links(
+  database: String,
+  workspace: String,
+  line: String,
+  wanted wanted: List(#(String, String)),
+  kept kept: List(String),
+) -> Result(Nil, LinkError) {
+  let saved = {
+    use connection <- open(database)
+    use _ <- result.try(exec(connection, "begin immediate;"))
+    case change_links(connection, workspace, line, wanted, kept) {
+      Ok(Nil) -> exec(connection, "commit;") |> result.replace(Ok(Nil))
+      Error(error) -> {
+        let _ = exec(connection, "rollback;")
+        Ok(Error(error))
+      }
+    }
+  }
+  case saved {
+    Ok(outcome) -> outcome
+    Error(Nil) -> Error(LinkStoreFailed)
+  }
+}
+
+fn exec(connection: sqlight.Connection, sql: String) -> Result(Nil, Nil) {
+  sqlight.exec(sql, connection) |> result.replace_error(Nil)
+}
+
+fn change_links(
+  connection: sqlight.Connection,
+  workspace: String,
+  line: String,
+  wanted: List(#(String, String)),
+  kept: List(String),
+) -> Result(Nil, LinkError) {
+  use current <- result.try(
+    sqlight.query(
+      "select team_member, email from team_member_link
+        where workspace = ?1 and line = ?2",
+      on: connection,
+      with: [sqlight.text(workspace), sqlight.text(line)],
+      expecting: {
+        use team_member <- decode.field(0, decode.string)
+        use email <- decode.field(1, decode.string)
+        decode.success(#(team_member, email))
+      },
+    )
+    |> result.map(dict.from_list)
+    |> result.replace_error(LinkStoreFailed),
+  )
+  let after =
+    list.fold(wanted, current, fn(links, pair) {
+      case pair.1 {
+        "" -> dict.delete(links, pair.0)
+        email -> dict.insert(links, pair.0, email)
+      }
+    })
+    |> dict.filter(fn(team_member, _) { list.contains(kept, team_member) })
+  use _ <- result.try(unique_emails(dict.values(after)))
+
+  let gone =
+    dict.filter(current, fn(team_member, email) {
+      dict.get(after, team_member) != Ok(email)
+    })
+  let made =
+    dict.filter(after, fn(team_member, email) {
+      dict.get(current, team_member) != Ok(email)
+    })
+  // Removals first, so two Team Members can swap their emails.
+  use _ <- result.try(
+    dict.to_list(gone)
+    |> list.try_each(fn(pair) {
+      write_link(
+        connection,
+        "delete from team_member_link
+          where workspace = ?1 and line = ?2 and team_member = ?3",
+        [workspace, line, pair.0],
+      )
+    }),
+  )
+  use _ <- result.try(
+    dict.to_list(made)
+    |> list.try_each(fn(pair) {
+      write_link(
+        connection,
+        "insert into team_member_link (workspace, line, team_member, email)
+         values (?1, ?2, ?3, ?4)",
+        [workspace, line, pair.0, pair.1],
+      )
+    }),
+  )
+  dict.keys(gone)
+  |> list.append(dict.keys(made))
+  |> list.unique
+  |> list.try_each(fn(team_member) {
+    sqlight.query(
+      "insert into link_change (workspace, line, team_member, email)
+       values (?1, ?2, ?3, ?4)",
+      on: connection,
+      with: [
+        sqlight.text(workspace),
+        sqlight.text(line),
+        sqlight.text(team_member),
+        sqlight.nullable(
+          sqlight.text,
+          dict.get(after, team_member) |> option.from_result,
+        ),
+      ],
+      expecting: decode.success(Nil),
+    )
+    |> result.replace(Nil)
+    |> result.replace_error(LinkStoreFailed)
+  })
+}
+
+/// One email for each Line: an Account is at most one Team Member there.
+pub fn unique_emails(emails: List(String)) -> Result(Nil, LinkError) {
+  case emails {
+    [] -> Ok(Nil)
+    [email, ..rest] ->
+      case list.contains(rest, email) {
+        True -> Error(EmailTaken(email))
+        False -> unique_emails(rest)
+      }
+  }
+}
+
+fn write_link(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(String),
+) -> Result(Nil, LinkError) {
+  sqlight.query(
+    sql,
+    on: connection,
+    with: list.map(values, sqlight.text),
+    expecting: decode.success(Nil),
+  )
+  |> result.replace(Nil)
+  |> result.replace_error(LinkStoreFailed)
+}
+
+/// Where the Account with `email` is a Team Member: (Workspace, Line, Team
+/// Member), across every Workspace.
+pub fn links_of(
+  database: String,
+  email: String,
+) -> Result(List(#(String, String, String)), Nil) {
+  use connection <- open(database)
+  sqlight.query(
+    "select workspace, line, team_member from team_member_link
+      where email = lower(?1)",
+    on: connection,
+    with: [sqlight.text(string.trim(email))],
+    expecting: {
+      use workspace <- decode.field(0, decode.string)
+      use line <- decode.field(1, decode.string)
+      use team_member <- decode.field(2, decode.string)
+      decode.success(#(workspace, line, team_member))
+    },
+  )
+  |> result.replace_error(Nil)
+}
+
+pub fn full_name(account: Account) -> String {
+  account.first_name <> " " <> account.last_name
 }
 
 fn check_name(name: String) -> Result(String, AccountError) {

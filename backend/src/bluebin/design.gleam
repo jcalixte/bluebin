@@ -1,5 +1,6 @@
 //// Design and change a running Line without code (F39–F41).
 
+import bluebin/accounts
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
@@ -292,9 +293,14 @@ pub fn check_change(
 ) -> Result(Nil, String) {
   use _ <- result.try(check_structure(wanted.steps))
   use _ <- result.try(check_labels(wanted.labels))
+  // A linked Team Member carries its Account's name, which can be longer.
+  // Only a name the owner types must fit.
   use _ <- result.try(
     list.try_each(wanted.team_members, fn(team_member) {
-      check_name(team_member.name, "Each Team Member needs a name.")
+      case list.contains(current.team_members, team_member) {
+        True -> Ok(Nil)
+        False -> check_name(team_member.name, "Each Team Member needs a name.")
+      }
     }),
   )
 
@@ -686,6 +692,50 @@ fn save_team_members(
   })
 }
 
+/// A linked Team Member shows its Account's name (F47): `names` pairs a
+/// Team Member id with that name. True when a name changed.
+pub fn name_linked(
+  connection: sqlight.Connection,
+  names: List(#(String, String)),
+) -> Result(Bool, DesignError) {
+  use _ <- result.try(exec(connection, "begin immediate;"))
+  let renamed =
+    list.try_fold(names, False, fn(any, pair) {
+      let #(id, name) = pair
+      use found <- result.try(
+        query(
+          connection,
+          "update team_member set name = ?2
+            where id = ?1 and removed_at is null and name <> ?2
+           returning id",
+          [sqlight.text(id), sqlight.text(name)],
+          decode.at([0], decode.string),
+        )
+        |> result.replace_error(StoreFailed),
+      )
+      case found {
+        [] -> Ok(any)
+        _ -> {
+          use _ <- result.try(
+            changed(connection, [
+              #("change", json.string("team_member_renamed")),
+              #("teamMember", json.string(id)),
+              #("name", json.string(name)),
+            ]),
+          )
+          Ok(True)
+        }
+      }
+    })
+  case renamed {
+    Ok(any) -> exec(connection, "commit;") |> result.replace(any)
+    Error(error) -> {
+      let _ = exec(connection, "rollback;")
+      Error(error)
+    }
+  }
+}
+
 /// The row stays, so the history keeps the name (F40).
 fn remove_team_member(
   connection: sqlight.Connection,
@@ -986,15 +1036,40 @@ pub fn labels_json(labels: Labels) -> Json {
   ])
 }
 
-pub fn to_json(design: Design, held: Dict(String, Held)) -> Json {
+pub fn to_json(
+  design: Design,
+  held: Dict(String, Held),
+  links: List(accounts.Link),
+) -> Json {
   json.object([
     #("labels", labels_json(design.labels)),
     #(
       "teamMembers",
       json.array(design.team_members, fn(team_member) {
+        let link =
+          list.find(links, fn(link) { link.team_member == team_member.id })
         json.object([
           #("id", json.string(team_member.id)),
           #("name", json.string(team_member.name)),
+          #(
+            "email",
+            json.string(
+              result.map(link, fn(link) { link.email }) |> result.unwrap(""),
+            ),
+          ),
+          #(
+            "account",
+            json.nullable(
+              result.try(link, fn(link) { option.to_result(link.account, Nil) })
+                |> option.from_result,
+              fn(account) {
+                json.object([
+                  #("firstName", json.string(account.first_name)),
+                  #("lastName", json.string(account.last_name)),
+                ])
+              },
+            ),
+          ),
         ])
       }),
     ),

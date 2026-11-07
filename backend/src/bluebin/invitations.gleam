@@ -10,7 +10,7 @@ import gleam/result
 import wisp
 
 /// The authentik that signs people in to Bluebin (ADR-0003).
-const authentik = "https://auth.apoena.dev"
+const authentik = "https://auth.bluebin.app"
 
 /// The sign-up flow of `authentik/bluebin-invitation.yaml`.
 const flow = "bluebin-invitation"

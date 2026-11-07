@@ -331,9 +331,16 @@ export type Labels = {
   pieces: string
 }
 
+/**
+ * `email` links the Team Member to the Account that has it; `account` stays
+ * null until that Account signs in ("not linked yet"). Both are empty while
+ * nobody is signed in.
+ */
 export type DesignTeamMember = {
   id: string
   name: string
+  email: string
+  account: { firstName: string; lastName: string } | null
 }
 
 /**
@@ -375,7 +382,7 @@ export type DesignStationInput = {
 
 export type DesignInput = {
   labels: Labels
-  teamMembers: DesignTeamMember[]
+  teamMembers: { id: string; name: string; email: string }[]
   steps: { name: string; stations: DesignStationInput[] }[]
 }
 

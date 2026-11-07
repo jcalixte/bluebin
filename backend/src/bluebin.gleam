@@ -25,7 +25,7 @@ import gleam/http/response
 import gleam/int
 import gleam/json
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/result
 import gleam/string
 import mist
@@ -163,11 +163,11 @@ pub fn handle_request(
           rename_line(request, workspace, line)
         }
         ["api", "lines", line, ..rest] ->
-          in_line(request, context.hub, workspace, line, ["api", ..rest])
+          in_line(request, context, workspace, line, ["api", ..rest])
         // Legacy routes of the first Line: scripts and SPAs open during a
         // deploy still call them.
         ["api", ..] ->
-          in_line(request, context.hub, workspace, lines.first, segments)
+          in_line(request, context, workspace, lines.first, segments)
         _ -> wisp.not_found()
       }
     }
@@ -178,7 +178,7 @@ pub fn handle_request(
 /// both `/api/demands` and `/api/lines/<id>/demands`.
 fn in_line(
   request: wisp.Request,
-  hub: live.Hub,
+  context: Context,
   workspace: String,
   line: String,
   segments: List(String),
@@ -189,13 +189,23 @@ fn in_line(
     Ok(database) -> {
       use <- announce_change(
         request,
-        hub,
+        context.hub,
         lines.channel(workspace, line),
         segments,
       )
-      route(request, segments, database)
+      let linking = case identity_of(request, context, workspace) {
+        SignedIn(..) -> Some(Linking(context.accounts, workspace, line))
+        SignedOut | NoEmail -> None
+      }
+      route(request, segments, database, linking)
     }
   }
+}
+
+/// Where the Team Member links of a Line live. Only a signed-in owner with
+/// SSO on links anyone (F52).
+type Linking {
+  Linking(accounts: String, workspace: String, line: String)
 }
 
 type Identity {
@@ -234,7 +244,10 @@ fn account_of(
     NoEmail -> wisp.response(401)
     SignedIn(uid:, email:) ->
       case accounts.sign_in(context.accounts, uid, email) {
-        Ok(Some(account)) -> account_response(request, account, named: True)
+        Ok(Some(account)) -> {
+          show_name_in_lines(context, account)
+          account_response(request, account, named: True)
+        }
         Ok(None) -> {
           let #(first_name, last_name) = accounts.suggested_name(request)
           accounts.Account(email:, first_name:, last_name:)
@@ -269,7 +282,10 @@ fn save_account(
           case
             accounts.save(context.accounts, uid, email, first_name, last_name)
           {
-            Ok(account) -> account_response(request, account, named: True)
+            Ok(account) -> {
+              show_name_in_lines(context, account)
+              account_response(request, account, named: True)
+            }
             Error(accounts.EmptyName) ->
               wisp.bad_request("a first and a last name are needed")
             Error(accounts.NameTooLong) ->
@@ -283,6 +299,34 @@ fn save_account(
       }
     }
   }
+}
+
+/// The link holds from the Account's next sign-in: each Team Member that
+/// has its email, in any Line of any Workspace, shows its name (F47).
+fn show_name_in_lines(context: Context, account: accounts.Account) -> Nil {
+  let name = accounts.full_name(account)
+  accounts.links_of(context.accounts, account.email)
+  |> result.unwrap([])
+  |> list.each(fn(link) {
+    let #(workspace, line, team_member) = link
+    let renamed =
+      lines.database(workspace, line)
+      |> result.replace_error(Nil)
+      |> result.try(fn(database) {
+        db.with_connection_at(
+          database,
+          design.name_linked(_, [
+            #(team_member, name),
+          ]),
+        )
+        |> result.replace_error(Nil)
+      })
+    case renamed {
+      Ok(True) ->
+        live.announce(context.hub, lines.channel(workspace, line), "design")
+      _ -> Nil
+    }
+  })
 }
 
 /// Called only for a signed-in Account, so SSO is on and the username
@@ -414,6 +458,7 @@ fn route(
   request: wisp.Request,
   segments: List(String),
   database: String,
+  linking: Option(Linking),
 ) -> wisp.Response {
   case segments {
     ["api", "demands"] ->
@@ -482,10 +527,10 @@ fn route(
       }
     ["api", "design"] ->
       case request.method {
-        http.Put -> save_design(request, database)
+        http.Put -> save_design(request, database, linking)
         _ -> {
           use <- wisp.require_method(request, http.Get)
-          design_of(database)
+          design_of(database, linking)
         }
       }
     ["api", "labels"] -> {
@@ -514,7 +559,7 @@ fn route(
       }
     ["api", "reset"] -> {
       use <- wisp.require_method(request, http.Post)
-      reset(request, database)
+      reset(request, database, linking)
     }
     _ -> wisp.not_found()
   }
@@ -601,34 +646,156 @@ fn save_calendar(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-fn design_of(database: String) -> wisp.Response {
-  case db.with_connection_at(database, design.load) {
-    Ok(#(found, held)) ->
-      wisp.json_response(json.to_string(design.to_json(found, held)), 200)
-    Error(Nil) -> wisp.internal_server_error()
+fn design_of(database: String, linking: Option(Linking)) -> wisp.Response {
+  case db.with_connection_at(database, design.load), links_of(linking) {
+    Ok(#(found, held)), Ok(links) ->
+      wisp.json_response(
+        json.to_string(design.to_json(found, held, links)),
+        200,
+      )
+    _, _ -> wisp.internal_server_error()
   }
 }
 
-fn save_design(request: wisp.Request, database: String) -> wisp.Response {
+fn links_of(linking: Option(Linking)) -> Result(List(accounts.Link), Nil) {
+  case linking {
+    None -> Ok([])
+    Some(linking) ->
+      accounts.links(linking.accounts, linking.workspace, linking.line)
+  }
+}
+
+/// The email of each Team Member in the body; one with no `email` field,
+/// sent by an SPA older than the links, keeps its link.
+fn emails_decoder() -> decode.Decoder(List(#(String, String))) {
+  use team_members <- decode.field(
+    "teamMembers",
+    decode.list({
+      use id <- decode.field("id", decode.string)
+      use email <- decode.optional_field(
+        "email",
+        None,
+        decode.map(decode.string, Some),
+      )
+      decode.success(#(id, email))
+    }),
+  )
+  list.filter_map(team_members, fn(pair) {
+    option.to_result(pair.1, Nil) |> result.map(fn(email) { #(pair.0, email) })
+  })
+  |> decode.success
+}
+
+fn check_emails(
+  emails: List(#(String, String)),
+) -> Result(List(#(String, String)), String) {
+  use checked <- result.try(
+    list.try_map(emails, fn(pair) {
+      case accounts.normal_email(pair.1) {
+        Ok(email) -> Ok(#(pair.0, email))
+        Error(Nil) ->
+          Error("\"" <> string.trim(pair.1) <> "\" is not an email.")
+      }
+    }),
+  )
+  let given =
+    list.map(checked, fn(pair) { pair.1 }) |> list.filter(fn(e) { e != "" })
+  case accounts.unique_emails(given) {
+    Ok(Nil) -> Ok(checked)
+    Error(accounts.EmailTaken(email)) -> Error(email_taken(email))
+    Error(accounts.LinkStoreFailed) -> Error("")
+  }
+}
+
+fn email_taken(email: String) -> String {
+  "Two Team Members have the email " <> email <> "."
+}
+
+fn save_design(
+  request: wisp.Request,
+  database: String,
+  linking: Option(Linking),
+) -> wisp.Response {
   use body <- wisp.require_json(request)
-  case decode.run(body, design.decoder()) {
-    Error(_) ->
+  case decode.run(body, design.decoder()), decode.run(body, emails_decoder()) {
+    Ok(wanted), Ok(emails) ->
+      case check_emails(emails) {
+        Error(reason) -> wisp.bad_request(reason)
+        Ok(emails) -> save_design_and_links(database, linking, wanted, emails)
+      }
+    _, _ ->
       wisp.bad_request(
         "expected the body of GET /api/design: {\"labels\", \"teamMembers\", \"steps\"}",
       )
-    Ok(wanted) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          use _ <- result.try(design.save(connection, wanted))
-          design.load(connection) |> result.replace_error(design.StoreFailed)
-        })
-      {
-        Ok(#(saved, held)) ->
-          wisp.json_response(json.to_string(design.to_json(saved, held)), 200)
-        Error(design.Invalid(reason)) -> wisp.bad_request(reason)
-        Error(design.StoreFailed) -> wisp.internal_server_error()
-      }
   }
+}
+
+/// The links live outside the Line file (ADR-0004), so they are saved after
+/// the Line's own transaction.
+fn save_design_and_links(
+  database: String,
+  linking: Option(Linking),
+  wanted: design.Design,
+  emails: List(#(String, String)),
+) -> wisp.Response {
+  let saved =
+    db.with_connection_at(database, fn(connection) {
+      design.save(connection, wanted)
+    })
+  case saved {
+    Error(design.Invalid(reason)) -> wisp.bad_request(reason)
+    Error(design.StoreFailed) -> wisp.internal_server_error()
+    Ok(saved) -> {
+      let kept =
+        list.map(saved.team_members, fn(team_member) { team_member.id })
+      let linked = case linking {
+        None -> Ok(Nil)
+        Some(linking) ->
+          accounts.save_links(
+            linking.accounts,
+            linking.workspace,
+            linking.line,
+            wanted: emails,
+            kept:,
+          )
+      }
+      case linked {
+        Error(accounts.EmailTaken(email)) ->
+          wisp.bad_request(email_taken(email))
+        Error(accounts.LinkStoreFailed) -> wisp.internal_server_error()
+        Ok(Nil) ->
+          case
+            links_of(linking)
+            |> result.try(fn(links) {
+              db.with_connection_at(database, fn(connection) {
+                use _ <- result.try(
+                  design.name_linked(connection, linked_names(links))
+                  |> result.replace_error(Nil),
+                )
+                design.load(connection)
+              })
+              |> result.map(fn(loaded) { #(loaded, links) })
+            })
+          {
+            Ok(#(#(found, held), links)) ->
+              wisp.json_response(
+                json.to_string(design.to_json(found, held, links)),
+                200,
+              )
+            Error(Nil) -> wisp.internal_server_error()
+          }
+      }
+    }
+  }
+}
+
+fn linked_names(links: List(accounts.Link)) -> List(#(String, String)) {
+  list.filter_map(links, fn(link) {
+    option.to_result(link.account, Nil)
+    |> result.map(fn(account) {
+      #(link.team_member, accounts.full_name(account))
+    })
+  })
 }
 
 fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
@@ -667,7 +834,12 @@ fn labels(database: String) -> wisp.Response {
 
 /// `{"mode": "empty"}` starts from scratch; anything else, or no body at all
 /// as the SPA sent before, puts back the demo data.
-fn reset(request: wisp.Request, database: String) -> wisp.Response {
+/// A Reset can bring back Team Member ids, so the Line's links go too.
+fn reset(
+  request: wisp.Request,
+  database: String,
+  linking: Option(Linking),
+) -> wisp.Response {
   let mode =
     wisp.read_body_bits(request)
     |> result.try(fn(body) {
@@ -678,9 +850,22 @@ fn reset(request: wisp.Request, database: String) -> wisp.Response {
     Ok("empty") -> db.reset_empty
     _ -> db.reset
   }
-  case db.with_connection_at(database, run) {
-    Ok(Nil) -> wisp.no_content()
-    Error(_) -> wisp.internal_server_error()
+  let cleared = fn() {
+    case linking {
+      None -> Ok(Nil)
+      Some(linking) ->
+        accounts.save_links(
+          linking.accounts,
+          linking.workspace,
+          linking.line,
+          wanted: [],
+          kept: [],
+        )
+    }
+  }
+  case db.with_connection_at(database, run), cleared() {
+    Ok(Nil), Ok(Nil) -> wisp.no_content()
+    _, _ -> wisp.internal_server_error()
   }
 }
 

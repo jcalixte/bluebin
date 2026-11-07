@@ -1,7 +1,7 @@
 # Invite-only sign-up for Bluebin, for authentik 2025.10.
 # Import: authentik admin > Flows and Stages > Flows > Import.
 # Invite: Directory > Invitations > Create, flow "bluebin-invitation".
-# The link is https://auth.apoena.dev/if/flow/bluebin-invitation/?itoken=<uuid>
+# The link is https://auth.bluebin.app/if/flow/bluebin-invitation/?itoken=<uuid>
 version: 1
 metadata:
   name: Bluebin - Invitation sign-up

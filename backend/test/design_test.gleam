@@ -179,7 +179,7 @@ pub fn the_seed_design_shows_the_work_held_test() {
   let assert Ok(#(found, held)) = design.load(connection)
   assert list.map(found.steps, fn(step) { list.length(step.stations) })
     == [1, 1, 3, 3, 1]
-  let json = design.to_json(found, held) |> json.to_string
+  let json = design.to_json(found, held, []) |> json.to_string
   assert string.contains(json, "\"labels\":{\"demand\":\"Feature\"")
 }
 
