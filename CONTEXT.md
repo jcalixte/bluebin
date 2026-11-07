@@ -138,6 +138,10 @@ _Avoid_: idle time, wait time, blocked time
 The time from a Work Station pulling a Piece in to the downstream Work Station pulling it out of the Blue Bin.
 _Avoid_: stage time, column time
 
+**Replenishment Time**:
+The time from a Work Station pulling a Piece in to putting it in its Blue Bin, pauses included.
+_Avoid_: processing time, cycle time, refill time
+
 **Starvation Time**:
 The time a Work Station holds a Kanban but has no Piece to pull.
 _Avoid_: idle time, blocked time, starving
@@ -214,7 +218,7 @@ _Avoid_: hidden Line, secret Line
 - Each **Piece** goes to production as soon as it is complete, at the pace of its **Demand**'s **Takt Time**
 - **Lead Time** = **Touch Time** + **Stagnation Time**
 - **Lead Time** = the **Backlog** wait + the sum of the **Station Lead Times**
-- **Station Lead Time** = **Touch Time** at that **Work Station** + the wait in its **Blue Bin**
+- **Station Lead Time** = **Replenishment Time** + the wait in its **Blue Bin**; **Replenishment Time** = **Touch Time** at that **Work Station** + its pauses
 - **Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Calendar Time** by default, and in **Working Time** as a second view
 - **Touch Time** is net time, so it is the same in both views
 - **Takt Time** always uses **Working Time**

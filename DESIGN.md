@@ -584,6 +584,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F9                                               | Warn before a second **Piece** goes in a **Blue Bin**, and record a **Deviation** with its reason if the **Team Member** goes on                                                                     |  →  | 100 % warned and recorded                                     | G3   |
 | F10                                              | Compare the capacity of each **Work Station** (average **Touch Time** ÷ **Team Members** working) with the **Takt Time** of the **Line**, and flag the slower ones                                   |  ↓  | flag ≤ 1 working day after the change                         | G3   |
 | F11                                              | Recompute the **Takt Time** of the **Line** when a **Demand** enters or ends                                                                                                                         |  ↓  | ≤ 1 min                                                       | G3   |
+| F55                                              | Suggest, for each **Work Station**, the **Blue Bin** count that covers its **Replenishment Time** at the **Takt Time** of the **Line**, and show it in Design without applying it                    |  →  | shown for each **Work Station** with ≥ 5 passes; ≤ 1 min after a pass ends | G3   |
 | **Pillar — Jidoka**                              |                                                                                                                                                                                                      |     |                                                               |      |
 | F12                                              | Raise **Rework** on a **Piece**: name the **Work Station** that made the defect, and describe the defect in one line                                                                                 |  ↓  | ≤ 2 clicks, ≤ 10 s                                            | G4   |
 | F13                                              | Give the **Rework** to its author by default: put it first in their **Assignments** and pause their current **Piece**                                                                                |  ↓  | ≤ 1 min after the **Rework** is raised                        | G4   |
@@ -617,6 +618,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F36                                              | Show, for each **Work Station**, the share of **Touch Time** in the **Station Lead Time**                                                                                                            |  ↑  | value visible for each **Work Station**                       | G9   |
 | F37                                              | Show the **Deviations** for each **Work Station** and for each rule, with their reasons                                                                                                              |  ↓  | ≤ 5 % of pulls                                                | G9   |
 | F38                                              | Compare two periods (before and after a **Line** change) on all measures                                                                                                                             |  ↓  | 1 view                                                        | G9   |
+| F54                                              | Measure, for each **Work Station**, its **Replenishment Time** (85th percentile, **Working Time**) from the flow events                                                                              |  →  | value for each **Work Station** with ≥ 5 passes in the period | G9   |
 | F39                                              | Design a **Line**: **Work Stations**, **Splits**, **Branches**, **Assembly**, **Blue Bin** count, **Team Members**, **Working Calendar**                                                             |  ↓  | the software team example in ≤ 30 min                         | G10  |
 | F40                                              | Change a **Line** while it runs (**Blue Bins**, **Team Members**, **Work Stations**), keep all past events, and date each change                                                                     |  →  | 0 lost events, 100 % of changes dated                         | G10  |
 | F41                                              | Let each **Line** name its own **Demands** and **Pieces**, for example "Feature" and "User Story"                                                                                                    |  →  | free labels for each **Line**                                 | G10  |
@@ -639,13 +641,13 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 
 - **G1** Client satisfaction, Takt Time visible to everyone _W:10_ — F1–F5
 - **G2** Pull, every **Deviation** visible _W:9_ — F6–F9
-- **G3** One-piece flow at **Takt Time** _W:8_ — F10–F11
+- **G3** One-piece flow at **Takt Time** _W:8_ — F10–F11, F55
 - **G4** Jidoka, stop and fix _W:8_ — F12–F16, F42
 - **G5** A **Team Member** knows the next thing to do _W:9_ — F17–F22
 - **G6** Levelled **Product Mix** _W:7_ — F23–F26
 - **G7** **Line** at a glance _W:8_ — F27–F29
 - **G8** Recording costs seconds _W:8_ — F30–F33
-- **G9** Flow problems as numbers _W:8_ — F34–F38
+- **G9** Flow problems as numbers _W:8_ — F34–F38, F54
 - **G10** Design and change without code _W:6_ — F39–F41
 - **G11** A **Team Member** signs in and finds their own work _W:7_ — F43–F47
 - **G12** A **Line** shows only to the **Accounts** it is meant for _W:6_ — F48–F53
