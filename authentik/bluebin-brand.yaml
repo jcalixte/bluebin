@@ -2,9 +2,6 @@
 # Import: authentik admin > Flows and Stages > Flows > Import, after
 # bluebin-authentication.yaml and bluebin-invitation.yaml.
 #
-# The brand gives every flow on auth.bluebin.app the Bluebin look, light or
-# dark from the OS, and the Bluebin sign-in.
-#
 # The outpost "bluebin" serves the forward auth of bluebin.app. authentik runs
 # it as the container ak-outpost-bluebin on the Docker network "coolify", where
 # Traefik reaches it. Its authentik_host is auth.bluebin.app, so the browser

@@ -59,7 +59,6 @@ pub fn a_route_missing_from_the_table_is_refused_test() {
   assert access.need(http.Get, ["api", "reset"]) == Error(Nil)
 }
 
-/// One check for each role × route.
 pub fn each_role_reaches_only_its_routes_test() {
   let roles = [
     #(access.Owner, [access.Read, access.Flow, access.Own]),
@@ -142,7 +141,6 @@ fn call_anonymous(
   #(response.status, simulate.read_body(response))
 }
 
-/// The first Team Member of the body with no email gets `email`.
 fn with_email(design: String, team_member: String, email: String) -> String {
   let assert Ok(#(before, after)) =
     string.split_once(design, "\"id\":\"" <> team_member <> "\"")

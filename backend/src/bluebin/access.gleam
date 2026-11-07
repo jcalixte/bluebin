@@ -75,9 +75,8 @@ pub fn allows(role: Role, need: Need) -> Bool {
   }
 }
 
-/// The Role of the Account `caller` in `line` of `workspace`. `email` is
-/// `None` unless SSO is on and the Account is signed in (F52): then only
-/// its own Workspace opens.
+/// `email` is `None` unless SSO is on and the Account is signed in (F52):
+/// then only its own Workspace opens.
 pub fn role(
   accounts_database: String,
   caller: String,

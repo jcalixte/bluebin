@@ -79,7 +79,6 @@ pub fn main() {
   process.sleep_forever()
 }
 
-/// `owner` is the Workspace named in the URL; `None` for the caller's own.
 /// A Line the caller may not read answers `404`, like the API (F48).
 fn events(
   request: request.Request(mist.Connection),
@@ -105,7 +104,6 @@ fn events(
   |> stream(request, context, line, _)
 }
 
-/// The live stream of a Shared Line, for anyone with its look-only link.
 fn look_events(
   request: request.Request(mist.Connection),
   context: Context,
@@ -262,8 +260,7 @@ pub fn handle_request(
 
 /// `segments` is the path inside the Line, `["api", "demands"]` for
 /// `/api/demands`, `/api/lines/<id>/demands` and
-/// `/api/w/<owner>/lines/<id>/demands`. `caller` is the signed-in Account's
-/// uid, `workspace` the owner's. The guard (H10) runs before any handler.
+/// `/api/w/<owner>/lines/<id>/demands`.
 fn in_line(
   request: wisp.Request,
   context: Context,
@@ -297,9 +294,8 @@ fn in_line(
   }
 }
 
-/// A Shared Line, look-only, for anyone with its link, signed in or not
-/// (F53). authentik lets `/api/s/` through with no sign-in, so the request
-/// has no identity and none is read. Sharing needs SSO on (F52).
+/// authentik lets `/api/s/` through with no sign-in, so the request has no
+/// identity and none is read (F53).
 fn look(
   request: wisp.Request,
   context: Context,
@@ -396,8 +392,7 @@ fn open_line(
 type ActAs =
   fn(Option(String)) -> Result(Option(String), Nil)
 
-/// Whether `team_member` is linked to an Account other than the caller's:
-/// then only that Account acts as them (R7). A read failure says yes.
+/// A Team Member linked to another Account acts only through that Account (R7).
 fn linked_elsewhere(
   context: Context,
   identity: Identity,
@@ -770,12 +765,11 @@ fn workspace_json(
   ])
 }
 
-/// `team_member` is the Account's own Team Member in `line`, if any.
 fn line_entry_json(
   line: lines.Line,
   shared: Bool,
   role: access.Role,
-  team_member: Option(String),
+  own_team_member: Option(String),
 ) -> json.Json {
   let role = case role {
     access.Member(_) -> "member"
@@ -787,7 +781,7 @@ fn line_entry_json(
     #("name", json.string(line.name)),
     #("shared", json.bool(shared)),
     #("role", json.string(role)),
-    #("teamMember", json.nullable(team_member, json.string)),
+    #("teamMember", json.nullable(own_team_member, json.string)),
   ])
 }
 
@@ -804,7 +798,6 @@ fn create_line(request: wisp.Request, workspace: String) -> wisp.Response {
   line_response(lines.create(workspace, name), 201)
 }
 
-/// The Line's name, for a page opened by a link and not from the menu.
 fn line_name(workspace: String, line: String) -> wisp.Response {
   case lines.list(workspace) {
     Error(_) -> wisp.internal_server_error()

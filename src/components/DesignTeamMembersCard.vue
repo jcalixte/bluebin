@@ -10,7 +10,6 @@ const teamMembers = defineModel<DesignTeamMember[]>({ required: true })
 
 const props = defineProps<{
   add: (name: string) => Promise<boolean>
-  /** Only a signed-in owner links Team Members to Accounts. */
   canLink: boolean
 }>()
 

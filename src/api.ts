@@ -39,7 +39,6 @@ export const workspaceOwner = page.owner
 /** Opened by the look-only link of a Shared Line: no Account, no Line menu, nothing to act on. */
 export const lookOnly = page.look
 
-/** The view part of the URL, without the Line prefix. */
 export function viewPath(): string {
   return lineUrl.exec(location.pathname)?.[4] ?? location.pathname
 }
@@ -65,7 +64,6 @@ export function rememberLine(line: string | null, owner: string | null = null) {
   else localStorage.removeItem(lastLineKey)
 }
 
-/** The API root of the Line of this page. */
 export const lineApi = `/api${pageUrl("", lineId, workspaceOwner)}`
 
 /** `/api/demands` → the same route inside the Line of this page. */

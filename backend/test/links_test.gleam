@@ -110,7 +110,7 @@ fn call(
 
 const ines = "\"id\":\"pe-ines\",\"name\":\"Inès\""
 
-/// The GET body is a valid PUT body: give Inès an email.
+/// The GET body is a valid PUT body.
 fn with_email_for_ines(design: String, email: String) -> String {
   let assert Ok(#(before, after)) =
     string.split_once(design, ines <> ",\"email\":\"\"")

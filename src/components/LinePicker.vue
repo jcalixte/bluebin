@@ -69,7 +69,6 @@ onMounted(async () => {
 
 const copied = ref<string | null>(null)
 
-/** Anyone with this link looks at the Shared Line, signed in or not (F53). */
 async function copyLookOnlyLink() {
   if (!workspace.value) return
   const link = location.origin + pageUrl(props.view, lineId, workspace.value.owner, true)

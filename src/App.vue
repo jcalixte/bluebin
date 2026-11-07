@@ -32,7 +32,6 @@ const { labels } = useLabels()
 const { account, checked } = useAccount()
 const { role, workspaces, ready } = useWorkspaces()
 
-/** Only the owner redesigns or resets a Line (F49). */
 const shownViews = computed(() =>
   role.value === "owner" ? views : views.filter((view) => view.id !== "design"),
 )
