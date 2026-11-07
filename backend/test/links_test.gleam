@@ -122,7 +122,24 @@ fn setup(sso: Bool) {
   let ada = #(random("links-ada-"), "Ada@Example.com")
   let path = random("data/links-test-") <> ".db"
   let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
+  // Only the Public Workspace starts from the demo data; these tests need it.
+  let assert Ok(Nil) = db.ready(db.workspace_path(owner.0), db.Demo)
   #(context(path, sso), owner, ada, path)
+}
+
+fn call_as_admin(
+  context: bluebin.Context,
+  method: http.Method,
+  path: String,
+  who: #(String, String),
+) -> #(Int, String) {
+  let response =
+    simulate.request(method, path)
+    |> simulate.header("x-authentik-uid", who.0)
+    |> simulate.header("x-authentik-email", who.1)
+    |> simulate.header("x-authentik-username", "akadmin")
+    |> bluebin.handle_request(context)
+  #(response.status, simulate.read_body(response))
 }
 
 fn clean(owner: #(String, String), ada: #(String, String), path: String) {
@@ -246,12 +263,42 @@ pub fn a_reset_removes_the_links_of_the_line_test() {
       owner,
       with_email_for_ines(design, "ada@example.com"),
     )
-  let #(reset, _) = call(context, http.Post, "/api/reset", owner, "")
+  let #(reset, _) = call_as_admin(context, http.Post, "/api/reset", owner)
   let left = emails(path, owner.0)
   clean(owner, ada, path)
 
   assert reset == 204
   assert left == []
+}
+
+pub fn only_akadmin_resets_a_line_test() {
+  let #(context, owner, ada, path) = setup(True)
+
+  let #(by_owner, _) = call(context, http.Post, "/api/reset", owner, "")
+  let #(by_admin, _) = call_as_admin(context, http.Post, "/api/reset", owner)
+  clean(owner, ada, path)
+
+  assert by_owner == 403
+  assert by_admin == 204
+}
+
+pub fn a_new_account_starts_with_an_empty_line_test() {
+  let #(context, owner, ada, path) = setup(True)
+
+  let #(_, design) = call(context, http.Get, "/api/design", ada, "")
+  clean(owner, ada, path)
+
+  assert string.contains(design, "Team Member 1")
+  assert !string.contains(design, "pe-ines")
+}
+
+pub fn akadmin_starts_with_the_demo_data_test() {
+  let #(context, owner, ada, path) = setup(True)
+
+  let #(_, design) = call_as_admin(context, http.Get, "/api/design", ada)
+  clean(owner, ada, path)
+
+  assert string.contains(design, "pe-ines")
 }
 
 pub fn with_sso_off_nothing_links_test() {

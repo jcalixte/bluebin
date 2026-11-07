@@ -41,6 +41,7 @@ const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
 )
 
+/** `akadmin`, the owner of the Public Workspace: only there does Reset… show. */
 const isAdmin = computed(() => account.value?.signedIn === true && account.value.admin)
 const inviting = ref(false)
 
@@ -166,7 +167,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             Invite…
           </button>
           <button
-            v-if="role === 'owner'"
+            v-if="isAdmin && role === 'owner'"
             type="button"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             :disabled="resetting"

@@ -392,10 +392,17 @@ pub fn workspace_path(workspace: String) -> String {
   workspaces_directory <> "/" <> workspace <> ".db"
 }
 
-/// Makes and seeds the database when it is new. The SPA sends several
+/// What a new Line holds: the demo data, only in the Public Workspace, or one
+/// Work Station and one Team Member to rename in Design.
+pub type Start {
+  Demo
+  Empty
+}
+
+/// Makes the database from `start` when it is new. The SPA sends several
 /// requests at once on its first load, so the slow path holds the write lock:
 /// the other requests wait, then see the current version.
-pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
+pub fn ready(database: String, start: Start) -> Result(Nil, sqlight.Error) {
   // The data can be wiped while the server runs: SQLite makes the file, not
   // its directory.
   let _ = simplifile.create_directory_all(directory_of(database))
@@ -405,7 +412,7 @@ pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
     True -> Ok(Nil)
     False -> {
       use _ <- result.try(sqlight.exec("begin immediate;", connection))
-      case prepare(connection) {
+      case prepare(connection, start) {
         Ok(Nil) -> sqlight.exec("commit;", connection)
         Error(error) -> {
           let _ = sqlight.exec("rollback;", connection)
@@ -439,9 +446,12 @@ pub fn with_connection_at(
   run(connection)
 }
 
-/// Makes the schema and the demo data on a new database, and does nothing on
-/// a current one. A database of another schema version is refused, not read.
-pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+/// Makes the schema and the `start` data on a new database, and does nothing
+/// on a current one. A database of another schema version is refused, not read.
+pub fn prepare(
+  connection: sqlight.Connection,
+  start: Start,
+) -> Result(Nil, sqlight.Error) {
   use version <- result.try(user_version(connection))
   case version {
     0 -> {
@@ -452,7 +462,10 @@ pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
           <> ";",
         connection,
       ))
-      seed(connection)
+      case start {
+        Demo -> seed(connection)
+        Empty -> sqlight.exec(start_empty_sql, connection)
+      }
     }
     _ if version == schema_version -> Ok(Nil)
     _ ->

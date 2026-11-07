@@ -12,7 +12,7 @@ import sqlight
 
 fn with_seeded_database(run: fn(sqlight.Connection) -> a) -> a {
   use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   run(connection)
 }
 

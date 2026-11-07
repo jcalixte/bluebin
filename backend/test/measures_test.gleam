@@ -252,7 +252,7 @@ pub fn starvation_lasts_while_a_kanban_is_held_test() {
 
 fn seeded(run: fn(sqlight.Connection) -> a) -> a {
   use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   run(connection)
 }
 

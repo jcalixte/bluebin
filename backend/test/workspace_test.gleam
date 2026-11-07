@@ -60,7 +60,7 @@ pub fn a_new_workspace_is_ready_after_parallel_first_requests_test() {
   let done = process.new_subject()
   list.repeat(Nil, 8)
   |> list.each(fn(_) {
-    process.spawn(fn() { process.send(done, db.ready(database)) })
+    process.spawn(fn() { process.send(done, db.ready(database, db.Demo)) })
   })
   list.repeat(Nil, 8)
   |> list.each(fn(_) {
@@ -76,8 +76,8 @@ pub fn a_new_workspace_is_ready_after_parallel_first_requests_test() {
 pub fn workspaces_do_not_share_data_test() {
   let ours = scratch_database("ours")
   let theirs = scratch_database("theirs")
-  let assert Ok(Nil) = db.ready(ours)
-  let assert Ok(Nil) = db.ready(theirs)
+  let assert Ok(Nil) = db.ready(ours, db.Demo)
+  let assert Ok(Nil) = db.ready(theirs, db.Demo)
 
   let assert Ok(_) = {
     use connection <- db.with_connection_at(ours)
@@ -158,7 +158,7 @@ pub fn an_account_names_and_lists_its_lines_test() {
   let assert Ok(line) = lines.create(uid, "  Mobile  ")
   assert line.name == "Mobile"
   let assert Ok(_) = lines.rename(uid, lines.first, "Web")
-  let assert Ok(found) = lines.list(uid)
+  let assert Ok(found) = lines.list(uid, db.Demo)
 
   let created =
     as_user(http.Post, "/api/lines", uid, "{\"name\": \"Back office\"}", hub)
@@ -176,8 +176,8 @@ pub fn a_new_line_starts_empty_and_apart_test() {
   let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
 
   let assert Ok(line) = lines.create(uid, "Mobile")
-  let assert Ok(first) = lines.database(uid, lines.first)
-  let assert Ok(other) = lines.database(uid, line.id)
+  let assert Ok(first) = lines.database(uid, lines.first, db.Demo)
+  let assert Ok(other) = lines.database(uid, line.id, db.Demo)
   let assert Ok(first_demands) = {
     use connection <- db.with_connection_at(first)
     demand.list_active(connection)
@@ -247,7 +247,7 @@ pub fn a_removed_directory_is_made_again_test() {
   let directory = "data/test-wiped-" <> int.to_string(int.random(1_000_000))
   let path = directory <> "/a.db"
   let _ = simplifile.delete_all([directory])
-  let assert Ok(Nil) = db.ready(path)
+  let assert Ok(Nil) = db.ready(path, db.Demo)
   let assert Ok(True) = simplifile.is_file(path)
   let _ = simplifile.delete_all([directory])
 }

@@ -81,7 +81,7 @@ pub fn behind_count_counts_only_the_demands_with_an_andon_test() {
 
 fn with_seeded_database(run: fn(sqlight.Connection) -> a) -> a {
   use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   run(connection)
 }
 
@@ -110,7 +110,7 @@ pub fn the_seed_fills_the_line_test() {
 
 pub fn the_seed_runs_once_test() {
   use connection <- with_seeded_database()
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from demand") == 3
   assert count(connection, "select count(*) from work_station") == 9
 }
@@ -1363,7 +1363,7 @@ pub fn the_next_thing_shows_only_the_andons_of_my_work_stations_test() {
 pub fn a_database_of_another_schema_version_is_refused_test() {
   use connection <- db.with_connection_at(":memory:")
   exec(connection, "create table person (id text); pragma user_version = 15;")
-  let assert Error(_) = db.prepare(connection)
+  let assert Error(_) = db.prepare(connection, db.Demo)
   assert count(
       connection,
       "select count(*) from sqlite_master where name = 'demand'",
@@ -1374,7 +1374,7 @@ pub fn a_database_of_another_schema_version_is_refused_test() {
 pub fn a_new_database_gets_the_schema_once_test() {
   use connection <- with_seeded_database()
   assert count(connection, "pragma user_version") == 1
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from line_label") == 1
   assert count(connection, "select count(*) from working_calendar") == 1
 }

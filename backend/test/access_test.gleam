@@ -196,6 +196,8 @@ fn world(sso: Bool) -> World {
   let carol = #(random("access-carol-"), "carol@example.com")
   let bob = #(random("access-bob-"), "bob@example.com")
   let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
+  // Only the Public Workspace starts from the demo data; these tests need it.
+  let assert Ok(Nil) = db.ready(db.workspace_path(owner.0), db.Demo)
   let on = context(path, True)
   named(on, owner, "Olga")
   named(on, ada, "Ada")

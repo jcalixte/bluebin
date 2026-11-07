@@ -59,12 +59,16 @@ fn directory(workspace: String) -> String {
 }
 
 /// The ready database of one Line of the workspace. The first Value
-/// Line is made on demand; any other must exist, so an unknown id never
-/// creates a file.
-pub fn database(workspace: String, line: String) -> Result(String, LineError) {
+/// Line is made on demand from `start`; any other must exist, so an unknown
+/// id never creates a file.
+pub fn database(
+  workspace: String,
+  line: String,
+  start: db.Start,
+) -> Result(String, LineError) {
   use <- guard_known(workspace, line)
   let path = path(workspace, line)
-  db.ready(path)
+  db.ready(path, start)
   |> result.replace(path)
   |> result.replace_error(StoreFailed)
 }
@@ -90,8 +94,12 @@ fn guard_known(
   }
 }
 
-/// Every Line of the workspace, by name.
-pub fn list(workspace: String) -> Result(List(Line), LineError) {
+/// Every Line of the workspace, by name. Makes the first one from `start`
+/// when it is new.
+pub fn list(
+  workspace: String,
+  start: db.Start,
+) -> Result(List(Line), LineError) {
   let others =
     simplifile.read_directory(directory(workspace))
     // No directory yet: the account has only its first Line.
@@ -111,7 +119,7 @@ pub fn list(workspace: String) -> Result(List(Line), LineError) {
 
   [first, ..others]
   |> list.try_map(fn(id) {
-    use database <- result.try(database(workspace, id))
+    use database <- result.try(database(workspace, id, start))
     use name <- result.map(name_of(database))
     Line(id:, name:)
   })
@@ -138,7 +146,7 @@ fn name_of(database: String) -> Result(String, LineError) {
   }
 }
 
-/// A new Line starts empty, like `Reset… → Start empty`.
+/// A new Line starts empty: one Work Station and one Team Member.
 pub fn create(workspace: String, name: String) -> Result(Line, LineError) {
   use name <- result.try(check_name(name))
   let id = prefix <> random_hex()
@@ -148,9 +156,8 @@ pub fn create(workspace: String, name: String) -> Result(Line, LineError) {
       simplifile.create_directory_all(directory(workspace))
       |> result.replace_error(Nil),
     )
-    use _ <- result.try(db.ready(path) |> result.replace_error(Nil))
+    use _ <- result.try(db.ready(path, db.Empty) |> result.replace_error(Nil))
     use connection <- db.with_connection_at(path)
-    use _ <- result.try(db.reset_empty(connection) |> result.replace_error(Nil))
     save_name(connection, name)
   }
   case made {
@@ -169,7 +176,7 @@ pub fn rename(
   name: String,
 ) -> Result(Line, LineError) {
   use name <- result.try(check_name(name))
-  use database <- result.try(database(workspace, line))
+  use database <- result.try(database(workspace, line, db.Empty))
   use connection <- db.with_connection_at(database)
   save_name(connection, name)
   |> result.replace(Line(id: line, name:))

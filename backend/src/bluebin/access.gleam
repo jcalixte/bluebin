@@ -147,7 +147,7 @@ fn is_team_member(
   line: String,
   team_member: String,
 ) -> Bool {
-  case lines.database(workspace, line) {
+  case lines.database(workspace, line, db.Empty) {
     Error(_) -> False
     Ok(database) ->
       db.with_connection_at(database, fn(connection) {

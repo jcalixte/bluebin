@@ -14,7 +14,7 @@ import sqlight
 
 fn with_seeded_database(run: fn(sqlight.Connection) -> a) -> a {
   use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   run(connection)
 }
 
@@ -282,7 +282,7 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
     == 1
 
   // A later migration must not fill it with the demo data again.
-  let assert Ok(Nil) = db.prepare(connection)
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from demand") == 0
 
   // The empty Line runs: a Demand enters, its first Piece is pulled.

@@ -237,7 +237,7 @@ pub fn handle_request(
             http.Post -> create_line(request, workspace)
             _ -> {
               use <- wisp.require_method(request, http.Get)
-              list_lines(workspace)
+              list_lines(workspace, start_of(request, context))
             }
           }
         ["api", "lines", line, ..rest] ->
@@ -347,7 +347,7 @@ fn open_line(
   line: String,
   segments: List(String),
 ) -> wisp.Response {
-  case lines.database(workspace, line) {
+  case lines.database(workspace, line, start_of(request, context)) {
     Error(lines.UnknownLine) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
     Ok(database) -> {
@@ -381,6 +381,13 @@ fn open_line(
           }
         ["api", "sharing"] ->
           share_line(request, context, identity, workspace, line)
+        ["api", "reset"] -> {
+          use <- wisp.require_method(request, http.Post)
+          case owns_public_workspace(request, context) {
+            True -> reset(request, database, linking)
+            False -> wisp.response(403)
+          }
+        }
         _ -> route(request, segments, database, linking, act_as)
       }
     }
@@ -449,6 +456,21 @@ fn share_line(
           }
       }
     }
+  }
+}
+
+/// The Public Workspace is `akadmin`'s, with SSO on (DESIGN §10); with SSO
+/// off everyone shares the `public` one. Only there do Lines start from the
+/// demo data and does Reset… run.
+fn owns_public_workspace(request: wisp.Request, context: Context) -> Bool {
+  !context.sso || invitations.is_admin(request)
+}
+
+/// How the caller's own first Line starts, when this request makes it.
+fn start_of(request: wisp.Request, context: Context) -> db.Start {
+  case owns_public_workspace(request, context) {
+    True -> db.Demo
+    False -> db.Empty
   }
 }
 
@@ -560,7 +582,7 @@ fn show_name_in_lines(context: Context, account: accounts.Account) -> Nil {
   |> list.each(fn(link) {
     let #(workspace, line, team_member) = link
     let renamed =
-      lines.database(workspace, line)
+      lines.database(workspace, line, db.Empty)
       |> result.replace_error(Nil)
       |> result.try(fn(database) {
         db.with_connection_at(
@@ -656,7 +678,10 @@ fn list_workspaces(
       SignedIn(email:, ..) -> access.live_links(context.accounts, email, caller)
       SignedOut | NoEmail -> Ok([])
     })
-    use own <- result.try(lines.list(caller) |> result.replace_error(Nil))
+    use own <- result.try(
+      lines.list(caller, start_of(request, context))
+      |> result.replace_error(Nil),
+    )
     use own <- result.try(
       list.try_map(own, fn(line) {
         use shared <- result.map(shared(caller, line.id))
@@ -711,7 +736,7 @@ fn other_workspaces(
         [] -> Ok(None)
         _ -> {
           use all <- result.try(
-            lines.list(workspace) |> result.replace_error(Nil),
+            lines.list(workspace, db.Empty) |> result.replace_error(Nil),
           )
           use entries <- result.try(
             list.try_map(all, fn(line) {
@@ -785,8 +810,8 @@ fn line_entry_json(
   ])
 }
 
-fn list_lines(workspace: String) -> wisp.Response {
-  case lines.list(workspace) {
+fn list_lines(workspace: String, start: db.Start) -> wisp.Response {
+  case lines.list(workspace, start) {
     Ok(found) ->
       wisp.json_response(json.to_string(json.array(found, line_json)), 200)
     Error(_) -> wisp.internal_server_error()
@@ -799,7 +824,7 @@ fn create_line(request: wisp.Request, workspace: String) -> wisp.Response {
 }
 
 fn line_name(workspace: String, line: String) -> wisp.Response {
-  case lines.list(workspace) {
+  case lines.list(workspace, db.Empty) {
     Error(_) -> wisp.internal_server_error()
     Ok(found) ->
       case list.find(found, fn(one) { one.id == line }) {
@@ -983,10 +1008,6 @@ fn route(
           working_calendar(database)
         }
       }
-    ["api", "reset"] -> {
-      use <- wisp.require_method(request, http.Post)
-      reset(request, database, linking)
-    }
     _ -> wisp.not_found()
   }
 }
