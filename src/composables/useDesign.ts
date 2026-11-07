@@ -1,6 +1,13 @@
 import { computed, onMounted, ref } from "vue"
 import { api } from "../api"
-import type { Design, DesignInput, DesignTeamMember, DesignStationInput, Labels } from "../types"
+import type {
+  BlueBinSuggestion,
+  Design,
+  DesignInput,
+  DesignTeamMember,
+  DesignStationInput,
+  Labels,
+} from "../types"
 import { useLabels } from "./useLabels"
 import { useLiveUpdates } from "./useLiveUpdates"
 
@@ -11,6 +18,8 @@ export type DraftStation = DesignStationInput & {
   key: string
   locked: boolean
   minBlueBins: number
+  /** Null for a Work Station added in this draft. */
+  suggestion: BlueBinSuggestion | null
 }
 
 export type DraftStep = {
@@ -21,6 +30,7 @@ export type DraftStep = {
 
 export type DesignDraft = {
   labels: Labels
+  taktTimeHours: number
   teamMembers: DesignTeamMember[]
   steps: DraftStep[]
 }
@@ -37,6 +47,7 @@ const newKey = () => `new-${nextKey++}`
 function toDraft(design: Design): DesignDraft {
   return {
     labels: { ...design.labels },
+    taktTimeHours: design.taktTimeHours,
     teamMembers: design.teamMembers.map((teamMember) => ({ ...teamMember })),
     steps: design.steps.map((step) => ({
       key: newKey(),
@@ -88,6 +99,7 @@ export function newStation(branch: string | null): DraftStation {
     teamMembers: [],
     locked: false,
     minBlueBins: 1,
+    suggestion: null,
   }
 }
 

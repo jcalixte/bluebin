@@ -54,7 +54,14 @@ pub fn lead_time_is_touch_time_plus_stagnation_time_test() {
 }
 
 fn event(at: Int, kind: String, piece: String, station: String, from) {
-  Event(at:, kind:, piece: Some(piece), station: Some(station), from:)
+  Event(
+    at:,
+    kind:,
+    piece: Some(piece),
+    station: Some(station),
+    from:,
+    cause: None,
+  )
 }
 
 pub fn a_pause_is_not_touch_time_test() {
@@ -72,12 +79,126 @@ pub fn a_pause_is_not_touch_time_test() {
     )
   assert passes
     == [
-      Pass(unit: "p", station: "a", start: 0, end: Some(100), touch: [
-        #(30, 40),
-        #(0, 10),
-      ]),
-      Pass(unit: "p", station: "b", start: 100, end: None, touch: [#(100, 200)]),
+      Pass(
+        unit: "p",
+        station: "a",
+        start: 0,
+        end: Some(100),
+        touch: [#(30, 40), #(0, 10)],
+        filled: Some(40),
+        held: [#(10, 30)],
+      ),
+      Pass(
+        unit: "p",
+        station: "b",
+        start: 100,
+        end: None,
+        touch: [#(100, 200)],
+        filled: None,
+        held: [],
+      ),
     ]
+}
+
+pub fn only_a_pause_for_rework_counts_in_the_suggestion_test() {
+  let paused = fn(at, cause) {
+    Event(
+      at:,
+      kind: "piece_paused",
+      piece: Some("p"),
+      station: None,
+      from: None,
+      cause:,
+    )
+  }
+  let assert [pass, _] =
+    measures.replay(
+      [
+        event(0, "piece_pulled", "p", "a", None),
+        paused(1 * hour, Some("held")),
+        event(3 * hour, "piece_resumed", "p", "", None),
+        paused(4 * hour, Some("rework")),
+        event(5 * hour, "piece_resumed", "p", "", None),
+        // Before the cause was recorded: read as held.
+        paused(6 * hour, None),
+        event(7 * hour, "piece_resumed", "p", "", None),
+        event(8 * hour, "piece_put_in_blue_bin", "p", "a", None),
+        event(20 * hour, "piece_pulled", "p", "b", Some("a")),
+      ],
+      dict.new(),
+      30 * hour,
+    )
+  assert pass.filled == Some(8 * hour)
+  assert pass.held == [#(6 * hour, 7 * hour), #(1 * hour, 3 * hour)]
+  let always =
+    Calendar(..office(), days: [0, 1, 2, 3, 4, 5, 6], start: 0, end: 24 * 60)
+  // The wait in the Blue Bin (8 h to 20 h) is not Replenishment Time.
+  let assert Ok(one) = measures.replenishment(always, pass)
+  assert one.calendar == 8 * hour
+  assert one.working == 8 * hour
+  assert one.working_without_held == 5 * hour
+}
+
+pub fn p85_is_the_nearest_rank_test() {
+  assert measures.p85(span_of(20, 1)) == Ok(17)
+  assert measures.p85([5, 1, 4, 2, 3]) == Ok(5)
+  assert measures.p85([7]) == Ok(7)
+  assert measures.p85([]) == Error(Nil)
+}
+
+/// `from` to `to`, both included, in that order.
+fn span_of(from: Int, to: Int) -> List(Int) {
+  case from == to, from < to {
+    True, _ -> [from]
+    False, True -> [from, ..span_of(from + 1, to)]
+    False, False -> [from, ..span_of(from - 1, to)]
+  }
+}
+
+fn filled_at(filled: Int, hours: Int) -> measures.Replenishment {
+  measures.Replenishment(
+    filled:,
+    calendar: hours * hour,
+    working: hours * hour,
+    working_without_held: hours * hour,
+  )
+}
+
+pub fn the_suggestion_covers_the_replenishment_time_at_takt_test() {
+  let five = fn(hours) { list.map(span_of(1, 5), filled_at(_, hours)) }
+  // Exactly 2 Takt Times: 2 Blue Bins, with no float rounding up to 3.
+  assert measures.suggest(five(8), 4.0)
+    == measures.Suggestion(
+      passes: 5,
+      replenishment: Some(8 * hour),
+      blue_bins: Some(2),
+    )
+  assert { measures.suggest(five(10), 4.0) }.blue_bins == Some(3)
+  assert { measures.suggest(five(7), 0.7) }.blue_bins == Some(10)
+  // Never fewer than one Blue Bin.
+  assert { measures.suggest(five(1), 4.0) }.blue_bins == Some(1)
+}
+
+pub fn no_suggestion_without_flow_or_takt_test() {
+  let four = list.map(span_of(1, 4), filled_at(_, 8))
+  assert measures.suggest(four, 4.0)
+    == measures.Suggestion(passes: 4, replenishment: None, blue_bins: None)
+  let five = [filled_at(5, 8), ..four]
+  assert measures.suggest(five, 0.0)
+    == measures.Suggestion(
+      passes: 5,
+      replenishment: Some(8 * hour),
+      blue_bins: None,
+    )
+}
+
+pub fn the_suggestion_reads_the_last_twenty_passes_test() {
+  // 20 recent passes of 4 h, and 10 old ones of 40 h that no longer count.
+  let recent = list.map(span_of(101, 120), filled_at(_, 4))
+  let old = list.map(span_of(1, 10), filled_at(_, 40))
+  let found = measures.suggest(list.append(old, recent), 4.0)
+  assert found.passes == 20
+  assert found.blue_bins == Some(1)
 }
 
 pub fn a_split_and_an_assembly_end_the_station_lead_time_test() {
@@ -113,7 +234,7 @@ pub fn a_split_and_an_assembly_end_the_station_lead_time_test() {
 
 pub fn starvation_lasts_while_a_kanban_is_held_test() {
   let kanban = fn(at, kind) {
-    Event(at:, kind:, piece: None, station: Some("qa"), from: None)
+    Event(at:, kind:, piece: None, station: Some("qa"), from: None, cause: None)
   }
   let held =
     measures.kanban_held(
@@ -164,6 +285,24 @@ pub fn every_produced_piece_of_the_seed_is_measured_exactly_test() {
   })
   let assert Ok(web) = list.find(found.stations, fn(s) { s.id == "ws-web" })
   assert list.length(web.passes) == 11
+}
+
+pub fn the_seed_gets_a_replenishment_time_and_a_suggestion_test() {
+  use connection <- seeded()
+  let assert Ok(web) =
+    list.find(last_weeks(connection).stations, fn(s) { s.id == "ws-web" })
+  assert list.length(web.replenishments) == 11
+  list.each(web.replenishments, fn(one) {
+    assert one.working_without_held <= one.working
+    assert one.working <= one.calendar
+  })
+  let assert Ok(demands) = demand.list_active(connection)
+  let assert Ok(suggestions) =
+    measures.suggestions(connection, demand.line_takt_hours(demands))
+  let assert Ok(suggestion) = dict.get(suggestions, "ws-web")
+  assert suggestion.passes == 11
+  let assert Some(bins) = suggestion.blue_bins
+  assert bins >= 1
 }
 
 pub fn a_deviation_and_a_spent_kanban_reach_the_measures_test() {

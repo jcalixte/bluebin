@@ -689,9 +689,11 @@ Core How decisions, shared by many Functions:
   - Serves: F54, F55
   - A pass gives the pull-in; its `piece_put_in_blue_bin` gives the end. **Rework** done later is not counted: it does not delay the **Blue Bin**
   - F55 reads the last 20 passes that ended at the **Work Station**, and needs at least 5; F54 reads the passes of the Measures period, like every other measure
+  - F55 drops the pauses caused by a **Team Member** holding another **Piece** (`piece_paused` cause `held`, R11); it keeps the pauses for **Rework**, a real loss of capacity. A past pause with no cause counts as `held`. F54 shows the full **Replenishment Time**
   - Suggested **Blue Bins** = max(1, ⌈p85 **Replenishment Time** ÷ **Takt Time** of the **Line**⌉), both in **Working Time**; no suggestion when no **Demand** is active
   - Every **Piece** crosses every **Branch** (each **Branch** pulls its own **Sub-Piece**), so one **Takt Time** of the **Line** serves all **Work Stations**
   - Computed in C2, next to the F10 capacity, and sent with the Design payload: C1 holds no formula
+  - C1 shows it under the **Blue Bin** input of each **Work Station** in Design, always when there is data, with its inputs: `Suggested: 3 · Takt 4 h, Replenishment 10 h (p85 of 12 passes)`. One click sets the input; the owner still saves. Neutral style: red and green are for status only
 - **How H16 — the last 7 days, like F10** (rejected: a slow **Line** gets fewer than 5 passes a week)
 - **How H17 — the Measures period** (rejected: Design has no period, so the suggestion would hang on hidden state)
 - **How H18 — the Toyota loop**: from the **Kanban** sent, without **Starvation Time** (rejected, see T6)
@@ -750,6 +752,9 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | R8  | H8 links outside the **Line**'s transaction vs F40 100 % of changes dated   |    ×     | `accounts.db` keeps its own dated log of link changes                                                                                                                               |
 | R9  | F48 hide a **Private Line** vs F1 one view, the same for everyone           |    ×     | Accepted by design: a **Private Line** is the owner's choice                                                                                                                        |
 | R10 | F52 link nothing with SSO off vs testing G11 in dev                         |    ×     | A server setting says SSO is on; the Vite dev proxy sends the email and name headers too, with that setting on in dev only                                                          |
+| R11 | F55 suggested **Blue Bins** vs F32 pause all but one **Piece** | ⊗ | More **Blue Bins** let a **Team Member** hold more **Pieces**; the held ones pause, the **Replenishment Time** grows, and the suggestion grows with it. Broken at the source: each `piece_paused` names its cause (`rework` or `held`), and F55 drops the `held` pauses (H15, T8) |
+| R12 | F55 suggested **Blue Bins** vs F10 capacity at **Takt Time** | × | H15 sizes **Blue Bins** as if capacity were enough. A **Work Station** slower than **Takt Time** needs **Team Members** or less work, not more **Blue Bins**: F10 and F29 flag it; the suggestion does not try to |
+| R13 | F55 last 20 passes vs F40 change while running | × | After a change (a new **Team Member**, a new **Branch**), the suggestion still reads the passes from before it. Accepted: the window renews in 20 passes; the hint shows how many passes it read |
 
 ---
 
@@ -779,6 +784,14 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 |  5   | F4 delivery forecast                                     | error ≤ 1 working day | Forecast date vs real date, for each finished **Demand**                        | Show a date range, not one date, until the error goes down                                                                                              |
 |  6   | F39 design the software team's **Line**                  | ≤ 30 min              | Time measured in the first real session with the team                           | Supply a "software team" template, with the **Split** for Web, iOS and Android                                                                          |
 
+### Blue Bin suggestion (F54, F55)
+
+| Rank | Function | Target | Watched on | If we miss it |
+| :--: | -------- | ------ | ---------- | ------------- |
+|  1   | F55 the suggestion does not follow WIP (R11) | Suggestion stable when only the **Blue Bin** count changes | F38 before/after: p85 **Replenishment Time** without `held` pauses, around each **Blue Bin** change | Show the suggestion only when it is lower than the current count, as a Kaizen hint |
+|  2   | F55 shown for the **Work Stations** | ≥ 5 passes reached in the first 2 weeks of a real **Line** | Count of "Not enough flow yet" in Design | Lower the minimum to 3 passes, and show the pass count larger |
+|  3   | F54 / F55 cost of the Design payload | ≤ 50 ms more | Request duration in the log, before and after | Compute from the current-state tables at each pass end, not from the log at each read |
+
 ### Sign-in and access (G11, G12)
 
 | Rank | Function                              | Target                             | Watched on                                                                                                                        | If we miss it                                                                                                               |
@@ -800,6 +813,9 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 
 | T4 | Account links only in a shared `accounts.db` (H8), over the email on the **Team Member** in the **Line** file plus an index (H7), and a scan of the **Line** files (H9) | One place for every **Account** and link; F46 and each access check are one indexed query; no copy to keep in sync | A link change is not in the **Line**'s transaction or flow log; a Reset or a removed **Team Member** leaves orphan links, so every read checks that the **Team Member** still exists | [ADR-0004](./docs/adr/0004-account-links-live-in-one-shared-accounts-db.md) |
 | T5 | The owner's uid in the URL (H12), over a random **Workspace** id (H13) | No migration, no new table: the uid is already the directory name | The owner's authentik uid (a hash) shows in links, history and logs; a **Workspace** cannot move to another owner | — |
+| T6 | **Replenishment Time** from the pull-in to the **Blue Bin** (H15), over the Toyota loop from the **Kanban** sent (H18) | Data that exists; no pairing of **Kanbans** to pulls; extra **Blue Bins** never hide a capacity problem | The suggestion is low for a **Work Station** whose **Kanbans** wait for a free **Team Member** (R12) | — |
+| T7 | The last 20 passes, at least 5 (H15), over the last 7 days (H16) and the Measures period (H17) | Fresh on a fast **Line**, enough on a slow one; no hidden state in Design | Not the F10 window; lags a **Line** change by up to 20 passes (R13) | — |
+| T8 | A cause on each `piece_paused`, and F55 without the `held` pauses, over a paused share in the hint, or **Touch Time** only | Cuts the WIP loop at its source, keeps **Rework** as a real loss | One more field on the event; old pauses with no cause count as `held` | — |
 
 ### Tensions being watched (unresolved by design)
 
@@ -811,6 +827,8 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **The wall TV cannot act for linked Team Members** (R7). **Trigger to revisit:** stale **Assignments** (F33) above 5 % on teams with linked **Team Members**.
 - **Orphan links after a Reset or a removed Team Member** (H8). Harmless, because a link counts only while its **Team Member** exists. **Trigger to revisit:** orphan links outnumber live ones, or a cleanup misses a case.
 - **The Account's name is asked once, never synced from authentik** (F44). **Trigger to revisit:** people change their name in authentik and expect Bluebin to follow.
+- **The suggestion assumes enough capacity** (T6, R12). **Trigger to revisit:** a **Work Station** at its suggested count still starves the one after it, while F10 does not flag it.
+- **Past pauses have no cause** (T8). They all count as `held`, so old Rework pauses are dropped too, and the first suggestions run low. **Trigger to revisit:** a **Line** with much past **Rework** gets suggestions below its real need.
 
 ---
 
@@ -822,10 +840,12 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **Flow actions name any Team Member.** Each flow action took the **Team Member** from the request body, so any client acted as anyone. Resolved for the actions that name one (pull, **Andon**, close an **Andon**, **Assignment**): C7 checks it (F50). Open: finish, deliver, **Rework**, repair and make urgent name no **Team Member**, so a **Team Member** can do them on another one's **Piece**; and a linked **Team Member** cannot hand an **Assignment** to someone else, nor can the owner hand one to a linked **Team Member**.
 - **Owner of the public Workspace.** [CONTEXT.md](./CONTEXT.md) said each **Workspace** has one owner **Account**, but the public **Workspace** of visitors who are not signed in had none, and everyone could change it. Resolved: the **Public Workspace** is the **Workspace** of one chosen **Account** (`akadmin`), which alone changes it; everyone else only looks. Its **Shared Lines** open with no sign-in by their look-only link (F53), like every other **Shared Line**.
 - **Who sees a Shared Line.** [CONTEXT.md](./CONTEXT.md) said every **Account** able to open its **Workspace**, so only the **Team Members** of another **Line** there. Resolved (2026-11-07): anyone with its link, signed in or not, look-only. authentik lets the look-only paths through with no sign-in; with SSO on, a request with no uid then gets no **Workspace** (`401`), so a path that climbs out of `/api/s/` opens nothing.
-- **Diagrams lag G11 and G12.** The TPS house (§1) and the House of Quality do not show G11, G12 or F43–F52. Open: redraw both after the build.
+- **Diagrams lag G11 and G12.** The TPS house (§1) and the House of Quality do not show G11, G12, F43–F52, F54 or F55. Open: redraw both after the build.
 - **"A user has one workspace for now".** The comment in `backend/src/bluebin/workspace.gleam` and the README's "Sign-in and Workspaces" said the **Workspace** comes only from `X-authentik-uid`. Resolved with C7 and H12: the owner's uid in the URL opens another **Workspace**.
 - **F9 and the automatic pause.** F9 also warned before a second active **Assignment**, but taking an **Assignment** pauses the current one automatically, so a second active one cannot happen. Resolved: F9 covers only the second **Piece** in a **Blue Bin**.
 
+- **Station Lead Time without pauses.** The relationship in [CONTEXT.md](./CONTEXT.md) said **Station Lead Time** = **Touch Time** + the wait in the **Blue Bin**, but the code counts pauses in it too, as **Stagnation Time**. Resolved (2026-11-07): **Station Lead Time** = **Replenishment Time** + the wait in the **Blue Bin**, and **Replenishment Time** = **Touch Time** + pauses.
+- **Kanbans have no identity.** `kanban_sent` and `kanban_spent` name only the **Work Station**, so a **Kanban** cannot be followed to the **Piece** it brought. Left open: H15 does not need it; a Toyota-loop measure (H18) would.
 ---
 
 ## 11. Build order — G11 and G12
@@ -845,6 +865,18 @@ Why this order:
 - **Slice 1 first.** Every other Function of G11 and G12 needs an **Account**. It changes no access, so it is safe alone. The dated log of link changes moved to slice 2, which makes the first link.
 - **Slice 3 is one deploy.** Today each flow action takes the **Team Member** from the request body (§10). URLs that open another **Workspace** without the guard let any client act as anyone.
 - **Slice 4 after slice 3.** The first screen must know the **Line** of the **Team Member**, and that **Line** can be in another owner's **Workspace**.
+
+---
+
+## 12. Build order — Blue Bin suggestion (F54, F55)
+
+| Slice | Name | Functions and components | What ships | Done when |
+| :---: | ---- | ------------------------ | ---------- | --------- |
+|   1   | The cause of a pause (built) | R11, T8, C2 | `piece_paused` names its cause: `rework` (F13) or `held` (F32); a past pause with no cause reads as `held` | Each new pause has a cause; the measures still add up (F34) |
+|   2   | **Replenishment Time** in Measures (built) | F54, H15, C1, C2 | p85 **Replenishment Time** for each **Work Station**, in the Measures period, next to **Station Lead Time** | Value for each **Work Station** with ≥ 5 passes |
+|   3   | Suggested **Blue Bins** in Design (built) | F55, H15, C1, C2 | The suggestion and its inputs in the Design payload; the neutral hint under the **Blue Bin** input, one click to set it | §8 Blue Bin suggestion, rows 1–3 |
+
+Why this order: slice 1 must ship first, so that pauses carry a cause before the suggestion reads them; every day without it adds untagged pauses. Slice 2 lets the owner check the numbers before Design suggests anything.
 
 ---
 

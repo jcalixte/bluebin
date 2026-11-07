@@ -20,11 +20,16 @@ pub type Event {
     piece: Option(String),
     station: Option(String),
     from: Option(String),
+    /// Why a Piece paused: `rework` or `held` (DESIGN.md R11). None before the
+    /// cause was recorded, which reads as `held`.
+    cause: Option(String),
   )
 }
 
 /// One stay of a Piece or Sub-Piece (`unit`) at a Work Station: from the pull
-/// in to the pull out of its Blue Bin. `end` is None while it lasts.
+/// in to the pull out of its Blue Bin. `end` is None while it lasts. `filled`
+/// is when it went in the Blue Bin; `held` are its pauses while its Team
+/// Member held another Piece.
 pub type Pass {
   Pass(
     unit: String,
@@ -32,6 +37,8 @@ pub type Pass {
     start: Int,
     end: Option(Int),
     touch: List(Interval),
+    filled: Option(Int),
+    held: List(Interval),
   )
 }
 
@@ -56,6 +63,9 @@ type Open {
     start: Int,
     touching: Option(Int),
     touch: List(Interval),
+    filled: Option(Int),
+    held_since: Option(Int),
+    held: List(Interval),
   )
 }
 
@@ -111,20 +121,36 @@ fn step(
         open: dict.insert(
           state.open,
           unit,
-          Open(station:, start: at, touching: Some(at), touch: []),
+          Open(
+            station:,
+            start: at,
+            touching: Some(at),
+            touch: [],
+            filled: None,
+            held_since: None,
+            held: [],
+          ),
         ),
       )
     }
-    "piece_paused", _ | "piece_put_in_blue_bin", _ ->
+    "piece_paused", _ ->
       update(state, unit, fn(open) {
-        case open.touching {
-          Some(since) ->
-            Open(..open, touching: None, touch: [#(since, at), ..open.touch])
-          None -> open
+        let open = stop_touching(open, at)
+        case event.cause, open.held_since {
+          Some("rework"), _ | _, Some(_) -> open
+          _, None -> Open(..open, held_since: Some(at))
         }
+      })
+    "piece_put_in_blue_bin", _ ->
+      update(state, unit, fn(open) {
+        Open(
+          ..stop_holding(stop_touching(open, at), at),
+          filled: option.or(open.filled, Some(at)),
+        )
       })
     "piece_resumed", _ ->
       update(state, unit, fn(open) {
+        let open = stop_holding(open, at)
         case open.touching {
           None -> Open(..open, touching: Some(at))
           Some(_) -> open
@@ -133,6 +159,22 @@ fn step(
     "piece_split", _ | "piece_reached_production", _ ->
       leave_any(state, unit, at)
     _, _ -> state
+  }
+}
+
+fn stop_touching(open: Open, at: Int) -> Open {
+  case open.touching {
+    Some(since) ->
+      Open(..open, touching: None, touch: [#(since, at), ..open.touch])
+    None -> open
+  }
+}
+
+fn stop_holding(open: Open, at: Int) -> Open {
+  case open.held_since {
+    Some(since) ->
+      Open(..open, held_since: None, held: [#(since, at), ..open.held])
+    None -> open
   }
 }
 
@@ -165,11 +207,91 @@ fn leave_any(state: Replay, unit: String, at: Int) -> Replay {
 }
 
 fn close_pass(unit: String, open: Open, end: Option(Int), at: Int) -> Pass {
-  let touch = case open.touching {
-    Some(since) -> [#(since, at), ..open.touch]
-    None -> open.touch
+  let open = stop_holding(stop_touching(open, at), at)
+  Pass(
+    unit:,
+    station: open.station,
+    start: open.start,
+    end:,
+    touch: open.touch,
+    filled: open.filled,
+    held: open.held,
+  )
+}
+
+/// Replenishment Time of one pass, from the pull in to the Blue Bin.
+pub type Replenishment {
+  Replenishment(
+    filled: Int,
+    calendar: Int,
+    working: Int,
+    /// Working Time without the pauses while the Team Member held another
+    /// Piece: those grow with the WIP, not with the work (DESIGN.md R11).
+    working_without_held: Int,
+  )
+}
+
+pub fn replenishment(
+  calendar: Calendar,
+  pass: Pass,
+) -> Result(Replenishment, Nil) {
+  use filled <- result.try(option.to_result(pass.filled, Nil))
+  let span = span(calendar, pass.start, filled, pass.touch)
+  let working = lead_working(span)
+  let held =
+    clip(pass.held, pass.start, filled)
+    |> list.fold(0, fn(total, one) {
+      total + calendar.working_seconds(calendar, one.0, one.1)
+    })
+  Ok(Replenishment(
+    filled:,
+    calendar: lead(span),
+    working:,
+    working_without_held: int.max(0, working - held),
+  ))
+}
+
+/// The value that 85 % of `values` stay at or under (nearest rank).
+pub fn p85(values: List(Int)) -> Result(Int, Nil) {
+  let sorted = list.sort(values, int.compare)
+  let rank = { list.length(sorted) * 85 + 99 } / 100
+  sorted |> list.drop(int.max(rank - 1, 0)) |> list.first
+}
+
+/// Fewer passes than this give no Replenishment Time and no suggestion.
+pub const min_passes = 5
+
+/// The suggestion reads the last passes that went in the Blue Bin (H15).
+pub const suggestion_passes = 20
+
+/// Suggested Blue Bins (F55): enough to cover the Replenishment Time at the
+/// Takt Time of the Line.
+pub type Suggestion {
+  Suggestion(passes: Int, replenishment: Option(Int), blue_bins: Option(Int))
+}
+
+pub fn suggest(
+  replenishments: List(Replenishment),
+  takt_hours: Float,
+) -> Suggestion {
+  let last =
+    replenishments
+    |> list.sort(fn(a, b) { int.compare(b.filled, a.filled) })
+    |> list.take(suggestion_passes)
+  let passes = list.length(last)
+  let replenishment = case passes >= min_passes {
+    True ->
+      p85(list.map(last, fn(one) { one.working_without_held }))
+      |> option.from_result
+    False -> None
   }
-  Pass(unit:, station: open.station, start: open.start, end:, touch:)
+  // In whole seconds, so that 8 h at a Takt Time of 4 h is 2, not 2.0000001.
+  let takt = float.round(takt_hours *. 3600.0)
+  let blue_bins = case replenishment, takt > 0 {
+    Some(seconds), True -> Some(int.max(1, { seconds + takt - 1 } / takt))
+    _, _ -> None
+  }
+  Suggestion(passes:, replenishment:, blue_bins:)
 }
 
 /// Touch Time is the union of `touches` inside [from, to); the rest of that
@@ -297,6 +419,8 @@ pub type StationMeasure {
     branch: Option(String),
     position: Int,
     passes: List(Span),
+    /// The passes that went in the Blue Bin in the period (F54).
+    replenishments: List(Replenishment),
     starvation: Int,
     starvation_working: Int,
     andon: Int,
@@ -390,11 +514,10 @@ pub fn load(
       Ok(#(Period(from:, to:, start:, end:), now))
     _ -> Error(InvalidPeriod)
   })
-  use calendar <- result.try(
-    calendar.load(connection) |> result.replace_error(StoreFailed),
-  )
-  use events <- result.try(query(connection, events_sql, [], event_decoder()))
-  use pieces <- result.try(query(connection, pieces_sql, [], piece_decoder()))
+  use #(calendar, events, pieces, children, passes) <- result.try(load_passes(
+    connection,
+    now,
+  ))
   use reworks <- result.try(
     query(
       connection,
@@ -471,17 +594,6 @@ pub fn load(
     deviation_decoder(),
   ))
 
-  let children =
-    list.fold(pieces, dict.new(), fn(children, piece) {
-      case piece.parent {
-        Some(parent) ->
-          dict.upsert(children, parent, fn(found) {
-            [piece.id, ..option.unwrap(found, [])]
-          })
-        None -> children
-      }
-    })
-  let passes = replay(events, children, now)
   let touches = fn(units: List(String)) {
     list.append(
       passes
@@ -602,6 +714,20 @@ pub fn load(
             _, _ -> Error(Nil)
           }
         })
+      let replenishments =
+        list.filter_map(passes, fn(pass) {
+          case pass.station == id {
+            True ->
+              replenishment(calendar, pass)
+              |> result.try(fn(one) {
+                case in_period(one.filled) {
+                  True -> Ok(one)
+                  False -> Error(Nil)
+                }
+              })
+            False -> Error(Nil)
+          }
+        })
       let #(starvation, starvation_working) =
         dict.get(held, id) |> result.unwrap([]) |> in_measured
       let station_stops =
@@ -618,6 +744,7 @@ pub fn load(
         branch:,
         position:,
         passes: station_passes,
+        replenishments:,
         starvation:,
         starvation_working:,
         andon:,
@@ -657,6 +784,65 @@ fn query(
   |> result.replace_error(StoreFailed)
 }
 
+/// The Passes of every Piece and Sub-Piece, replayed from the log.
+fn load_passes(
+  connection: sqlight.Connection,
+  now: Int,
+) -> Result(
+  #(
+    Calendar,
+    List(Event),
+    List(PieceRow),
+    Dict(String, List(String)),
+    List(Pass),
+  ),
+  MeasuresError,
+) {
+  use calendar <- result.try(
+    calendar.load(connection) |> result.replace_error(StoreFailed),
+  )
+  use events <- result.try(query(connection, events_sql, [], event_decoder()))
+  use pieces <- result.try(query(connection, pieces_sql, [], piece_decoder()))
+  let children =
+    list.fold(pieces, dict.new(), fn(children, piece) {
+      case piece.parent {
+        Some(parent) ->
+          dict.upsert(children, parent, fn(found) {
+            [piece.id, ..option.unwrap(found, [])]
+          })
+        None -> children
+      }
+    })
+  Ok(#(calendar, events, pieces, children, replay(events, children, now)))
+}
+
+/// Suggested Blue Bins for each Work Station that has passes (F55, H15).
+pub fn suggestions(
+  connection: sqlight.Connection,
+  takt_hours: Float,
+) -> Result(Dict(String, Suggestion), MeasuresError) {
+  use now <- result.try(query(
+    connection,
+    "select cast(strftime('%s', 'now') as integer)",
+    [],
+    decode.at([0], decode.int),
+  ))
+  use #(calendar, _, _, _, passes) <- result.try(load_passes(
+    connection,
+    list.first(now) |> result.unwrap(0),
+  ))
+  passes
+  |> list.filter_map(fn(pass) {
+    replenishment(calendar, pass)
+    |> result.map(fn(one) { #(pass.station, one) })
+  })
+  |> list.group(fn(entry) { entry.0 })
+  |> dict.map_values(fn(_, entries) {
+    suggest(list.map(entries, fn(entry) { entry.1 }), takt_hours)
+  })
+  |> Ok
+}
+
 fn touches_of_reworks(
   reworks: List(#(String, Interval)),
   unit: String,
@@ -672,7 +858,8 @@ fn touches_of_reworks(
 const events_sql =
   "
 select cast(strftime('%s', at) as integer), kind, piece_id,
-       json_extract(payload, '$.station'), json_extract(payload, '$.from')
+       json_extract(payload, '$.station'), json_extract(payload, '$.from'),
+       json_extract(payload, '$.cause')
   from flow_event
  where kind in ('piece_pulled', 'piece_assembled', 'piece_paused',
                 'piece_resumed', 'piece_put_in_blue_bin', 'piece_split',
@@ -717,7 +904,8 @@ fn event_decoder() -> decode.Decoder(Event) {
   use piece <- decode.field(2, decode.optional(decode.string))
   use station <- decode.field(3, decode.optional(decode.string))
   use from <- decode.field(4, decode.optional(decode.string))
-  decode.success(Event(at:, kind:, piece:, station:, from:))
+  use cause <- decode.field(5, decode.optional(decode.string))
+  decode.success(Event(at:, kind:, piece:, station:, from:, cause:))
 }
 
 fn piece_decoder() -> decode.Decoder(PieceRow) {
@@ -799,6 +987,7 @@ pub fn to_json(measures: Measures) -> json.Json {
           #("passes", json.int(list.length(station.passes))),
           #("stationLeadTime", average_lead(station.passes)),
           #("touchTime", average_touch(station.passes)),
+          #("replenishmentTime", p85_duration(station.replenishments)),
           #("touchShare", case leads {
             0 -> json.null()
             _ ->
@@ -854,6 +1043,20 @@ pub fn to_json(measures: Measures) -> json.Json {
       ]),
     ),
   ])
+}
+
+/// p85 Replenishment Time, or null under `min_passes` passes (F54).
+fn p85_duration(replenishments: List(Replenishment)) -> json.Json {
+  case list.length(replenishments) >= min_passes {
+    False -> json.null()
+    True ->
+      duration(
+        p85(list.map(replenishments, fn(one) { one.calendar }))
+          |> option.from_result,
+        p85(list.map(replenishments, fn(one) { one.working }))
+          |> option.from_result,
+      )
+  }
 }
 
 fn spans_json(spans: List(Span)) -> List(#(String, json.Json)) {

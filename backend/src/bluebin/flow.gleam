@@ -595,7 +595,12 @@ fn settle(
     Error(_) -> Error(StoreFailed)
     Ok([count, ..]) if count > 0 -> {
       use _ <- result.try(start_next_rework(connection, team_member_id))
-      use paused <- result.try(pause_pieces(connection, team_member_id, None))
+      use paused <- result.try(pause_pieces(
+        connection,
+        team_member_id,
+        None,
+        "rework",
+      ))
       Ok(Settled(paused:, resumed: None))
     }
     Ok(_) -> {
@@ -657,6 +662,7 @@ fn keep_nearest_active(
         connection,
         team_member_id,
         option.from_result(list.first(kept)),
+        "held",
       )
   }
 }
@@ -666,6 +672,7 @@ fn pause_pieces(
   connection: sqlight.Connection,
   team_member_id: String,
   except: Option(String),
+  cause: String,
 ) -> Result(List(String), FlowError) {
   let paused =
     sqlight.query(
@@ -690,7 +697,10 @@ fn pause_pieces(
       connection,
       "piece_paused",
       Some(piece.0),
-      json.object([#("teamMember", json.string(team_member_id))]),
+      json.object([
+        #("teamMember", json.string(team_member_id)),
+        #("cause", json.string(cause)),
+      ]),
     ))
     Ok(piece.1)
   })

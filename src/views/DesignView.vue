@@ -219,6 +219,7 @@ function confirmDiscard() {
               :key="station.key"
               v-model="step.stations[stationIndex]"
               :team-members="draft.teamMembers"
+              :takt-hours="draft.taktTimeHours"
               @remove="removeStation(index, stationIndex)"
             />
 

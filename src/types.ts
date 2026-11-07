@@ -274,6 +274,8 @@ export type StationMeasures = {
   passes: number
   stationLeadTime: Duration | null
   touchTime: Duration | null
+  /** 85th percentile of the passes that went in the Blue Bin in the period; null under 5 passes. */
+  replenishmentTime: Duration | null
   /** A fraction in 0..1. */
   touchShare: number | null
   starvationTime: Duration | null
@@ -344,6 +346,18 @@ export type DesignTeamMember = {
 }
 
 /**
+ * Suggested Blue Bins (DESIGN.md F55): the last `passes` (at most 20) that went
+ * in the Blue Bin. `replenishmentHours` is their 85th percentile in Working
+ * Time, without the pauses while the Team Member held another Piece; null
+ * under 5 passes. `blueBins` is null without it or without a Takt Time.
+ */
+export type BlueBinSuggestion = {
+  passes: number
+  replenishmentHours: number | null
+  blueBins: number | null
+}
+
+/**
  * `locked`: the Work Station holds a Piece, an open Rework or an open Andon.
  * `minBlueBins`: max(1, Pieces in its Blue Bins).
  */
@@ -356,6 +370,7 @@ export type DesignStation = {
   teamMembers: string[]
   locked: boolean
   minBlueBins: number
+  suggestion: BlueBinSuggestion
 }
 
 /** Steps are in flow order: the first step pulls from the Backlog. */
@@ -366,6 +381,8 @@ export type DesignStep = {
 
 export type Design = {
   labels: Labels
+  /** The Takt Time of the Line, in hours of Working Time; 0 with no active Demand. */
+  taktTimeHours: number
   teamMembers: DesignTeamMember[]
   steps: DesignStep[]
 }

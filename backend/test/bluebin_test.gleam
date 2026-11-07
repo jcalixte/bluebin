@@ -409,6 +409,15 @@ pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
   assert raised.assignee == Some("Alice")
   assert raised.paused == Some("US-9 · iOS")
   assert state_of(connection, "p-checkout-9-ios") == "paused"
+  // A pause for Rework is a real loss of capacity: it counts in the
+  // suggested Blue Bins (DESIGN.md R11).
+  assert count(
+      connection,
+      "select count(*) from flow_event
+       where kind = 'piece_paused' and piece_id = 'p-checkout-9-ios'
+         and json_extract(payload, '$.cause') = 'rework'",
+    )
+    == 1
   assert count(
       connection,
       "select count(*) from rework
@@ -611,6 +620,13 @@ pub fn a_new_piece_waits_behind_the_one_in_hand_test() {
   let assert Ok(_) = flow.pull(connection, "ws-web", Some("pe-bob"), None)
   assert state_of(connection, "p-checkout-8-web") == "in_flow"
   assert state_of(connection, "p-checkout-9-web") == "paused"
+  assert count(
+      connection,
+      "select count(*) from flow_event
+       where kind = 'piece_paused' and piece_id = 'p-checkout-9-web'
+         and json_extract(payload, '$.cause') = 'held'",
+    )
+    == 1
 
   let assert Ok(_) = flow.finish(connection, "ws-web", "p-checkout-8-web", None)
   assert state_of(connection, "p-checkout-9-web") == "in_flow"
@@ -1294,6 +1310,7 @@ pub fn capacity_is_the_average_touch_time_shared_by_the_team_members_test() {
         measures.Span(touch: 7200, stagnation: 0, stagnation_working: 0),
         measures.Span(touch: 14_400, stagnation: 0, stagnation_working: 0),
       ],
+      replenishments: [],
       starvation: 0,
       starvation_working: 0,
       andon: 0,

@@ -5,7 +5,7 @@ import type { DesignTeamMember } from "../types"
 
 const station = defineModel<DraftStation>({ required: true })
 
-const props = defineProps<{ teamMembers: DesignTeamMember[] }>()
+const props = defineProps<{ teamMembers: DesignTeamMember[]; taktHours: number }>()
 
 defineEmits<{ remove: [] }>()
 
@@ -23,6 +23,16 @@ function toggle(teamMember: string, event: Event) {
 }
 
 const tooFewBins = computed(() => !(Number(station.value.blueBins) >= station.value.minBlueBins))
+
+/** Must match min_passes in backend/src/bluebin/measures.gleam. */
+const minPasses = 5
+
+const suggestion = computed(() => station.value.suggestion)
+
+function useSuggestion() {
+  const bins = suggestion.value?.blueBins
+  if (bins != null) station.value.blueBins = bins
+}
 </script>
 
 <template>
@@ -105,6 +115,29 @@ const tooFewBins = computed(() => !(Number(station.value.blueBins) >= station.va
           {{ station.minBlueBins }} or more: Pieces are in the Blue Bins.
         </span>
       </label>
+
+      <p
+        v-if="suggestion"
+        class="-mt-1 text-xs"
+        title="Suggested Blue Bins = Replenishment Time ÷ Takt Time, rounded up. Replenishment Time: from the pull in to the Blue Bin, 85th percentile of the last 20 passes, in Working Time, without the pauses while a Team Member held another Piece."
+      >
+        <template v-if="suggestion.blueBins !== null">
+          <span v-if="suggestion.blueBins === Number(station.blueBins)" class="opacity-70">
+            Matches the suggestion:
+          </span>
+          <button v-else type="button" class="link font-medium" @click="useSuggestion">
+            Use the suggestion: {{ suggestion.blueBins }}
+          </button>
+          <span class="opacity-70">
+            Takt {{ taktHours }} h, Replenishment {{ suggestion.replenishmentHours }} h (85th
+            percentile of {{ suggestion.passes }} passes)
+          </span>
+        </template>
+        <span v-else-if="suggestion.replenishmentHours === null" class="opacity-70">
+          No suggestion yet: {{ suggestion.passes }} of {{ minPasses }} passes.
+        </span>
+        <span v-else class="opacity-70">No suggestion: no active Demand, so no Takt Time.</span>
+      </p>
 
       <fieldset>
         <legend class="mb-1 text-sm font-medium">Team Members</legend>

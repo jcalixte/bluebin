@@ -1073,14 +1073,27 @@ fn save_calendar(request: wisp.Request, database: String) -> wisp.Response {
 }
 
 fn design_of(database: String, linking: Option(Linking)) -> wisp.Response {
-  case db.with_connection_at(database, design.load), links_of(linking) {
-    Ok(#(found, held)), Ok(links) ->
-      wisp.json_response(
-        json.to_string(design.to_json(found, held, links)),
-        200,
-      )
+  case db.with_connection_at(database, design_json), links_of(linking) {
+    Ok(to_json), Ok(links) ->
+      wisp.json_response(json.to_string(to_json(links)), 200)
     _, _ -> wisp.internal_server_error()
   }
+}
+
+/// The Design with the Takt Time of the Line and the suggested Blue Bins
+/// (F55), waiting for the Account links.
+fn design_json(
+  connection: sqlight.Connection,
+) -> Result(fn(List(accounts.Link)) -> json.Json, Nil) {
+  use #(found, held) <- result.try(design.load(connection))
+  use demands <- result.try(
+    demand.list_active(connection) |> result.replace_error(Nil),
+  )
+  let takt = demand.line_takt_hours(demands)
+  use suggestions <- result.try(
+    measures.suggestions(connection, takt) |> result.replace_error(Nil),
+  )
+  Ok(fn(links) { design.to_json(found, held, links, takt, suggestions) })
 }
 
 fn links_of(linking: Option(Linking)) -> Result(List(accounts.Link), Nil) {
@@ -1198,16 +1211,12 @@ fn save_design_and_links(
                   design.name_linked(connection, linked_names(links))
                   |> result.replace_error(Nil),
                 )
-                design.load(connection)
+                design_json(connection)
               })
-              |> result.map(fn(loaded) { #(loaded, links) })
+              |> result.map(fn(to_json) { to_json(links) })
             })
           {
-            Ok(#(#(found, held), links)) ->
-              wisp.json_response(
-                json.to_string(design.to_json(found, held, links)),
-                200,
-              )
+            Ok(found) -> wisp.json_response(json.to_string(found), 200)
             Error(Nil) -> wisp.internal_server_error()
           }
       }

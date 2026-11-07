@@ -1,6 +1,7 @@
 //// Design and change a running Line without code (F39–F41).
 
 import bluebin/accounts
+import bluebin/measures
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
@@ -1040,9 +1041,12 @@ pub fn to_json(
   design: Design,
   held: Dict(String, Held),
   links: List(accounts.Link),
+  takt_hours: Float,
+  suggestions: Dict(String, measures.Suggestion),
 ) -> Json {
   json.object([
     #("labels", labels_json(design.labels)),
+    #("taktTimeHours", json.float(takt_hours)),
     #(
       "teamMembers",
       json.array(design.team_members, fn(team_member) {
@@ -1102,12 +1106,33 @@ pub fn to_json(
                     result.map(found, fn(h) { h.in_bins }) |> result.unwrap(0),
                   )),
                 ),
+                #(
+                  "suggestion",
+                  suggestion_json(
+                    option.to_result(station.id, Nil)
+                    |> result.try(dict.get(suggestions, _))
+                    |> result.unwrap(measures.suggest([], takt_hours)),
+                  ),
+                ),
               ])
             }),
           ),
         ])
       }),
     ),
+  ])
+}
+
+fn suggestion_json(suggestion: measures.Suggestion) -> Json {
+  json.object([
+    #("passes", json.int(suggestion.passes)),
+    #(
+      "replenishmentHours",
+      json.nullable(suggestion.replenishment, fn(seconds) {
+        json.float(int.to_float({ seconds * 10 + 1800 } / 3600) /. 10.0)
+      }),
+    ),
+    #("blueBins", json.nullable(suggestion.blue_bins, json.int)),
   ])
 }
 

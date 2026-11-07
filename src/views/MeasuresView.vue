@@ -404,8 +404,9 @@ const deviationList = computed(() =>
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Work Station</h3>
           <p class="text-sm opacity-70">
-            Station Lead Time and Touch Time are averages per pass; Starvation Time and Andon Time
-            are totals of the period.
+            Station Lead Time and Touch Time are averages per pass; Replenishment Time is the 85th
+            percentile of the passes, from the pull in to the Blue Bin (5 passes or more);
+            Starvation Time and Andon Time are totals of the period.
           </p>
           <p v-if="stations.length === 0" class="opacity-70">No Work Station.</p>
           <div v-else class="overflow-x-auto">
@@ -414,6 +415,7 @@ const deviationList = computed(() =>
                 <tr>
                   <th rowspan="2">Work Station</th>
                   <th colspan="2" class="text-center">Station Lead Time</th>
+                  <th colspan="2" class="text-center">Replenishment Time</th>
                   <th colspan="2" class="text-center">Touch Time</th>
                   <th colspan="2" class="text-center">Touch share</th>
                   <th colspan="2" class="text-center">Starvation Time</th>
@@ -421,7 +423,7 @@ const deviationList = computed(() =>
                   <th colspan="2" class="text-center">Deviations / pulls</th>
                 </tr>
                 <tr>
-                  <template v-for="n in 6" :key="n">
+                  <template v-for="n in 7" :key="n">
                     <th class="text-right">Before</th>
                     <th class="text-right">After</th>
                   </template>
@@ -443,6 +445,12 @@ const deviationList = computed(() =>
                   </td>
                   <td class="text-right tabular-nums">
                     {{ hours(pick(row.after?.stationLeadTime)) }}
+                  </td>
+                  <td class="text-right tabular-nums">
+                    {{ hours(pick(row.before?.replenishmentTime)) }}
+                  </td>
+                  <td class="text-right tabular-nums">
+                    {{ hours(pick(row.after?.replenishmentTime)) }}
                   </td>
                   <td class="text-right tabular-nums">{{ hours(pick(row.before?.touchTime)) }}</td>
                   <td class="text-right tabular-nums">{{ hours(pick(row.after?.touchTime)) }}</td>
