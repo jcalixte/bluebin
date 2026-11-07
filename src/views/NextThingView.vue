@@ -165,9 +165,7 @@ function since(at: string) {
     <header class="mb-6 flex flex-wrap items-end justify-between gap-x-10 gap-y-4">
       <div>
         <h2 class="text-xl font-semibold">My next thing</h2>
-        <p class="text-sm opacity-70">
-          One thing to do now, from the pull rules. Nobody pushes it.
-        </p>
+        <p class="text-sm opacity-70">One thing to do now, chosen by the pull rules.</p>
       </div>
       <label class="flex items-center gap-3">
         <span class="text-xs font-semibold uppercase tracking-wide opacity-70">I am</span>

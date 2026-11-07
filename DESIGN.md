@@ -452,7 +452,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 
 ### Where we land
 
-The right-hand zone scores each Goal 0–5 for four alternatives. **Bluebin** is the target score, not a measurement — nothing is built yet. **Jira** and **Linear** are kept apart on purpose: they fail the lean Goals the same way but trade off against each other everywhere else — Jira buys reports and configuration with slow capture, Linear buys speed with an opinionated workflow. **Physical board** is the shop-floor baseline: a wall, cards, a Heijunka box.
+The right-hand zone scores each Goal 0–5 for four alternatives. The **Bluebin** column holds target scores, set before the build. **Jira** and **Linear** get one column each: they fail the lean Goals in the same way, but they differ on the other Goals. Jira gives reports and configuration, with slow capture. Linear gives speed, with an opinionated workflow. **Physical board** is the shop-floor baseline: a wall, cards and a Heijunka box.
 
 | Goal                                 | Bluebin | Jira | Linear | Physical board | Reading                                                                                                          |
 | ------------------------------------ | :-----: | :--: | :----: | :------------: | ---------------------------------------------------------------------------------------------------------------- |
@@ -462,17 +462,17 @@ The right-hand zone scores each Goal 0–5 for four alternatives. **Bluebin** is
 | G4 Jidoka: stop and fix              |    5    |  2   |   2    |       2        | A bug ticket at the end of the board is the opposite of stopping where the defect is found                       |
 | G5 Team Member knows the next thing  |    5    |  3   | **4**  |       2        | Linear's triage and "my issues" come closest; still no **Rework**, no **Help Downstream**                        |
 | G6 Levelled **Product Mix**          |    5    |  1   |   1    |       3        | The Heijunka box is physical practice; no card board levels anything                                             |
-| G7 **Line** at a glance              |    4    |  2   |   3    |     **5**      | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen is our answer, not a win                 |
+| G7 **Line** at a glance              |    4    |  2   |   3    |     **5**      | A wall wins on peripheral vision; Jira loses it to clutter; a TV screen only narrows the gap                     |
 | G8 Recording costs seconds           |    4    |  1   |   4    |     **5**      | Jira is form-heavy; Linear is keyboard-fast and ties us; we pay a click and a reason                             |
-| G9 Flow problems as numbers          |    5    |  4   |   3    |       1        | Jira's reports are the closest fight; they just measure the wrong flow                                           |
+| G9 Flow problems as numbers          |    5    |  4   |   3    |       1        | Jira's reports come closest, but they count tickets with no **Takt Time**                                        |
 | G10 Design and change without code   |    5    |  3   |   2    |     **5**      | A wall is redrawn in a minute; Jira pays an admin for it; Linear refuses; keeping that freedom in software is R1 |
 
-Four readings:
+What the scores say:
 
-1. **We win the lean Goals, not the board Goals.** G1, G2, G4, G6 are where nothing competes — **Takt Time**, pull with a reason, Jidoka, Heijunka. That is the product.
-2. **The physical board beats us on G7, G8, G10.** These three are exactly the costs of being software. They set hard budgets: live screens (§8), recording ≤ 10 s (F31), and change-while-running (F40) even though F40 ranks last by weight and first by difficulty.
-3. **Splitting the two tools splits the threat.** Jira is the threat on G9 (reports) and G10 (configuration); Linear is the threat on G5 (next thing) and G8 (speed of capture). No single competitor holds both ends, so neither one alone sets our bar — the envelope of the two does.
-4. **G8 is now a tie, not a lead.** Linear scores 4 like us. The only reason we stay level is F31; if the reason prompt grows past 10 s, Linear is ahead on the Goal that every **Team Member** touches all day.
+1. Bluebin leads on G1, G2, G4 and G6 (**Takt Time**, pull with a reason, Jidoka and Heijunka), where no alternative competes. These Goals are the product.
+2. The physical board beats us on G7, G8 and G10, the costs of software. They set hard budgets: live screens (§8), recording in 10 s or less (F31), and change-while-running (F40), even though F40 ranks last by weight and first by difficulty.
+3. Jira is the threat on G9 (reports) and G10 (configuration); Linear is the threat on G5 (next thing) and G8 (speed of capture). Each tool is strong on one side only, so our bar is the better of the two on each Goal.
+4. On G8, Linear scores 4, the same as us, and F31 alone keeps us level. If the reason prompt grows past 10 s, Linear leads on the Goal that every **Team Member** touches all day.
 
 ---
 

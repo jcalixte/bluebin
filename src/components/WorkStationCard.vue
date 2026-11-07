@@ -368,7 +368,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             v-for="extra in station.overflow"
             :key="extra.id"
             class="flex min-h-14 flex-col justify-end gap-1 rounded-b-lg border-2 border-t-0 border-warning bg-warning px-1.5 pb-1.5 pt-3 text-xs text-warning-content"
-            :title="`${extra.demand} — over the Blue Bin count, put there by a Deviation`"
+            :title="`${extra.demand}: over the Blue Bin count, put there by a Deviation`"
           >
             <span class="truncate font-medium">{{ extra.piece }}</span>
             <span class="text-[0.6875rem]">over the count</span>
