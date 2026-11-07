@@ -91,7 +91,10 @@ The authentik brand is shared by every app on `auth.apoena.dev`.
 [`authentik/apoena-brand.yaml`](./authentik/apoena-brand.yaml) gives it the
 apoena.dev look: the toucan
 ([`authentik/apoena-toucan.svg`](./authentik/apoena-toucan.svg)), a monospace
-font and the apoena.dev colours, light or dark from the OS. Its custom CSS gives
+font and the apoena.dev colours, light or dark from the OS. It also makes the
+sign-in flow `apoena-authentication` ("Hi! Sign in to apoena.") from the stages
+of `default-authentication-flow` and sets it as the brand's authentication
+flow, so an authentik upgrade cannot bring back "Welcome to authentik!". Its custom CSS gives
 every flow whose slug starts with `bluebin-` the Bluebin look instead: the
 Bluebin icon and colours. authentik loads the SVGs from the public Gitea raw
 URLs of `main`, so push them before you import. Custom CSS cannot load web
