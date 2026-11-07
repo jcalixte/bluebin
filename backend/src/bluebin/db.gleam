@@ -1,6 +1,9 @@
 import gleam/dynamic/decode
 import gleam/int
+import gleam/list
 import gleam/result
+import gleam/string
+import simplifile
 import sqlight
 
 /// Each workspace has its own SQLite file in this directory, so no query can
@@ -388,6 +391,9 @@ pub fn workspace_path(workspace: String) -> String {
 /// requests at once on its first load, so the slow path holds the write lock:
 /// the other requests wait, then see the current version.
 pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
+  // The data can be wiped while the server runs: SQLite makes the file, not
+  // its directory.
+  let _ = simplifile.create_directory_all(directory_of(database))
   use connection <- with_connection_at(database)
   use version <- result.try(user_version(connection))
   case version == schema_version {
@@ -402,6 +408,14 @@ pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
         }
       }
     }
+  }
+}
+
+fn directory_of(path: String) -> String {
+  case string.split(path, "/") |> list.reverse {
+    [_, _, ..] as parts ->
+      parts |> list.drop(1) |> list.reverse |> string.join("/")
+    _ -> "."
   }
 }
 

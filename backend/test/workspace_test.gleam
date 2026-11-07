@@ -237,3 +237,13 @@ pub fn the_routes_of_a_line_reach_its_own_data_test() {
   assert scoped != first
   assert first == bare
 }
+
+/// A data wipe removes the directory while the server runs.
+pub fn a_removed_directory_is_made_again_test() {
+  let directory = "data/test-wiped-" <> int.to_string(int.random(1_000_000))
+  let path = directory <> "/a.db"
+  let _ = simplifile.delete_all([directory])
+  let assert Ok(Nil) = db.ready(path)
+  let assert Ok(True) = simplifile.is_file(path)
+  let _ = simplifile.delete_all([directory])
+}
