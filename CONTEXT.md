@@ -259,6 +259,7 @@ _Avoid_: hidden Line, secret Line
 - A **Team Member** has at most one active **Assignment**; the others are paused
 - **Rework** pauses the **Piece** that the **Team Member** is transforming upstream
 - A **Piece** never moves backward: the **Work Station** that finds a defect raises **Rework** and names the **Work Station** that made it; a **Team Member** of that **Work Station** comes to repair the **Piece** where it is
+- When only one upstream **Work Station** can have made the defect, **Rework** names it by default
 - While **Rework** waits or runs, the downstream **Work Station** does not pull a new **Piece**; it does **Help Downstream** or waits
 - **Rework** is **Touch Time** of the **Piece**, and also **Rework Time** of the **Work Station** that made the defect
 - Each **Rework** lowers the **First Pass Yield** of the **Work Station** that made the defect

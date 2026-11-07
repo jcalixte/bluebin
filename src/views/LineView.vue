@@ -74,7 +74,8 @@ function openRework(station: WorkStation, piece: string) {
     piece,
     reference: station.inProgress.find((one) => one.id === piece)?.piece ?? piece,
   }
-  madeBy.value = ""
+  const [only, ...others] = madeByChoices.value
+  madeBy.value = only && others.length === 0 ? only.id : ""
   defect.value = ""
 }
 

@@ -685,6 +685,16 @@ Core How decisions, shared by many Functions:
 - **How H11 — a check inside each handler** (rejected: about 25 places, and a route that forgets the check is open)
 - **How H7 — email on the Team Member in the Line file, plus a rebuildable index** (rejected, see T4)
 - **How H9 — email in the Line files only, scanned at sign-in** (rejected, see T4)
+- **How H15 — Replenishment Time from the passes, p85 of the last 20** (chosen, see T6)
+  - Serves: F54, F55
+  - A pass gives the pull-in; its `piece_put_in_blue_bin` gives the end. **Rework** done later is not counted: it does not delay the **Blue Bin**
+  - F55 reads the last 20 passes that ended at the **Work Station**, and needs at least 5; F54 reads the passes of the Measures period, like every other measure
+  - Suggested **Blue Bins** = max(1, ⌈p85 **Replenishment Time** ÷ **Takt Time** of the **Line**⌉), both in **Working Time**; no suggestion when no **Demand** is active
+  - Every **Piece** crosses every **Branch** (each **Branch** pulls its own **Sub-Piece**), so one **Takt Time** of the **Line** serves all **Work Stations**
+  - Computed in C2, next to the F10 capacity, and sent with the Design payload: C1 holds no formula
+- **How H16 — the last 7 days, like F10** (rejected: a slow **Line** gets fewer than 5 passes a week)
+- **How H17 — the Measures period** (rejected: Design has no period, so the suggestion would hang on hidden state)
+- **How H18 — the Toyota loop**: from the **Kanban** sent, without **Starvation Time** (rejected, see T6)
 
 Components that realise these How decisions:
 
