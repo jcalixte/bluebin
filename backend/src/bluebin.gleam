@@ -275,7 +275,7 @@ fn in_line(
     Ok(access.NoRole) -> wisp.not_found()
     Ok(role) ->
       case access.need(request.method, segments) {
-        Error(Nil) -> wisp.response(403)
+        Error(refusal) -> refused(refusal)
         Ok(need) ->
           case access.allows(role, need) {
             False -> wisp.response(403)
@@ -321,9 +321,17 @@ fn look(
                 line,
                 segments,
               )
-            _ -> wisp.response(403)
+            Ok(_) -> wisp.response(403)
+            Error(refusal) -> refused(refusal)
           }
       }
+  }
+}
+
+fn refused(refusal: access.Refusal) -> wisp.Response {
+  case refusal {
+    access.NoSuchRoute -> wisp.not_found()
+    access.WrongMethod(allowed:) -> wisp.method_not_allowed(allowed:)
   }
 }
 
@@ -362,33 +370,25 @@ fn open_line(
         SignedOut | NoEmail -> None
       }
       let act_as = fn(wanted) {
-        access.actor(role, wanted, linked_elsewhere(
-          context,
-          identity,
+        access.actor(role, wanted, access.linked_elsewhere(
+          context.accounts,
+          signed_in_email(identity),
           workspace,
           line,
           _,
         ))
       }
-      case segments {
-        ["api"] ->
-          case request.method {
-            http.Put -> rename_line(request, workspace, line)
-            _ -> {
-              use <- wisp.require_method(request, http.Get)
-              line_name(workspace, line)
-            }
-          }
-        ["api", "sharing"] ->
+      case request.method, segments {
+        http.Put, ["api"] -> rename_line(request, workspace, line)
+        http.Get, ["api"] -> line_name(workspace, line)
+        _, ["api", "sharing"] ->
           share_line(request, context, identity, workspace, line)
-        ["api", "reset"] -> {
-          use <- wisp.require_method(request, http.Post)
+        _, ["api", "reset"] ->
           case owns_public_workspace(request, context) {
             True -> reset(request, database, linking)
             False -> wisp.response(403)
           }
-        }
-        _ -> route(request, segments, database, linking, act_as)
+        method, _ -> route(request, method, segments, database, linking, act_as)
       }
     }
   }
@@ -398,31 +398,6 @@ fn open_line(
 /// not act as the one in the request (F50).
 type ActAs =
   fn(Option(String)) -> Result(Option(String), Nil)
-
-/// A Team Member linked to another Account acts only through that Account (R7).
-fn linked_elsewhere(
-  context: Context,
-  identity: Identity,
-  workspace: String,
-  line: String,
-  team_member: String,
-) -> Bool {
-  case identity {
-    SignedOut | NoEmail -> False
-    SignedIn(email:, ..) ->
-      case accounts.links(context.accounts, workspace, line) {
-        Error(Nil) -> True
-        Ok(links) ->
-          list.any(links, fn(link) {
-            case link.team_member == team_member, link.account {
-              True, Some(account) ->
-                string.lowercase(account.email) != string.lowercase(email)
-              _, _ -> False
-            }
-          })
-      }
-  }
-}
 
 fn not_yours() -> wisp.Response {
   wisp.response(403)
@@ -440,20 +415,19 @@ fn share_line(
   line: String,
 ) -> wisp.Response {
   case identity {
-    SignedOut | NoEmail ->
+    SignedOut ->
       wisp.response(403)
       |> wisp.string_body("A Line is shared only with sign-in on.")
+    NoEmail -> wisp.response(401)
     SignedIn(..) -> {
-      use body <- wisp.require_json(request)
-      case
-        decode.run(body, decode.field("shared", decode.bool, decode.success))
-      {
-        Error(_) -> wisp.bad_request("expected a body like {\"shared\": true}")
-        Ok(shared) ->
-          case accounts.share(context.accounts, workspace, line, shared) {
-            Ok(Nil) -> json_body([#("shared", json.bool(shared))], 200)
-            Error(Nil) -> wisp.internal_server_error()
-          }
+      use shared <- require_body(
+        request,
+        decode.field("shared", decode.bool, decode.success),
+        or: "expected a body like {\"shared\": true}",
+      )
+      case accounts.share(context.accounts, workspace, line, shared) {
+        Ok(Nil) -> send_json(json.object([#("shared", json.bool(shared))]), 200)
+        Error(Nil) -> wisp.internal_server_error()
       }
     }
   }
@@ -509,10 +483,7 @@ fn account_of(
   workspace: String,
 ) -> wisp.Response {
   case identity_of(request, context, workspace) {
-    SignedOut ->
-      json.object([#("signedIn", json.bool(False))])
-      |> json.to_string
-      |> wisp.json_response(200)
+    SignedOut -> send_json(json.object([#("signedIn", json.bool(False))]), 200)
     NoEmail -> wisp.response(401)
     SignedIn(uid:, email:) ->
       case accounts.sign_in(context.accounts, uid, email) {
@@ -539,35 +510,30 @@ fn save_account(
     SignedOut -> wisp.response(403)
     NoEmail -> wisp.response(401)
     SignedIn(uid:, email:) -> {
-      use body <- wisp.require_json(request)
       let decoder = {
         use first_name <- decode.field("firstName", decode.string)
         use last_name <- decode.field("lastName", decode.string)
         decode.success(#(first_name, last_name))
       }
-      case decode.run(body, decoder) {
-        Error(_) ->
+      use #(first_name, last_name) <- require_body(
+        request,
+        decoder,
+        or: "expected a body like {\"firstName\": \"Ada\", \"lastName\": \"Lovelace\"}",
+      )
+      case accounts.save(context.accounts, uid, email, first_name, last_name) {
+        Ok(account) -> {
+          show_name_in_lines(context, account)
+          account_response(request, account, named: True)
+        }
+        Error(accounts.EmptyName) ->
+          wisp.bad_request("a first and a last name are needed")
+        Error(accounts.NameTooLong) ->
           wisp.bad_request(
-            "expected a body like {\"firstName\": \"Ada\", \"lastName\": \"Lovelace\"}",
+            "a name stays under "
+            <> int.to_string(accounts.max_name_length)
+            <> " characters",
           )
-        Ok(#(first_name, last_name)) ->
-          case
-            accounts.save(context.accounts, uid, email, first_name, last_name)
-          {
-            Ok(account) -> {
-              show_name_in_lines(context, account)
-              account_response(request, account, named: True)
-            }
-            Error(accounts.EmptyName) ->
-              wisp.bad_request("a first and a last name are needed")
-            Error(accounts.NameTooLong) ->
-              wisp.bad_request(
-                "a name stays under "
-                <> int.to_string(accounts.max_name_length)
-                <> " characters",
-              )
-            Error(accounts.StoreFailed) -> wisp.internal_server_error()
-          }
+        Error(accounts.StoreFailed) -> wisp.internal_server_error()
       }
     }
   }
@@ -616,8 +582,7 @@ fn account_response(
     #("firstName", json.string(account.first_name)),
     #("lastName", json.string(account.last_name)),
   ])
-  |> json.to_string
-  |> wisp.json_response(200)
+  |> send_json(200)
 }
 
 fn create_invitation(
@@ -626,7 +591,8 @@ fn create_invitation(
   workspace: String,
 ) -> wisp.Response {
   case identity_of(request, context, workspace) {
-    SignedOut | NoEmail -> wisp.response(403)
+    SignedOut -> wisp.response(403)
+    NoEmail -> wisp.response(401)
     SignedIn(..) ->
       case invitations.is_admin(request) {
         False -> wisp.response(403)
@@ -637,8 +603,7 @@ fn create_invitation(
                 #("link", json.string(invitation.link)),
                 #("expires", json.string(invitation.expires)),
               ])
-              |> json.to_string
-              |> wisp.json_response(201)
+              |> send_json(201)
             Error(invitations.NoToken) ->
               wisp.response(503)
               |> wisp.string_body(
@@ -659,161 +624,52 @@ fn create_invitation(
 }
 
 /// Every Line the Account can open, by Workspace, its own first (F46).
-/// With SSO off only its own Workspace opens (F52).
 fn list_workspaces(
   request: wisp.Request,
   context: Context,
   caller: String,
 ) -> wisp.Response {
-  let identity = identity_of(request, context, caller)
-  let shared = fn(workspace, line) {
-    case identity {
-      SignedIn(..) -> accounts.is_shared(context.accounts, workspace, line)
-      SignedOut | NoEmail -> Ok(False)
-    }
-  }
-  let found = {
-    // The owner can be a Team Member of their own Lines too (F45).
-    use held <- result.try(case identity {
-      SignedIn(email:, ..) -> access.live_links(context.accounts, email, caller)
-      SignedOut | NoEmail -> Ok([])
-    })
-    use own <- result.try(
-      lines.list(caller, start_of(request, context))
-      |> result.replace_error(Nil),
+  let email = signed_in_email(identity_of(request, context, caller))
+  case
+    access.workspaces(
+      context.accounts,
+      caller,
+      email,
+      start_of(request, context),
     )
-    use own <- result.try(
-      list.try_map(own, fn(line) {
-        use shared <- result.map(shared(caller, line.id))
-        line_entry_json(
-          line,
-          shared,
-          access.Owner,
-          list.key_find(held, line.id) |> option.from_result,
-        )
-      }),
-    )
-    use name <- result.try(case identity {
-      SignedIn(..) -> accounts.name_of_uid(context.accounts, caller)
-      SignedOut | NoEmail -> Ok(None)
-    })
-    use others <- result.map(case identity {
-      SignedIn(email:, ..) -> other_workspaces(context, caller, email)
-      SignedOut | NoEmail -> Ok([])
-    })
-    [workspace_json(caller, name, True, own), ..others]
-  }
-  case found {
-    Ok(workspaces) ->
-      wisp.json_response(
-        json.to_string(json.preprocessed_array(workspaces)),
-        200,
-      )
+  {
+    Ok(workspaces) -> send_json(json.array(workspaces, workspace_json), 200)
     Error(Nil) -> wisp.internal_server_error()
   }
 }
 
-/// The Workspaces where `email` is a Team Member: its Lines there, and the
-/// Shared Lines of those Workspaces.
-fn other_workspaces(
-  context: Context,
-  caller: String,
-  email: String,
-) -> Result(List(json.Json), Nil) {
-  use links <- result.try(accounts.links_of(context.accounts, email))
-  let workspaces =
-    list.map(links, fn(link) { link.0 })
-    |> list.unique
-    |> list.filter(fn(workspace) { workspace != caller })
-  use found <- result.map(
-    list.try_map(workspaces, fn(workspace) {
-      use held <- result.try(access.live_links(
-        context.accounts,
-        email,
-        workspace,
-      ))
-      case held {
-        [] -> Ok(None)
-        _ -> {
-          use all <- result.try(
-            lines.list(workspace, db.Empty) |> result.replace_error(Nil),
-          )
-          use entries <- result.try(
-            list.try_map(all, fn(line) {
-              use shared <- result.map(accounts.is_shared(
-                context.accounts,
-                workspace,
-                line.id,
-              ))
-              case list.key_find(held, line.id), shared {
-                Ok(team_member), _ ->
-                  Some(line_entry_json(
-                    line,
-                    shared,
-                    access.Member(team_member),
-                    Some(team_member),
-                  ))
-                Error(Nil), True ->
-                  Some(line_entry_json(line, shared, access.Viewer, None))
-                Error(Nil), False -> None
-              }
-            }),
-          )
-          use name <- result.map(accounts.name_of_uid(
-            context.accounts,
-            workspace,
-          ))
-          Some(#(
-            option.unwrap(name, ""),
-            workspace_json(workspace, name, False, option.values(entries)),
-          ))
-        }
-      }
-    }),
-  )
-  option.values(found)
-  |> list.sort(fn(one, other) { string.compare(one.0, other.0) })
-  |> list.map(fn(pair) { pair.1 })
-}
-
-fn workspace_json(
-  owner: String,
-  name: Option(String),
-  own: Bool,
-  entries: List(json.Json),
-) -> json.Json {
+fn workspace_json(workspace: access.OpenWorkspace) -> json.Json {
   json.object([
-    #("owner", json.string(owner)),
-    #("name", json.nullable(name, json.string)),
-    #("own", json.bool(own)),
-    #("lines", json.preprocessed_array(entries)),
+    #("owner", json.string(workspace.owner)),
+    #("name", json.nullable(workspace.name, json.string)),
+    #("own", json.bool(workspace.own)),
+    #("lines", json.array(workspace.lines, open_line_json)),
   ])
 }
 
-fn line_entry_json(
-  line: lines.Line,
-  shared: Bool,
-  role: access.Role,
-  own_team_member: Option(String),
-) -> json.Json {
-  let role = case role {
+fn open_line_json(open: access.OpenLine) -> json.Json {
+  let role = case open.role {
     access.Member(_) -> "member"
     access.Viewer -> "viewer"
     access.Owner | access.NoRole -> "owner"
   }
   json.object([
-    #("id", json.string(line.id)),
-    #("name", json.string(line.name)),
-    #("shared", json.bool(shared)),
+    #("id", json.string(open.line.id)),
+    #("name", json.string(open.line.name)),
+    #("shared", json.bool(open.shared)),
     #("role", json.string(role)),
-    #("teamMember", json.nullable(own_team_member, json.string)),
+    #("teamMember", json.nullable(open.team_member, json.string)),
   ])
 }
 
 fn list_lines(workspace: String, start: db.Start) -> wisp.Response {
   case lines.list(workspace, start) {
-    Ok(found) ->
-      wisp.json_response(json.to_string(json.array(found, line_json)), 200)
+    Ok(found) -> send_json(json.array(found, line_json), 200)
     Error(_) -> wisp.internal_server_error()
   }
 }
@@ -828,7 +684,7 @@ fn line_name(workspace: String, line: String) -> wisp.Response {
     Error(_) -> wisp.internal_server_error()
     Ok(found) ->
       case list.find(found, fn(one) { one.id == line }) {
-        Ok(found) -> wisp.json_response(json.to_string(line_json(found)), 200)
+        Ok(found) -> send_json(line_json(found), 200)
         Error(Nil) -> wisp.not_found()
       }
   }
@@ -847,11 +703,12 @@ fn require_line_name(
   request: wisp.Request,
   next: fn(String) -> wisp.Response,
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
-  case decode.run(body, decode.field("name", decode.string, decode.success)) {
-    Ok(name) -> next(name)
-    Error(_) -> wisp.bad_request("expected a body like {\"name\": \"Mobile\"}")
-  }
+  require_body(
+    request,
+    decode.field("name", decode.string, decode.success),
+    or: "expected a body like {\"name\": \"Mobile\"}",
+    then: next,
+  )
 }
 
 fn line_response(
@@ -859,7 +716,7 @@ fn line_response(
   status: Int,
 ) -> wisp.Response {
   case result {
-    Ok(line) -> wisp.json_response(json.to_string(line_json(line)), status)
+    Ok(line) -> send_json(line_json(line), status)
     Error(lines.EmptyName) -> wisp.bad_request("a Line needs a name")
     Error(lines.NameTooLong) ->
       wisp.bad_request(
@@ -904,111 +761,42 @@ fn caller_of(
   }
 }
 
+/// `access.need` already refused every path and method missing here.
 fn route(
   request: wisp.Request,
+  method: http.Method,
   segments: List(String),
   database: String,
   linking: Option(Linking),
   act_as: ActAs,
 ) -> wisp.Response {
-  case segments {
-    ["api", "demands"] ->
-      case request.method {
-        http.Post -> create_demand(request, database)
-        _ -> {
-          use <- wisp.require_method(request, http.Get)
-          demands(database)
-        }
-      }
-    ["api", "line"] -> {
-      use <- wisp.require_method(request, http.Get)
-      line_view(database)
-    }
-    ["api", "backlog"] -> {
-      use <- wisp.require_method(request, http.Get)
-      backlog(database)
-    }
-    ["api", "backlog", "urgent"] -> {
-      use <- wisp.require_method(request, http.Post)
-      make_urgent(request, database)
-    }
-    ["api", "pull"] -> {
-      use <- wisp.require_method(request, http.Post)
-      pull(request, database, act_as)
-    }
-    ["api", "finish"] -> {
-      use <- wisp.require_method(request, http.Post)
-      finish(request, database)
-    }
-    ["api", "deliver"] -> {
-      use <- wisp.require_method(request, http.Post)
-      deliver(request, database)
-    }
-    ["api", "rework"] -> {
-      use <- wisp.require_method(request, http.Post)
-      raise_rework(request, database)
-    }
-    ["api", "rework", "repair"] -> {
-      use <- wisp.require_method(request, http.Post)
-      repair_rework(request, database)
-    }
-    ["api", "andons"] -> {
-      use <- wisp.require_method(request, http.Get)
-      andons(database)
-    }
-    ["api", "andon"] -> {
-      use <- wisp.require_method(request, http.Post)
-      raise_andon(request, database, act_as)
-    }
-    ["api", "andon", "close"] -> {
-      use <- wisp.require_method(request, http.Post)
-      close_andon(request, database, act_as)
-    }
-    ["api", "assign"] -> {
-      use <- wisp.require_method(request, http.Post)
-      assign(request, database, act_as)
-    }
-    ["api", "team-members"] ->
-      case request.method {
-        http.Post -> add_team_member(request, database)
-        _ -> {
-          use <- wisp.require_method(request, http.Get)
-          team_members(database)
-        }
-      }
-    ["api", "design"] ->
-      case request.method {
-        http.Put -> save_design(request, database, linking)
-        _ -> {
-          use <- wisp.require_method(request, http.Get)
-          design_of(database, linking)
-        }
-      }
-    ["api", "labels"] -> {
-      use <- wisp.require_method(request, http.Get)
-      labels(database)
-    }
-    ["api", "team-members", team_member, "next"] -> {
-      use <- wisp.require_method(request, http.Get)
+  case method, segments {
+    http.Post, ["api", "demands"] -> create_demand(request, database)
+    _, ["api", "demands"] -> demands(database)
+    _, ["api", "line"] -> line_view(database)
+    _, ["api", "backlog"] -> backlog(database)
+    _, ["api", "backlog", "urgent"] -> make_urgent(request, database)
+    _, ["api", "pull"] -> pull(request, database, act_as)
+    _, ["api", "finish"] -> finish(request, database)
+    _, ["api", "deliver"] -> deliver(request, database)
+    _, ["api", "rework"] -> raise_rework(request, database)
+    _, ["api", "rework", "repair"] -> repair_rework(request, database)
+    _, ["api", "andons"] -> andons(database)
+    _, ["api", "andon"] -> raise_andon(request, database, act_as)
+    _, ["api", "andon", "close"] -> close_andon(request, database, act_as)
+    _, ["api", "assign"] -> assign(request, database, act_as)
+    http.Post, ["api", "team-members"] -> add_team_member(request, database)
+    _, ["api", "team-members"] -> team_members(database)
+    http.Put, ["api", "design"] -> save_design(request, database, linking)
+    _, ["api", "design"] -> design_of(database, linking)
+    _, ["api", "labels"] -> labels(database)
+    _, ["api", "team-members", team_member, "next"] ->
       next_thing(team_member, database)
-    }
-    ["api", "steps", position] -> {
-      use <- wisp.require_method(request, http.Put)
-      rename_step(request, position, database)
-    }
-    ["api", "measures"] -> {
-      use <- wisp.require_method(request, http.Get)
-      measures_of(request, database)
-    }
-    ["api", "calendar"] ->
-      case request.method {
-        http.Put -> save_calendar(request, database)
-        _ -> {
-          use <- wisp.require_method(request, http.Get)
-          working_calendar(database)
-        }
-      }
-    _ -> wisp.not_found()
+    _, ["api", "steps", position] -> rename_step(request, position, database)
+    _, ["api", "measures"] -> measures_of(request, database)
+    http.Put, ["api", "calendar"] -> save_calendar(request, database)
+    _, ["api", "calendar"] -> working_calendar(database)
+    _, _ -> wisp.not_found()
   }
 }
 
@@ -1040,8 +828,7 @@ fn measures_of(request: wisp.Request, database: String) -> wisp.Response {
     })
 
   case result {
-    Ok(found) ->
-      wisp.json_response(json.to_string(measures.to_json(found)), 200)
+    Ok(found) -> send_json(measures.to_json(found), 200)
     Error(measures.InvalidPeriod) ->
       wisp.bad_request(
         "expected ?from=2026-10-30&to=2026-11-05, with from on or before to",
@@ -1063,40 +850,32 @@ fn holiday_response(answer: Result(String, holidays.Failure)) -> wisp.Response {
 }
 
 fn working_calendar(database: String) -> wisp.Response {
-  case db.with_connection_at(database, calendar.load) {
-    Ok(found) ->
-      wisp.json_response(json.to_string(calendar.to_json(found)), 200)
-    Error(_) -> wisp.internal_server_error()
-  }
+  use connection <- read(database)
+  calendar.load(connection) |> result.map(calendar.to_json)
 }
 
 fn save_calendar(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
-  case decode.run(body, calendar.decoder()) {
-    Error(_) ->
-      wisp.bad_request(
-        "expected a body like {\"days\": [1, 2, 3, 4, 5], \"start\": \"09:00\", \"end\": \"16:00\", \"holidays\": [{\"day\": \"2026-12-25\", \"label\": \"Christmas\"}]}",
-      )
-    Ok(wanted) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          use _ <- result.try(calendar.save(connection, wanted))
-          calendar.load(connection)
-          |> result.replace_error(calendar.StoreFailed)
-        })
-      {
-        Ok(saved) ->
-          wisp.json_response(json.to_string(calendar.to_json(saved)), 200)
-        Error(calendar.Invalid(message)) -> wisp.bad_request(message)
-        Error(calendar.StoreFailed) -> wisp.internal_server_error()
-      }
+  use wanted <- require_body(
+    request,
+    calendar.decoder(),
+    or: "expected a body like {\"days\": [1, 2, 3, 4, 5], \"start\": \"09:00\", \"end\": \"16:00\", \"holidays\": [{\"day\": \"2026-12-25\", \"label\": \"Christmas\"}]}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      use _ <- result.try(calendar.save(connection, wanted))
+      calendar.load(connection)
+      |> result.replace_error(calendar.StoreFailed)
+    })
+  {
+    Ok(saved) -> send_json(calendar.to_json(saved), 200)
+    Error(calendar.Invalid(message)) -> wisp.bad_request(message)
+    Error(calendar.StoreFailed) -> wisp.internal_server_error()
   }
 }
 
 fn design_of(database: String, linking: Option(Linking)) -> wisp.Response {
   case db.with_connection_at(database, design_json), links_of(linking) {
-    Ok(to_json), Ok(links) ->
-      wisp.json_response(json.to_string(to_json(links)), 200)
+    Ok(to_json), Ok(links) -> send_json(to_json(links), 200)
     _, _ -> wisp.internal_server_error()
   }
 }
@@ -1125,68 +904,24 @@ fn links_of(linking: Option(Linking)) -> Result(List(accounts.Link), Nil) {
   }
 }
 
-/// The email of each Team Member in the body; one with no `email` field,
-/// sent by an SPA older than the links, keeps its link.
-fn emails_decoder() -> decode.Decoder(List(#(String, String))) {
-  use team_members <- decode.field(
-    "teamMembers",
-    decode.list({
-      use id <- decode.field("id", decode.string)
-      use email <- decode.optional_field(
-        "email",
-        None,
-        decode.map(decode.string, Some),
-      )
-      decode.success(#(id, email))
-    }),
-  )
-  list.filter_map(team_members, fn(pair) {
-    option.to_result(pair.1, Nil) |> result.map(fn(email) { #(pair.0, email) })
-  })
-  |> decode.success
-}
-
-fn check_emails(
-  emails: List(#(String, String)),
-) -> Result(List(#(String, String)), String) {
-  use checked <- result.try(
-    list.try_map(emails, fn(pair) {
-      case accounts.normal_email(pair.1) {
-        Ok(email) -> Ok(#(pair.0, email))
-        Error(Nil) ->
-          Error("\"" <> string.trim(pair.1) <> "\" is not an email.")
-      }
-    }),
-  )
-  let given =
-    list.map(checked, fn(pair) { pair.1 }) |> list.filter(fn(e) { e != "" })
-  case accounts.unique_emails(given) {
-    Ok(Nil) -> Ok(checked)
-    Error(accounts.EmailTaken(email)) -> Error(email_taken(email))
-    Error(accounts.LinkStoreFailed) -> Error("")
-  }
-}
-
-fn email_taken(email: String) -> String {
-  "Two Team Members have the email " <> email <> "."
-}
-
 fn save_design(
   request: wisp.Request,
   database: String,
   linking: Option(Linking),
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
-  case decode.run(body, design.decoder()), decode.run(body, emails_decoder()) {
-    Ok(wanted), Ok(emails) ->
-      case check_emails(emails) {
-        Error(reason) -> wisp.bad_request(reason)
-        Ok(emails) -> save_design_and_links(database, linking, wanted, emails)
-      }
-    _, _ ->
-      wisp.bad_request(
-        "expected the body of GET /api/design: {\"labels\", \"teamMembers\", \"steps\"}",
-      )
+  let decoder = {
+    use wanted <- decode.then(design.decoder())
+    use emails <- decode.then(accounts.emails_decoder())
+    decode.success(#(wanted, emails))
+  }
+  use #(wanted, emails) <- require_body(
+    request,
+    decoder,
+    or: "expected the body of GET /api/design: {\"labels\", \"teamMembers\", \"steps\"}",
+  )
+  case accounts.check_emails(emails) {
+    Error(reason) -> wisp.bad_request(reason)
+    Ok(emails) -> save_design_and_links(database, linking, wanted, emails)
   }
 }
 
@@ -1221,7 +956,7 @@ fn save_design_and_links(
       }
       case linked {
         Error(accounts.EmailTaken(email)) ->
-          wisp.bad_request(email_taken(email))
+          wisp.bad_request(accounts.email_taken(email))
         Error(accounts.LinkStoreFailed) -> wisp.internal_server_error()
         Ok(Nil) ->
           case
@@ -1237,7 +972,7 @@ fn save_design_and_links(
               |> result.map(fn(to_json) { to_json(links) })
             })
           {
-            Ok(found) -> wisp.json_response(json.to_string(found), 200)
+            Ok(found) -> send_json(found, 200)
             Error(Nil) -> wisp.internal_server_error()
           }
       }
@@ -1255,37 +990,30 @@ fn linked_names(links: List(accounts.Link)) -> List(#(String, String)) {
 }
 
 fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
-  case decode.run(body, decode.field("name", decode.string, decode.success)) {
-    Error(_) -> wisp.bad_request("expected a body like {\"name\": \"Inès\"}")
-    Ok(name) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          design.add_team_member(connection, name)
-        })
-      {
-        Ok(team_member) ->
-          wisp.json_response(
-            json.to_string(
-              json.object([
-                #("id", json.string(team_member.id)),
-                #("name", json.string(team_member.name)),
-              ]),
-            ),
-            201,
-          )
-        Error(design.Invalid(reason)) -> wisp.bad_request(reason)
-        Error(design.StoreFailed) -> wisp.internal_server_error()
-      }
+  use name <- require_body(
+    request,
+    decode.field("name", decode.string, decode.success),
+    or: "expected a body like {\"name\": \"Inès\"}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      design.add_team_member(connection, name)
+    })
+  {
+    Ok(team_member) ->
+      json.object([
+        #("id", json.string(team_member.id)),
+        #("name", json.string(team_member.name)),
+      ])
+      |> send_json(201)
+    Error(design.Invalid(reason)) -> wisp.bad_request(reason)
+    Error(design.StoreFailed) -> wisp.internal_server_error()
   }
 }
 
 fn labels(database: String) -> wisp.Response {
-  case db.with_connection_at(database, design.load_labels) {
-    Ok(found) ->
-      wisp.json_response(json.to_string(design.labels_json(found)), 200)
-    Error(Nil) -> wisp.internal_server_error()
-  }
+  use connection <- read(database)
+  design.load_labels(connection) |> result.map(design.labels_json)
 }
 
 /// `{"mode": "empty"}` starts from scratch; anything else, or no body at all
@@ -1319,9 +1047,14 @@ fn reset(
         )
     }
   }
-  case db.with_connection_at(database, run), cleared() {
-    Ok(Nil), Ok(Nil) -> wisp.no_content()
-    _, _ -> wisp.internal_server_error()
+  // The links go only once the Line is reset: a failed reset keeps them.
+  case db.with_connection_at(database, run) {
+    Ok(Nil) ->
+      case cleared() {
+        Ok(Nil) -> wisp.no_content()
+        Error(_) -> wisp.internal_server_error()
+      }
+    Error(_) -> wisp.internal_server_error()
   }
 }
 
@@ -1351,7 +1084,7 @@ fn demands(database: String) -> wisp.Response {
     db.with_connection_at(database, fn(connection) {
       use demands <- result.try(demand.list_active(connection))
       use calendar <- result.try(calendar.load(connection))
-      use now <- result.try(andon.now(connection))
+      use now <- result.try(db.now(connection))
       Ok(demand.to_json(demands, calendar, now / 86_400))
     })
 
@@ -1362,7 +1095,6 @@ fn demands(database: String) -> wisp.Response {
 }
 
 fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use label <- decode.field("label", decode.string)
     use client <- decode.field("client", decode.string)
@@ -1370,70 +1102,50 @@ fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
     use pieces <- decode.field("pieces", decode.int)
     decode.success(#(label, client, due_on, pieces))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request(
-        "expected a body like {\"label\": \"Checkout redesign\", \"client\": \"Retail\", \"dueOn\": \"2026-12-31\", \"pieces\": 8}",
-      )
-    Ok(#(label, client, due_on, pieces)) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          demand.create(connection, label, client, due_on, pieces)
-        })
-      {
-        Ok(id) -> json_body([#("id", json.string(id))], 201)
-        Error(demand.Invalid(reason)) -> wisp.bad_request(reason)
-        Error(demand.StoreFailed) -> wisp.internal_server_error()
-      }
+  use #(label, client, due_on, pieces) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"label\": \"Checkout redesign\", \"client\": \"Retail\", \"dueOn\": \"2026-12-31\", \"pieces\": 8}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      demand.create(connection, label, client, due_on, pieces)
+    })
+  {
+    Ok(id) -> send_json(json.object([#("id", json.string(id))]), 201)
+    Error(demand.Invalid(reason)) -> wisp.bad_request(reason)
+    Error(demand.StoreFailed) -> wisp.internal_server_error()
   }
 }
 
 fn line_view(database: String) -> wisp.Response {
-  let result =
-    db.with_connection_at(database, fn(connection) {
-      use stations <- result.try(line.load(connection))
-      use steps <- result.try(line.list_steps(connection))
-      use demands <- result.try(demand.list_active(connection))
-      use calendar <- result.try(calendar.load(connection))
-      use now <- result.try(andon.now(connection))
-      use andons <- result.try(andon.andons(connection, calendar, now))
-      use #(stale, active) <- result.try(andon.stale(connection, calendar, now))
-      let takt = demand.line_takt_hours(demands)
-      use bottlenecks <- result.try(andon.bottlenecks(connection, takt))
-      Ok(
-        json.object([
-          #("stations", stations),
-          #("steps", line.steps_json(steps)),
-          #("taktTimeHours", json.float(takt)),
-          #("demandsBehind", json.int(demand.behind_count(demands))),
-          #("andons", andon.andons_json(andons)),
-          #("stale", andon.stale_json(stale)),
-          #("activeAssignments", json.int(active)),
-          #("bottlenecks", andon.bottlenecks_json(bottlenecks)),
-        ]),
-      )
-    })
-
-  case result {
-    Ok(body) -> wisp.json_response(json.to_string(body), 200)
-    Error(_) -> wisp.internal_server_error()
-  }
+  use connection <- read(database)
+  use stations <- result.try(line.load(connection))
+  use steps <- result.try(line.list_steps(connection))
+  use demands <- result.try(demand.list_active(connection))
+  use calendar <- result.try(calendar.load(connection))
+  use now <- result.try(db.now(connection))
+  use andons <- result.try(andon.andons(connection, calendar, now))
+  use #(stale, active) <- result.try(andon.stale(connection, calendar, now))
+  let takt = demand.line_takt_hours(demands)
+  use bottlenecks <- result.try(andon.bottlenecks(connection, takt))
+  Ok(
+    json.object([
+      #("stations", stations),
+      #("steps", line.steps_json(steps)),
+      #("taktTimeHours", json.float(takt)),
+      #("demandsBehind", json.int(demand.behind_count(demands))),
+      #("andons", andon.andons_json(andons)),
+      #("stale", andon.stale_json(stale)),
+      #("activeAssignments", json.int(active)),
+      #("bottlenecks", andon.bottlenecks_json(bottlenecks)),
+    ]),
+  )
 }
 
 fn andons(database: String) -> wisp.Response {
-  let result =
-    db.with_connection_at(database, fn(connection) {
-      use calendar <- result.try(calendar.load(connection))
-      use now <- result.try(andon.now(connection))
-      andon.andons(connection, calendar, now)
-    })
-
-  case result {
-    Ok(found) ->
-      wisp.json_response(json.to_string(andon.andons_json(found)), 200)
-    Error(_) -> wisp.internal_server_error()
-  }
+  use connection <- read(database)
+  andon.current(connection) |> result.map(andon.andons_json)
 }
 
 fn raise_andon(
@@ -1441,7 +1153,6 @@ fn raise_andon(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
     use team_member <- decode.optional_field(
@@ -1451,20 +1162,19 @@ fn raise_andon(
     )
     decode.success(#(station, team_member))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
-    Ok(#(station, team_member)) ->
-      case act_as(team_member) {
-        Error(Nil) -> not_yours()
-        Ok(team_member) ->
-          andon_response(
-            db.with_connection_at(database, fn(connection) {
-              flow.raise_andon(connection, station, team_member)
-            }),
-          )
-      }
+  use #(station, team_member) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"station\": \"ws-web\"}",
+  )
+  case act_as(team_member) {
+    Error(Nil) -> not_yours()
+    Ok(team_member) ->
+      andon_response(
+        db.with_connection_at(database, fn(connection) {
+          flow.raise_andon(connection, station, team_member)
+        }),
+      )
   }
 }
 
@@ -1473,54 +1183,42 @@ fn close_andon(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
     use team_member <- decode.field("teamMember", decode.string)
     decode.success(#(station, team_member))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request(
-        "expected a body like {\"station\": \"ws-web\", \"teamMember\": \"pe-bob\"}",
+  use #(station, team_member) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"station\": \"ws-web\", \"teamMember\": \"pe-bob\"}",
+  )
+  case act_as(Some(team_member)) {
+    Ok(Some(team_member)) ->
+      andon_response(
+        db.with_connection_at(database, fn(connection) {
+          flow.close_andon(connection, station, team_member)
+        }),
       )
-    Ok(#(station, team_member)) ->
-      case act_as(Some(team_member)) {
-        Ok(Some(team_member)) ->
-          andon_response(
-            db.with_connection_at(database, fn(connection) {
-              flow.close_andon(connection, station, team_member)
-            }),
-          )
-        _ -> not_yours()
-      }
+    _ -> not_yours()
   }
 }
 
 fn andon_response(result: Result(Nil, flow.FlowError)) -> wisp.Response {
   case result {
     Ok(Nil) -> wisp.no_content()
-    Error(failure) -> flow_response(Error(failure))
+    Error(failure) -> flow_failure(failure)
   }
 }
 
 fn backlog(database: String) -> wisp.Response {
-  let result =
-    db.with_connection_at(database, fn(connection) {
-      use backlog <- result.try(heijunka.load(connection))
-      use mix <- result.try(heijunka.product_mix(connection, backlog.demands))
-      Ok(heijunka.to_json(backlog, mix))
-    })
-
-  case result {
-    Ok(body) -> wisp.json_response(json.to_string(body), 200)
-    Error(_) -> wisp.internal_server_error()
-  }
+  use connection <- read(database)
+  use backlog <- result.try(heijunka.load(connection))
+  use mix <- result.try(heijunka.product_mix(connection, backlog.demands))
+  Ok(heijunka.to_json(backlog, mix))
 }
 
 fn make_urgent(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use piece <- decode.field("piece", decode.string)
     use reason <- decode.optional_field(
@@ -1530,17 +1228,16 @@ fn make_urgent(request: wisp.Request, database: String) -> wisp.Response {
     )
     decode.success(#(piece, reason))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request("expected a body like {\"piece\": \"p-billing-3\"}")
-    Ok(#(piece, reason)) ->
-      flow_response(
-        db.with_connection_at(database, fn(connection) {
-          flow.make_urgent(connection, piece, reason)
-        }),
-      )
-  }
+  use #(piece, reason) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"piece\": \"p-billing-3\"}",
+  )
+  flow_response(
+    db.with_connection_at(database, fn(connection) {
+      flow.make_urgent(connection, piece, reason)
+    }),
+  )
 }
 
 fn pull(
@@ -1548,7 +1245,6 @@ fn pull(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
     use team_member <- decode.optional_field(
@@ -1563,25 +1259,23 @@ fn pull(
     )
     decode.success(#(station, team_member, reason))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request("expected a body like {\"station\": \"ws-web\"}")
-    Ok(#(station, team_member, reason)) ->
-      case act_as(team_member) {
-        Error(Nil) -> not_yours()
-        Ok(team_member) ->
-          flow_response(
-            db.with_connection_at(database, fn(connection) {
-              flow.pull(connection, station, team_member, reason)
-            }),
-          )
-      }
+  use #(station, team_member, reason) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"station\": \"ws-web\"}",
+  )
+  case act_as(team_member) {
+    Error(Nil) -> not_yours()
+    Ok(team_member) ->
+      flow_response(
+        db.with_connection_at(database, fn(connection) {
+          flow.pull(connection, station, team_member, reason)
+        }),
+      )
   }
 }
 
 fn finish(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
     use piece <- decode.field("piece", decode.string)
@@ -1592,214 +1286,138 @@ fn finish(request: wisp.Request, database: String) -> wisp.Response {
     )
     decode.success(#(station, piece, reason))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request(
-        "expected a body like {\"station\": \"ws-web\", \"piece\": \"p-checkout-8\"}",
-      )
-    Ok(#(station, piece, reason)) ->
-      flow_response(
-        db.with_connection_at(database, fn(connection) {
-          flow.finish(connection, station, piece, reason)
-        }),
-      )
-  }
+  use #(station, piece, reason) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"station\": \"ws-web\", \"piece\": \"p-checkout-8\"}",
+  )
+  flow_response(
+    db.with_connection_at(database, fn(connection) {
+      flow.finish(connection, station, piece, reason)
+    }),
+  )
 }
 
 fn deliver(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
-  let decoder = decode.field("piece", decode.string, decode.success)
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request("expected a body like {\"piece\": \"p-checkout-9\"}")
-    Ok(piece) ->
-      flow_response(
-        db.with_connection_at(database, fn(connection) {
-          flow.deliver(connection, piece)
-        }),
-      )
-  }
+  use piece <- require_body(
+    request,
+    decode.field("piece", decode.string, decode.success),
+    or: "expected a body like {\"piece\": \"p-checkout-9\"}",
+  )
+  flow_response(
+    db.with_connection_at(database, fn(connection) {
+      flow.deliver(connection, piece)
+    }),
+  )
 }
 
 fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
   case result {
     Ok(flowed) ->
-      json_body(
-        [
-          #("piece", json.string(flowed.piece)),
-          #("demand", json.string(flowed.demand)),
-          #(
-            "deviations",
-            json.array(flowed.deviations, fn(rule) {
-              json.string(flow.rule_name(rule))
-            }),
-          ),
-          #("kanbansSentTo", json.array(flowed.kanbans_sent_to, json.string)),
-        ],
-        200,
-      )
-    Error(flow.NeedsConfirmation(rules)) ->
-      json_body(
-        [
-          #(
-            "confirm",
-            json.string(list.map(rules, flow.rule_name) |> string.join(" ")),
-          ),
-          #(
-            "rules",
-            json.array(rules, fn(rule) { json.string(flow.rule_name(rule)) }),
-          ),
-          #(
-            "message",
-            json.string(list.map(rules, flow.rule_warning) |> string.join(" ")),
-          ),
-        ],
-        409,
-      )
-    Error(flow.NothingToPull) ->
-      json_body(
-        [
-          #("error", json.string("nothing_to_pull")),
-          #(
-            "message",
-            json.string(
-              "No Piece waits upstream of this Work Station, so there is nothing to pull.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.NothingToAssemble) ->
-      json_body(
-        [
-          #("error", json.string("nothing_to_assemble")),
-          #(
-            "message",
-            json.string(
-              "No Piece has every Sub-Piece waiting in the last Blue Bin of its Branch, so there is nothing to assemble.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.PieceNotHere) ->
-      json_body(
-        [
-          #("error", json.string("piece_not_here")),
-          #(
-            "message",
-            json.string("This Piece is no longer where the action expects it."),
-          ),
-        ],
-        409,
-      )
-    Error(flow.NotUpstream) ->
-      json_body(
-        [
-          #("error", json.string("not_upstream")),
-          #(
-            "message",
-            json.string(
-              "A Piece never moves backward: the defect belongs to a Work Station it already crossed.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.EmptyDescription) ->
-      wisp.bad_request("a Rework says in one line what the defect is")
-    Error(flow.UnknownRework) ->
-      json_body(
-        [
-          #("error", json.string("unknown_rework")),
-          #("message", json.string("This Rework is already repaired.")),
-        ],
-        409,
-      )
-    Error(flow.ReworkFirst) ->
-      json_body(
-        [
-          #("error", json.string("rework_first")),
-          #(
-            "message",
-            json.string(
-              "This Team Member repairs a Rework first. Repair it, or hand it to another Team Member of the Work Station, before pulling a new Piece.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.NotOfStation) ->
-      json_body(
-        [
-          #("error", json.string("not_of_station")),
-          #(
-            "message",
-            json.string(
-              "An Assignment goes only to a Team Member of the same Work Station.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.ReorderNeedsConfirmation(effects)) ->
-      json_body(
-        [
-          #(
-            "confirm",
-            json.string(flow.rule_name(flow.ReorderHeijunkaSequence)),
-          ),
-          #(
-            "message",
-            json.string(flow.rule_warning(flow.ReorderHeijunkaSequence)),
-          ),
-          #("effects", heijunka.effects_json(effects)),
-        ],
-        409,
-      )
-    Error(flow.NotNextOfDemand) ->
-      json_body(
-        [
-          #("error", json.string("not_next_of_demand")),
-          #(
-            "message",
-            json.string(
-              "Inside one Demand, Pieces leave the Backlog first-in, first-out. Only the next Piece of this Demand can be made urgent.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.NoAndon) ->
-      json_body(
-        [
-          #("error", json.string("no_andon")),
-          #("message", json.string("No Andon stops this Work Station.")),
-        ],
-        409,
-      )
-    Error(flow.NotTeamLeader) ->
-      json_body(
-        [
-          #("error", json.string("not_team_leader")),
-          #(
-            "message",
-            json.string(
-              "Only the Team Leader of the Work Station closes its Andon.",
-            ),
-          ),
-        ],
-        409,
-      )
-    Error(flow.UnknownStation) -> wisp.not_found()
-    Error(flow.StoreFailed) -> wisp.internal_server_error()
+      json.object([
+        #("piece", json.string(flowed.piece)),
+        #("demand", json.string(flowed.demand)),
+        #(
+          "deviations",
+          json.array(flowed.deviations, fn(rule) {
+            json.string(flow.rule_name(rule))
+          }),
+        ),
+        #("kanbansSentTo", json.array(flowed.kanbans_sent_to, json.string)),
+      ])
+      |> send_json(200)
+    Error(failure) -> flow_failure(failure)
   }
 }
 
+fn flow_failure(failure: flow.FlowError) -> wisp.Response {
+  case failure {
+    flow.NeedsConfirmation(rules) ->
+      json.object([
+        #(
+          "confirm",
+          json.string(list.map(rules, flow.rule_name) |> string.join(" ")),
+        ),
+        #(
+          "rules",
+          json.array(rules, fn(rule) { json.string(flow.rule_name(rule)) }),
+        ),
+        #(
+          "message",
+          json.string(list.map(rules, flow.rule_warning) |> string.join(" ")),
+        ),
+      ])
+      |> send_json(409)
+    flow.ReorderNeedsConfirmation(effects) ->
+      json.object([
+        #("confirm", json.string(flow.rule_name(flow.ReorderHeijunkaSequence))),
+        #(
+          "message",
+          json.string(flow.rule_warning(flow.ReorderHeijunkaSequence)),
+        ),
+        #("effects", heijunka.effects_json(effects)),
+      ])
+      |> send_json(409)
+    flow.NothingToPull ->
+      conflict(
+        "nothing_to_pull",
+        "No Piece waits upstream of this Work Station, so there is nothing to pull.",
+      )
+    flow.NothingToAssemble ->
+      conflict(
+        "nothing_to_assemble",
+        "No Piece has every Sub-Piece waiting in the last Blue Bin of its Branch, so there is nothing to assemble.",
+      )
+    flow.PieceNotHere ->
+      conflict(
+        "piece_not_here",
+        "This Piece is no longer where the action expects it.",
+      )
+    flow.NotUpstream ->
+      conflict(
+        "not_upstream",
+        "A Piece never moves backward: the defect belongs to a Work Station it already crossed.",
+      )
+    flow.UnknownRework ->
+      conflict("unknown_rework", "This Rework is already repaired.")
+    flow.ReworkFirst ->
+      conflict(
+        "rework_first",
+        "This Team Member repairs a Rework first. Repair it, or hand it to another Team Member of the Work Station, before pulling a new Piece.",
+      )
+    flow.NotOfStation ->
+      conflict(
+        "not_of_station",
+        "An Assignment goes only to a Team Member of the same Work Station.",
+      )
+    flow.NotNextOfDemand ->
+      conflict(
+        "not_next_of_demand",
+        "Inside one Demand, Pieces leave the Backlog first-in, first-out. Only the next Piece of this Demand can be made urgent.",
+      )
+    flow.NoAndon -> conflict("no_andon", "No Andon stops this Work Station.")
+    flow.NotTeamLeader ->
+      conflict(
+        "not_team_leader",
+        "Only the Team Leader of the Work Station closes its Andon.",
+      )
+    flow.EmptyDescription ->
+      wisp.bad_request("a Rework says in one line what the defect is")
+    flow.UnknownStation -> wisp.not_found()
+    flow.StoreFailed -> wisp.internal_server_error()
+  }
+}
+
+/// A flow action the state of the Line refuses: the SPA shows `message`.
+fn conflict(code: String, message: String) -> wisp.Response {
+  json.object([
+    #("error", json.string(code)),
+    #("message", json.string(message)),
+  ])
+  |> send_json(409)
+}
+
 fn raise_rework(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
     use piece <- decode.field("piece", decode.string)
@@ -1807,68 +1425,54 @@ fn raise_rework(request: wisp.Request, database: String) -> wisp.Response {
     use description <- decode.field("description", decode.string)
     decode.success(#(station, piece, made_by, description))
   }
-
-  case decode.run(body, decoder) {
-    Error(_) ->
-      wisp.bad_request(
-        "expected a body like {\"station\": \"ws-qa-ios\", \"piece\": \"p-offline-4-ios\", \"madeBy\": \"ws-ios\", \"description\": \"…\"}",
-      )
-    Ok(#(station, piece, made_by, description)) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          flow.raise_rework(connection, station, piece, made_by, description)
-        })
-      {
-        Ok(raised) ->
-          json_body(
-            [
-              #("id", json.string(raised.id)),
-              #("piece", json.string(raised.piece)),
-              #("demand", json.string(raised.demand)),
-              #("assignee", json.nullable(raised.assignee, json.string)),
-              #("paused", json.nullable(raised.paused, json.string)),
-            ],
-            200,
-          )
-        Error(failure) -> flow_response(Error(failure))
-      }
+  use #(station, piece, made_by, description) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"station\": \"ws-qa-ios\", \"piece\": \"p-offline-4-ios\", \"madeBy\": \"ws-ios\", \"description\": \"…\"}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      flow.raise_rework(connection, station, piece, made_by, description)
+    })
+  {
+    Ok(raised) ->
+      json.object([
+        #("id", json.string(raised.id)),
+        #("piece", json.string(raised.piece)),
+        #("demand", json.string(raised.demand)),
+        #("assignee", json.nullable(raised.assignee, json.string)),
+        #("paused", json.nullable(raised.paused, json.string)),
+      ])
+      |> send_json(200)
+    Error(failure) -> flow_failure(failure)
   }
 }
 
 fn repair_rework(request: wisp.Request, database: String) -> wisp.Response {
-  use body <- wisp.require_json(request)
-  let decoder = decode.field("rework", decode.string, decode.success)
-
-  case decode.run(body, decoder) {
-    Error(_) -> wisp.bad_request("expected a body like {\"rework\": \"rw-1\"}")
-    Ok(rework) ->
-      case
-        db.with_connection_at(database, fn(connection) {
-          flow.repair_rework(connection, rework)
-        })
-      {
-        Ok(repaired) ->
-          json_body(
-            [
-              #("piece", json.string(repaired.piece)),
-              #("resumed", json.nullable(repaired.resumed, json.string)),
-            ],
-            200,
-          )
-        Error(failure) -> flow_response(Error(failure))
-      }
+  use rework <- require_body(
+    request,
+    decode.field("rework", decode.string, decode.success),
+    or: "expected a body like {\"rework\": \"rw-1\"}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      flow.repair_rework(connection, rework)
+    })
+  {
+    Ok(repaired) ->
+      json.object([
+        #("piece", json.string(repaired.piece)),
+        #("resumed", json.nullable(repaired.resumed, json.string)),
+      ])
+      |> send_json(200)
+    Error(failure) -> flow_failure(failure)
   }
 }
 
 fn team_members(database: String) -> wisp.Response {
-  case db.with_connection_at(database, assignment.team_members) {
-    Ok(team_members) ->
-      wisp.json_response(
-        json.to_string(assignment.team_members_json(team_members)),
-        200,
-      )
-    Error(_) -> wisp.internal_server_error()
-  }
+  use connection <- read(database)
+  assignment.team_members(connection)
+  |> result.map(assignment.team_members_json)
 }
 
 fn next_thing(team_member: String, database: String) -> wisp.Response {
@@ -1876,11 +1480,7 @@ fn next_thing(team_member: String, database: String) -> wisp.Response {
     db.with_connection_at(database, fn(connection) {
       use view <- result.try(assignment.load(connection, team_member))
       use andons <- result.try(
-        {
-          use calendar <- result.try(calendar.load(connection))
-          use now <- result.try(andon.now(connection))
-          andon.andons(connection, calendar, now)
-        }
+        andon.current(connection)
         |> result.replace_error(assignment.ReadFailed),
       )
       let mine =
@@ -1891,7 +1491,7 @@ fn next_thing(team_member: String, database: String) -> wisp.Response {
       Ok(assignment.to_json(view, andon.andons_json(mine)))
     })
   {
-    Ok(body) -> wisp.json_response(json.to_string(body), 200)
+    Ok(body) -> send_json(body, 200)
     Error(assignment.UnknownTeamMember) -> wisp.not_found()
     Error(assignment.ReadFailed) -> wisp.internal_server_error()
   }
@@ -1902,31 +1502,24 @@ fn assign(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
   let decoder = {
     use kind <- decode.field("kind", decode.string)
     use id <- decode.field("id", decode.string)
     use team_member <- decode.field("teamMember", decode.string)
-    decode.success(#(kind, id, team_member))
+    case kind {
+      "piece" -> decode.success(#(flow.PieceAssignment, id, team_member))
+      "rework" -> decode.success(#(flow.ReworkAssignment, id, team_member))
+      _ -> decode.failure(#(flow.PieceAssignment, id, team_member), "kind")
+    }
   }
-  let parsed = case decode.run(body, decoder) {
-    Ok(#("piece", id, team_member)) ->
-      Ok(#(flow.PieceAssignment, id, team_member))
-    Ok(#("rework", id, team_member)) ->
-      Ok(#(flow.ReworkAssignment, id, team_member))
-    _ -> Error(Nil)
-  }
-
-  case parsed {
-    Error(Nil) ->
-      wisp.bad_request(
-        "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"teamMember\": \"pe-lila\"}",
-      )
-    Ok(#(kind, id, team_member)) ->
-      case act_as(Some(team_member)) {
-        Ok(Some(team_member)) -> reassign(database, kind, id, team_member)
-        _ -> not_yours()
-      }
+  use #(kind, id, team_member) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"teamMember\": \"pe-lila\"}",
+  )
+  case act_as(Some(team_member)) {
+    Ok(Some(team_member)) -> reassign(database, kind, id, team_member)
+    _ -> not_yours()
   }
 }
 
@@ -1942,19 +1535,13 @@ fn reassign(
     })
   {
     Ok(reassigned) ->
-      json_body(
-        [
-          #("piece", json.string(reassigned.piece)),
-          #("teamMember", json.string(reassigned.team_member)),
-        ],
-        200,
-      )
-    Error(failure) -> flow_response(Error(failure))
+      json.object([
+        #("piece", json.string(reassigned.piece)),
+        #("teamMember", json.string(reassigned.team_member)),
+      ])
+      |> send_json(200)
+    Error(failure) -> flow_failure(failure)
   }
-}
-
-fn json_body(fields: List(#(String, json.Json)), status: Int) -> wisp.Response {
-  wisp.json_response(json.to_string(json.object(fields)), status)
 }
 
 fn rename_step(
@@ -1962,46 +1549,66 @@ fn rename_step(
   position: String,
   database: String,
 ) -> wisp.Response {
-  use body <- wisp.require_json(request)
-
-  let parsed = {
-    use position <- result.try(int.parse(position) |> result.replace_error(Nil))
-    use name <- result.try(
-      decode.run(body, decode.field("name", decode.string, decode.success))
-      |> result.replace_error(Nil),
-    )
-    Ok(#(position, name))
-  }
-
-  case parsed {
-    Error(Nil) -> wisp.bad_request("expected a body like {\"name\": \"Build\"}")
-    Ok(#(position, name)) -> {
-      let renamed =
-        db.with_connection_at(database, fn(connection) {
-          line.rename_step(connection, position, name)
-        })
-
-      case renamed {
-        Ok(step) ->
-          wisp.json_response(
-            json.to_string(
-              json.object([
-                #("position", json.int(step.position)),
-                #("name", json.string(step.name)),
-              ]),
-            ),
-            200,
-          )
-        Error(line.EmptyName) -> wisp.bad_request("a step needs a name")
-        Error(line.NameTooLong) ->
-          wisp.bad_request(
-            "a step name stays under "
-            <> int.to_string(line.max_name_length)
-            <> " characters",
-          )
-        Error(line.UnknownStep) -> wisp.not_found()
-        Error(line.StoreFailed) -> wisp.internal_server_error()
-      }
+  let decoder = {
+    use name <- decode.field("name", decode.string)
+    case int.parse(position) {
+      Ok(position) -> decode.success(#(position, name))
+      Error(Nil) -> decode.failure(#(0, name), "position")
     }
   }
+  use #(position, name) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"name\": \"Build\"}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      line.rename_step(connection, position, name)
+    })
+  {
+    Ok(step) ->
+      json.object([
+        #("position", json.int(step.position)),
+        #("name", json.string(step.name)),
+      ])
+      |> send_json(200)
+    Error(line.EmptyName) -> wisp.bad_request("a step needs a name")
+    Error(line.NameTooLong) ->
+      wisp.bad_request(
+        "a step name stays under "
+        <> int.to_string(line.max_name_length)
+        <> " characters",
+      )
+    Error(line.UnknownStep) -> wisp.not_found()
+    Error(line.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+/// The JSON body decoded, or `400` with `message`.
+fn require_body(
+  request: wisp.Request,
+  decoder: decode.Decoder(a),
+  or message: String,
+  then next: fn(a) -> wisp.Response,
+) -> wisp.Response {
+  use body <- wisp.require_json(request)
+  case decode.run(body, decoder) {
+    Ok(decoded) -> next(decoded)
+    Error(_) -> wisp.bad_request(message)
+  }
+}
+
+/// A read of the Line: its JSON, or `500` when the store fails.
+fn read(
+  database: String,
+  load: fn(sqlight.Connection) -> Result(json.Json, error),
+) -> wisp.Response {
+  case db.with_connection_at(database, load) {
+    Ok(found) -> send_json(found, 200)
+    Error(_) -> wisp.internal_server_error()
+  }
+}
+
+fn send_json(body: json.Json, status: Int) -> wisp.Response {
+  wisp.json_response(json.to_string(body), status)
 }

@@ -1,7 +1,10 @@
 //// Design and change a running Line without code (F39–F41).
 
 import bluebin/accounts
+import bluebin/db
+import bluebin/line
 import bluebin/measures
+import bluebin/text
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
@@ -13,9 +16,6 @@ import gleam/result
 import gleam/set
 import gleam/string
 import sqlight
-
-/// The longest name the wall-TV column layout holds without breaking.
-pub const max_name_length = 40
 
 pub type Labels {
   Labels(demand: String, demands: String, piece: String, pieces: String)
@@ -106,54 +106,7 @@ pub fn load(
       decode.success(#(position, name))
     }),
   )
-  use rows <- result.try(
-    query(
-      connection,
-      "select w.id, w.name, w.position, w.branch, w.blue_bins,
-            coalesce(w.team_leader, ''),
-            exists (select 1 from piece p where p.station_id = w.id)
-              or exists (select 1 from rework r
-                          where r.closed_at is null
-                            and (r.station_id = w.id or r.raised_by = w.id))
-              or exists (select 1 from andon a
-                          where a.closed_at is null and a.station_id = w.id),
-            (select count(*) from piece p
-              where p.station_id = w.id and p.state = 'in_bin'),
-            (select count(*) from kanban k where k.station_id = w.id)
-       from work_station w
-      order by w.position, w.rowid",
-      [],
-      {
-        use id <- decode.field(0, decode.string)
-        use name <- decode.field(1, decode.string)
-        use position <- decode.field(2, decode.int)
-        use branch <- decode.field(3, decode.optional(decode.string))
-        use blue_bins <- decode.field(4, decode.int)
-        use team_leader <- decode.field(5, decode.string)
-        use locked <- decode.field(6, sqlight.decode_bool())
-        use in_bins <- decode.field(7, decode.int)
-        use kanbans <- decode.field(8, decode.int)
-        decode.success(#(
-          position,
-          Station(
-            id: Some(id),
-            name:,
-            branch:,
-            blue_bins:,
-            team_leader:,
-            team_members: list.filter_map(members, fn(member) {
-              case member.0 == id {
-                True -> Ok(member.1)
-                False -> Error(Nil)
-              }
-            }),
-          ),
-          Held(position:, locked:, in_bins:, kanbans:),
-        ))
-      },
-    ),
-  )
-
+  use rows <- result.try(load_stations(connection, members))
   let steps =
     rows
     |> list.chunk(fn(row) { row.0 })
@@ -176,6 +129,59 @@ pub fn load(
     |> dict.from_list
 
   Ok(#(Design(labels:, team_members:, steps:), held))
+}
+
+/// Each Work Station in Line order, with its step position and what it holds.
+/// `members` pairs a Work Station id with a Team Member id.
+fn load_stations(
+  connection: sqlight.Connection,
+  members: List(#(String, String)),
+) -> Result(List(#(Int, Station, Held)), Nil) {
+  query(
+    connection,
+    "select w.id, w.name, w.position, w.branch, w.blue_bins,
+            coalesce(w.team_leader, ''),
+            exists (select 1 from piece p where p.station_id = w.id)
+              or exists (select 1 from rework r
+                          where r.closed_at is null
+                            and (r.station_id = w.id or r.raised_by = w.id))
+              or exists (select 1 from andon a
+                          where a.closed_at is null and a.station_id = w.id),
+            (select count(*) from piece p
+              where p.station_id = w.id and p.state = 'in_bin'),
+            (select count(*) from kanban k where k.station_id = w.id)
+       from work_station w
+      order by w.position, w.rowid",
+    [],
+    {
+      use id <- decode.field(0, decode.string)
+      use name <- decode.field(1, decode.string)
+      use position <- decode.field(2, decode.int)
+      use branch <- decode.field(3, decode.optional(decode.string))
+      use blue_bins <- decode.field(4, decode.int)
+      use team_leader <- decode.field(5, decode.string)
+      use locked <- decode.field(6, sqlight.decode_bool())
+      use in_bins <- decode.field(7, decode.int)
+      use kanbans <- decode.field(8, decode.int)
+      decode.success(#(
+        position,
+        Station(
+          id: Some(id),
+          name:,
+          branch:,
+          blue_bins:,
+          team_leader:,
+          team_members: list.filter_map(members, fn(member) {
+            case member.0 == id {
+              True -> Ok(member.1)
+              False -> Error(Nil)
+            }
+          }),
+        ),
+        Held(position:, locked:, in_bins:, kanbans:),
+      ))
+    },
+  )
 }
 
 /// The shape of the steps alone: one trunk Work Station per step, or a Split
@@ -250,7 +256,7 @@ fn step_shape(
       let unique = set.from_list(branches)
       case
         list.any(branches, fn(branch) {
-          branch == "" || string.length(branch) > max_name_length
+          result.is_error(text.check(branch, line.max_name_length))
         }),
         set.size(unique) == list.length(branches)
       {
@@ -258,7 +264,7 @@ fn step_shape(
           Error(
             label
             <> " has a Branch name that is empty or longer than "
-            <> int.to_string(max_name_length)
+            <> int.to_string(line.max_name_length)
             <> " characters.",
           )
         False, False -> Error(label <> " has two Branches with the same name.")
@@ -269,58 +275,40 @@ fn step_shape(
 }
 
 fn check_name(name: String, when_empty: String) -> Result(Nil, String) {
-  let trimmed = string.trim(name)
-  case trimmed == "", string.length(trimmed) > max_name_length {
-    True, _ -> Error(when_empty)
-    _, True ->
-      Error(
+  text.check(name, line.max_name_length)
+  |> result.replace(Nil)
+  |> result.map_error(fn(error) {
+    case error {
+      text.Empty -> when_empty
+      text.TooLong ->
         "\""
-        <> trimmed
+        <> string.trim(name)
         <> "\" is longer than "
-        <> int.to_string(max_name_length)
-        <> " characters.",
-      )
-    False, False -> Ok(Nil)
-  }
+        <> int.to_string(line.max_name_length)
+        <> " characters."
+    }
+  })
 }
 
 /// Everything the running flow forbids: work must not be lost or move back.
-pub fn check_change(
+fn check_change(
   wanted: Design,
   current: Design,
   held: Dict(String, Held),
   busy: List(#(String, String)),
   partial_split: Bool,
 ) -> Result(Nil, String) {
-  use _ <- result.try(check_structure(wanted.steps))
-  use _ <- result.try(check_labels(wanted.labels))
-  // A linked Team Member carries its Account's name, which can be longer.
-  // Only a name the owner types must fit.
-  use _ <- result.try(
-    list.try_each(wanted.team_members, fn(team_member) {
-      case list.contains(current.team_members, team_member) {
-        True -> Ok(Nil)
-        False -> check_name(team_member.name, "Each Team Member needs a name.")
-      }
-    }),
-  )
-
-  let known_team_members =
-    list.map(current.team_members, fn(team_member) { team_member.id })
-  let kept_team_members =
-    list.map(wanted.team_members, fn(team_member) { team_member.id })
   let placed = placed(wanted.steps)
   let current_stations = stations_by_id(current.steps)
-  let wanted_ids = list.filter_map(placed, fn(entry) { entry.1 |> id_of })
-
-  use _ <- result.try(
-    list.try_each(wanted.team_members, fn(team_member) {
-      case list.contains(known_team_members, team_member.id) {
-        True -> Ok(Nil)
-        False -> Error("Add a new Team Member before you use them.")
-      }
-    }),
-  )
+  let wanted_ids = list.filter_map(placed, fn(entry) { id_of(entry.1) })
+  let kept_team_members =
+    list.map(wanted.team_members, fn(team_member) { team_member.id })
+  use _ <- result.try(check_structure(wanted.steps))
+  use _ <- result.try(check_labels(wanted.labels))
+  use _ <- result.try(check_team_members(
+    wanted.team_members,
+    current.team_members,
+  ))
   use _ <- result.try(
     case list.length(wanted_ids) == set.size(set.from_list(wanted_ids)) {
       True -> Ok(Nil)
@@ -339,54 +327,96 @@ pub fn check_change(
       )
     }),
   )
-
-  use _ <- result.try(
-    dict.to_list(current_stations)
-    |> list.try_each(fn(entry) {
-      let #(id, station) = entry
-      case list.contains(wanted_ids, id), dict.get(held, id) {
-        False, Ok(Held(locked: True, ..)) ->
-          Error(
-            station.name
-            <> " holds work (a Piece, a Rework or an Andon). It cannot go until that work moves on.",
-          )
-        _, _ -> Ok(Nil)
-      }
-    }),
-  )
-
+  use _ <- result.try(check_removed_stations(current_stations, wanted_ids, held))
   use _ <- result.try(check_locked_order(placed, held))
-
-  use _ <- result.try(
-    list.try_each(busy, fn(pair) {
-      let #(station_id, team_member_id) = pair
-      let stays =
-        list.find(placed, fn(entry) { id_of(entry.1) == Ok(station_id) })
-        |> result.map(fn(entry) {
-          list.contains({ entry.1 }.team_members, team_member_id)
-        })
-      case stays {
-        Ok(False) ->
-          Error(
-            name_of(current.team_members, team_member_id)
-            <> " has work in hand at "
-            <> name_of_station(current_stations, station_id)
-            <> " and must stay in it.",
-          )
-        _ -> Ok(Nil)
-      }
-    }),
-  )
-
-  let branches_now = branch_names(current.steps)
-  let branches_wanted = branch_names(wanted.steps)
-  case partial_split && !set.is_subset(branches_now, branches_wanted) {
+  use _ <- result.try(check_busy(
+    busy,
+    placed,
+    current.team_members,
+    current_stations,
+  ))
+  case
+    partial_split
+    && !set.is_subset(branch_names(current.steps), branch_names(wanted.steps))
+  {
     True ->
       Error(
         "A Piece waits at the Split for some Branches to pull it. Keep every Branch until they all have pulled it.",
       )
     False -> Ok(Nil)
   }
+}
+
+/// A Team Member is added on its own before the design names it.
+fn check_team_members(
+  wanted: List(TeamMember),
+  current: List(TeamMember),
+) -> Result(Nil, String) {
+  // A linked Team Member carries its Account's name, which can be longer.
+  // Only a name the owner types must fit.
+  use _ <- result.try(
+    list.try_each(wanted, fn(team_member) {
+      case list.contains(current, team_member) {
+        True -> Ok(Nil)
+        False -> check_name(team_member.name, "Each Team Member needs a name.")
+      }
+    }),
+  )
+  let known = list.map(current, fn(team_member) { team_member.id })
+  list.try_each(wanted, fn(team_member) {
+    case list.contains(known, team_member.id) {
+      True -> Ok(Nil)
+      False -> Error("Add a new Team Member before you use them.")
+    }
+  })
+}
+
+/// A Work Station that holds work cannot go.
+fn check_removed_stations(
+  current: Dict(String, Station),
+  wanted_ids: List(String),
+  held: Dict(String, Held),
+) -> Result(Nil, String) {
+  dict.to_list(current)
+  |> list.try_each(fn(entry) {
+    let #(id, station) = entry
+    case list.contains(wanted_ids, id), dict.get(held, id) {
+      False, Ok(Held(locked: True, ..)) ->
+        Error(
+          station.name
+          <> " holds work (a Piece, a Rework or an Andon). It cannot go until that work moves on.",
+        )
+      _, _ -> Ok(Nil)
+    }
+  })
+}
+
+/// A Team Member with work in hand stays in its Work Station. `busy` pairs
+/// a Work Station id with a Team Member id.
+fn check_busy(
+  busy: List(#(String, String)),
+  placed: List(#(Int, Station)),
+  team_members: List(TeamMember),
+  current: Dict(String, Station),
+) -> Result(Nil, String) {
+  list.try_each(busy, fn(pair) {
+    let #(station_id, team_member_id) = pair
+    let stays =
+      list.find(placed, fn(entry) { id_of(entry.1) == Ok(station_id) })
+      |> result.map(fn(entry) {
+        list.contains({ entry.1 }.team_members, team_member_id)
+      })
+    case stays {
+      Ok(False) ->
+        Error(
+          name_of(team_members, team_member_id)
+          <> " has work in hand at "
+          <> name_of_station(current, station_id)
+          <> " and must stay in it.",
+        )
+      _ -> Ok(Nil)
+    }
+  })
 }
 
 fn check_labels(labels: Labels) -> Result(Nil, String) {
@@ -538,19 +568,15 @@ pub fn save(
   wanted: Design,
 ) -> Result(Design, DesignError) {
   // A removed Work Station leaves its id in past rows (passes, Deviations,
-  // closed Rework): the history stays (F40), so it must not block the delete.
-  use _ <- result.try(exec(connection, "pragma foreign_keys = off;"))
-  use _ <- result.try(exec(connection, "begin immediate;"))
-  case save_inside(connection, wanted) {
-    Ok(saved) -> {
-      use _ <- result.try(exec(connection, "commit;"))
-      Ok(saved)
-    }
-    Error(error) -> {
-      let _ = exec(connection, "rollback;")
-      Error(error)
-    }
-  }
+  // closed Rework) so the history stays (F40): the delete must pass even on a
+  // connection that enforces foreign keys, as the tests' connections do.
+  // Outside the transaction, where SQLite ignores the pragma.
+  use _ <- result.try(
+    sqlight.exec("pragma foreign_keys = off;", connection)
+    |> result.replace_error(StoreFailed),
+  )
+  use <- db.transaction(connection, fn(_) { StoreFailed })
+  save_inside(connection, wanted)
 }
 
 fn save_inside(
@@ -699,42 +725,34 @@ pub fn name_linked(
   connection: sqlight.Connection,
   names: List(#(String, String)),
 ) -> Result(Bool, DesignError) {
-  use _ <- result.try(exec(connection, "begin immediate;"))
-  let renamed =
-    list.try_fold(names, False, fn(any, pair) {
-      let #(id, name) = pair
-      use found <- result.try(
-        query(
-          connection,
-          "update team_member set name = ?2
+  use <- db.transaction(connection, fn(_) { StoreFailed })
+  list.try_fold(names, False, fn(any, pair) {
+    let #(id, name) = pair
+    use found <- result.try(
+      query(
+        connection,
+        "update team_member set name = ?2
             where id = ?1 and removed_at is null and name <> ?2
            returning id",
-          [sqlight.text(id), sqlight.text(name)],
-          decode.at([0], decode.string),
-        )
-        |> result.replace_error(StoreFailed),
+        [sqlight.text(id), sqlight.text(name)],
+        decode.at([0], decode.string),
       )
-      case found {
-        [] -> Ok(any)
-        _ -> {
-          use _ <- result.try(
-            changed(connection, [
-              #("change", json.string("team_member_renamed")),
-              #("teamMember", json.string(id)),
-              #("name", json.string(name)),
-            ]),
-          )
-          Ok(True)
-        }
+      |> result.replace_error(StoreFailed),
+    )
+    case found {
+      [] -> Ok(any)
+      _ -> {
+        use _ <- result.try(
+          changed(connection, [
+            #("change", json.string("team_member_renamed")),
+            #("teamMember", json.string(id)),
+            #("name", json.string(name)),
+          ]),
+        )
+        Ok(True)
       }
-    })
-  case renamed {
-    Ok(any) -> exec(connection, "commit;") |> result.replace(any)
-    Error(error) -> {
-      let _ = exec(connection, "rollback;")
-      Error(error)
     }
-  }
+  })
 }
 
 /// The row stays, so the history keeps the name (F40).
@@ -1049,33 +1067,7 @@ pub fn to_json(
     #("taktTimeHours", json.float(takt_hours)),
     #(
       "teamMembers",
-      json.array(design.team_members, fn(team_member) {
-        let link =
-          list.find(links, fn(link) { link.team_member == team_member.id })
-        json.object([
-          #("id", json.string(team_member.id)),
-          #("name", json.string(team_member.name)),
-          #(
-            "email",
-            json.string(
-              result.map(link, fn(link) { link.email }) |> result.unwrap(""),
-            ),
-          ),
-          #(
-            "account",
-            json.nullable(
-              result.try(link, fn(link) { option.to_result(link.account, Nil) })
-                |> option.from_result,
-              fn(account) {
-                json.object([
-                  #("firstName", json.string(account.first_name)),
-                  #("lastName", json.string(account.last_name)),
-                ])
-              },
-            ),
-          ),
-        ])
-      }),
+      json.array(design.team_members, team_member_json(_, links)),
     ),
     #(
       "steps",
@@ -1084,41 +1076,78 @@ pub fn to_json(
           #("name", json.string(step.name)),
           #(
             "stations",
-            json.array(step.stations, fn(station) {
-              let found =
-                option.to_result(station.id, Nil)
-                |> result.try(dict.get(held, _))
-              json.object([
-                #("id", json.nullable(station.id, json.string)),
-                #("name", json.string(station.name)),
-                #("branch", json.nullable(station.branch, json.string)),
-                #("blueBins", json.int(station.blue_bins)),
-                #("teamLeader", json.string(station.team_leader)),
-                #("teamMembers", json.array(station.team_members, json.string)),
-                #(
-                  "locked",
-                  json.bool(result.map(found, fn(h) { h.locked }) == Ok(True)),
-                ),
-                #(
-                  "minBlueBins",
-                  json.int(int.max(
-                    1,
-                    result.map(found, fn(h) { h.in_bins }) |> result.unwrap(0),
-                  )),
-                ),
-                #(
-                  "suggestion",
-                  suggestion_json(
-                    option.to_result(station.id, Nil)
-                    |> result.try(dict.get(suggestions, _))
-                    |> result.unwrap(measures.suggest([], takt_hours)),
-                  ),
-                ),
-              ])
-            }),
+            json.array(step.stations, station_json(
+              _,
+              held,
+              takt_hours,
+              suggestions,
+            )),
           ),
         ])
       }),
+    ),
+  ])
+}
+
+fn team_member_json(
+  team_member: TeamMember,
+  links: List(accounts.Link),
+) -> Json {
+  let link = list.find(links, fn(link) { link.team_member == team_member.id })
+  json.object([
+    #("id", json.string(team_member.id)),
+    #("name", json.string(team_member.name)),
+    #(
+      "email",
+      json.string(
+        result.map(link, fn(link) { link.email }) |> result.unwrap(""),
+      ),
+    ),
+    #(
+      "account",
+      json.nullable(
+        result.try(link, fn(link) { option.to_result(link.account, Nil) })
+          |> option.from_result,
+        fn(account) {
+          json.object([
+            #("firstName", json.string(account.first_name)),
+            #("lastName", json.string(account.last_name)),
+          ])
+        },
+      ),
+    ),
+  ])
+}
+
+fn station_json(
+  station: Station,
+  held: Dict(String, Held),
+  takt_hours: Float,
+  suggestions: Dict(String, measures.Suggestion),
+) -> Json {
+  let found = id_of(station) |> result.try(dict.get(held, _))
+  json.object([
+    #("id", json.nullable(station.id, json.string)),
+    #("name", json.string(station.name)),
+    #("branch", json.nullable(station.branch, json.string)),
+    #("blueBins", json.int(station.blue_bins)),
+    #("teamLeader", json.string(station.team_leader)),
+    #("teamMembers", json.array(station.team_members, json.string)),
+    #("locked", json.bool(result.map(found, fn(h) { h.locked }) == Ok(True))),
+    #(
+      "minBlueBins",
+      json.int(int.max(
+        1,
+        result.map(found, fn(h) { h.in_bins }) |> result.unwrap(0),
+      )),
+    ),
+    #(
+      "suggestion",
+      suggestion_json(
+        id_of(station)
+        |> result.try(dict.get(suggestions, _))
+        |> result.unwrap(measures.suggest([], takt_hours)),
+      ),
     ),
   ])
 }
@@ -1255,11 +1284,4 @@ fn run(
   )
   |> result.replace(Nil)
   |> result.replace_error(StoreFailed)
-}
-
-fn exec(
-  connection: sqlight.Connection,
-  sql: String,
-) -> Result(Nil, DesignError) {
-  sqlight.exec(sql, connection) |> result.replace_error(StoreFailed)
 }

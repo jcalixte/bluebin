@@ -1,3 +1,4 @@
+import bluebin/db
 import bluebin/demand
 import bluebin/heijunka
 import gleam/bool
@@ -215,7 +216,7 @@ pub fn deliver(
   piece_id: String,
 ) -> Result(Flowed, FlowError) {
   use <- in_transaction(connection)
-  use last <- result.try(edge_position(connection, "max"))
+  use last <- result.try(last_position(connection))
   use piece <- result.try(load_piece_in_last_bin(connection, piece_id, last))
 
   use _ <- result.try(
@@ -253,23 +254,21 @@ fn deliver_demand_when_complete(
   connection: sqlight.Connection,
   piece_id: String,
 ) -> Result(Nil, FlowError) {
-  let delivered =
-    sqlight.query(
-      "update demand set state = 'delivered'
-        where id = (select demand_id from piece where id = ?1)
-          and state = 'active'
-          and (select count(*) from piece p
-                where p.demand_id = demand.id and p.parent_id is null
-                  and p.state = 'produced') >= pieces_asked
-       returning id",
-      on: connection,
-      with: [sqlight.text(piece_id)],
-      expecting: decode.at([0], decode.string),
-    )
+  use delivered <- result.try(maybe_one(
+    connection,
+    "update demand set state = 'delivered'
+      where id = (select demand_id from piece where id = ?1)
+        and state = 'active'
+        and (select count(*) from piece p
+              where p.demand_id = demand.id and p.parent_id is null
+                and p.state = 'produced') >= pieces_asked
+     returning id",
+    [sqlight.text(piece_id)],
+    decode.at([0], decode.string),
+  ))
   case delivered {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok(Nil)
-    Ok([demand, ..]) ->
+    None -> Ok(Nil)
+    Some(demand) ->
       record_event(
         connection,
         "demand_delivered",
@@ -347,18 +346,13 @@ pub fn make_urgent(
 
 /// The Work Station the Backlog feeds; a reorder is its Deviation.
 fn first_station(connection: sqlight.Connection) -> Result(String, FlowError) {
-  case
-    sqlight.query(
-      "select id from work_station order by position, id limit 1",
-      on: connection,
-      with: [],
-      expecting: decode.at([0], decode.string),
-    )
-  {
-    Ok([id, ..]) -> Ok(id)
-    Ok([]) -> Error(UnknownStation)
-    Error(_) -> Error(StoreFailed)
-  }
+  one(
+    connection,
+    "select id from work_station order by position, id limit 1",
+    [],
+    decode.at([0], decode.string),
+    or: UnknownStation,
+  )
 }
 
 pub type Raised {
@@ -398,26 +392,22 @@ pub fn raise_rework(
 
   use author <- result.try(author_of(connection, piece.id, made_by.id))
 
-  let opened =
-    sqlight.query(
-      "insert into rework (id, piece_id, station_id, description, raised_by,
-                           assignee)
-       values ('rw-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5)
-       returning id",
-      on: connection,
-      with: [
-        sqlight.text(piece.id),
-        sqlight.text(made_by.id),
-        sqlight.text(description),
-        sqlight.text(found_by.id),
-        sqlight.nullable(sqlight.text, option.map(author, fn(one) { one.0 })),
-      ],
-      expecting: decode.at([0], decode.string),
-    )
-  use id <- result.try(case opened {
-    Ok([id, ..]) -> Ok(id)
-    _ -> Error(StoreFailed)
-  })
+  use id <- result.try(one(
+    connection,
+    "insert into rework (id, piece_id, station_id, description, raised_by,
+                         assignee)
+     values ('rw-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5)
+     returning id",
+    [
+      sqlight.text(piece.id),
+      sqlight.text(made_by.id),
+      sqlight.text(description),
+      sqlight.text(found_by.id),
+      sqlight.nullable(sqlight.text, option.map(author, fn(one) { one.0 })),
+    ],
+    decode.at([0], decode.string),
+    or: StoreFailed,
+  ))
 
   use settled <- result.try(settle_option(
     connection,
@@ -485,21 +475,16 @@ fn load_open_rework(
     use assignee <- decode.field(2, decode.optional(decode.string))
     decode.success(#(piece_id, reference, assignee))
   }
-  let found =
-    sqlight.query(
-      "select r.piece_id, p.reference, r.assignee
-         from rework r
-         join piece p on p.id = r.piece_id
-        where r.id = ?1 and r.closed_at is null",
-      on: connection,
-      with: [sqlight.text(rework_id)],
-      expecting: decoder,
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(UnknownRework)
-    Ok([rework, ..]) -> Ok(rework)
-  }
+  one(
+    connection,
+    "select r.piece_id, p.reference, r.assignee
+       from rework r
+       join piece p on p.id = r.piece_id
+      where r.id = ?1 and r.closed_at is null",
+    [sqlight.text(rework_id)],
+    decoder,
+    or: UnknownRework,
+  )
 }
 
 pub type Settled {
@@ -584,16 +569,15 @@ fn settle(
   connection: sqlight.Connection,
   team_member_id: String,
 ) -> Result(Settled, FlowError) {
-  let open =
-    sqlight.query(
+  use open <- result.try(
+    exists(
+      connection,
       "select count(*) from rework where assignee = ?1 and closed_at is null",
-      on: connection,
-      with: [sqlight.text(team_member_id)],
-      expecting: decode.at([0], decode.int),
-    )
+      [sqlight.text(team_member_id)],
+    ),
+  )
   case open {
-    Error(_) -> Error(StoreFailed)
-    Ok([count, ..]) if count > 0 -> {
+    True -> {
       use _ <- result.try(start_next_rework(connection, team_member_id))
       use paused <- result.try(pause_pieces(
         connection,
@@ -603,7 +587,7 @@ fn settle(
       ))
       Ok(Settled(paused:, resumed: None))
     }
-    Ok(_) -> {
+    False -> {
       use resumed <- result.try(resume_next_piece(connection, team_member_id))
       Ok(Settled(paused: [], resumed:))
     }
@@ -645,26 +629,16 @@ fn keep_nearest_active(
   team_member_id: String,
   newcomer: String,
 ) -> Result(List(String), FlowError) {
-  let nearest =
-    sqlight.query(
-      "select p.id from piece p
-         join work_station w on w.id = p.station_id
-        where p.assignee = ?1 and p.state = 'in_flow'
-        order by w.position desc, p.id = ?2, p.since, p.rowid limit 1",
-      on: connection,
-      with: [sqlight.text(team_member_id), sqlight.text(newcomer)],
-      expecting: decode.at([0], decode.string),
-    )
-  case nearest {
-    Error(_) -> Error(StoreFailed)
-    Ok(kept) ->
-      pause_pieces(
-        connection,
-        team_member_id,
-        option.from_result(list.first(kept)),
-        "held",
-      )
-  }
+  use kept <- result.try(maybe_one(
+    connection,
+    "select p.id from piece p
+       join work_station w on w.id = p.station_id
+      where p.assignee = ?1 and p.state = 'in_flow'
+      order by w.position desc, p.id = ?2, p.since, p.rowid limit 1",
+    [sqlight.text(team_member_id), sqlight.text(newcomer)],
+    decode.at([0], decode.string),
+  ))
+  pause_pieces(connection, team_member_id, kept, "held")
 }
 
 /// Answers the references of the Pieces paused.
@@ -674,24 +648,15 @@ fn pause_pieces(
   except: Option(String),
   cause: String,
 ) -> Result(List(String), FlowError) {
-  let paused =
-    sqlight.query(
-      "update piece set state = 'paused',
-                        since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        where assignee = ?1 and state = 'in_flow' and id is not ?2
-        returning id, reference",
-      on: connection,
-      with: [
-        sqlight.text(team_member_id),
-        sqlight.nullable(sqlight.text, except),
-      ],
-      expecting: {
-        use id <- decode.field(0, decode.string)
-        use reference <- decode.field(1, decode.string)
-        decode.success(#(id, reference))
-      },
-    )
-  use paused <- result.try(result.replace_error(paused, StoreFailed))
+  use paused <- result.try(rows(
+    connection,
+    "update piece set state = 'paused',
+                      since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where assignee = ?1 and state = 'in_flow' and id is not ?2
+      returning id, reference",
+    [sqlight.text(team_member_id), sqlight.nullable(sqlight.text, except)],
+    id_and_reference(),
+  ))
   list.try_map(paused, fn(piece) {
     use _ <- result.try(record_event(
       connection,
@@ -710,29 +675,23 @@ fn resume_next_piece(
   connection: sqlight.Connection,
   team_member_id: String,
 ) -> Result(Option(String), FlowError) {
-  let resumed =
-    sqlight.query(
-      "update piece set state = 'in_flow',
-                        since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        where id = (select p.id from piece p
-                      join work_station w on w.id = p.station_id
-                     where p.assignee = ?1 and p.state = 'paused'
-                     order by w.position desc, p.since, p.rowid limit 1)
-          and not exists (select 1 from piece
-                           where assignee = ?1 and state = 'in_flow')
-        returning id, reference",
-      on: connection,
-      with: [sqlight.text(team_member_id)],
-      expecting: {
-        use id <- decode.field(0, decode.string)
-        use reference <- decode.field(1, decode.string)
-        decode.success(#(id, reference))
-      },
-    )
+  use resumed <- result.try(maybe_one(
+    connection,
+    "update piece set state = 'in_flow',
+                      since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id = (select p.id from piece p
+                    join work_station w on w.id = p.station_id
+                   where p.assignee = ?1 and p.state = 'paused'
+                   order by w.position desc, p.since, p.rowid limit 1)
+        and not exists (select 1 from piece
+                         where assignee = ?1 and state = 'in_flow')
+      returning id, reference",
+    [sqlight.text(team_member_id)],
+    id_and_reference(),
+  ))
   case resumed {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok(None)
-    Ok([#(id, reference), ..]) -> {
+    None -> Ok(None)
+    Some(#(id, reference)) -> {
       use _ <- result.try(record_event(
         connection,
         "piece_resumed",
@@ -749,39 +708,27 @@ fn holds_an_open_rework(
   team_member_id: String,
   station_id: String,
 ) -> Result(Bool, FlowError) {
-  let found =
-    sqlight.query(
-      "select count(*) from rework r
-        where r.assignee = ?1 and r.closed_at is null
-          and exists (select 1 from station_team_member sp
-                       where sp.station_id = ?2 and sp.team_member_id = ?1)",
-      on: connection,
-      with: [sqlight.text(team_member_id), sqlight.text(station_id)],
-      expecting: decode.at([0], decode.int),
-    )
-  case found {
-    Ok([count, ..]) -> Ok(count > 0)
-    Ok([]) -> Ok(False)
-    Error(_) -> Error(StoreFailed)
-  }
+  exists(
+    connection,
+    "select count(*) from rework r
+      where r.assignee = ?1 and r.closed_at is null
+        and exists (select 1 from station_team_member sp
+                     where sp.station_id = ?2 and sp.team_member_id = ?1)",
+    [sqlight.text(team_member_id), sqlight.text(station_id)],
+  )
 }
 
 fn assignee_of(
   connection: sqlight.Connection,
   piece_id: String,
 ) -> Result(Option(String), FlowError) {
-  let found =
-    sqlight.query(
-      "select assignee from piece where id = ?1",
-      on: connection,
-      with: [sqlight.text(piece_id)],
-      expecting: decode.at([0], decode.optional(decode.string)),
-    )
-  case found {
-    Ok([assignee, ..]) -> Ok(assignee)
-    Ok([]) -> Ok(None)
-    Error(_) -> Error(StoreFailed)
-  }
+  maybe_one(
+    connection,
+    "select assignee from piece where id = ?1",
+    [sqlight.text(piece_id)],
+    decode.at([0], decode.optional(decode.string)),
+  )
+  |> result.map(option.flatten)
 }
 
 fn load_piece_in_hand(
@@ -795,20 +742,15 @@ fn load_piece_in_hand(
     use in_flow <- decode.field(3, decode.int)
     decode.success(#(reference, station_id, assignee, in_flow > 0))
   }
-  let found =
-    sqlight.query(
-      "select reference, station_id, assignee, state = 'in_flow' from piece
-        where id = ?1 and station_id is not null
-          and state in ('in_flow', 'paused')",
-      on: connection,
-      with: [sqlight.text(piece_id)],
-      expecting: decoder,
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(PieceNotHere)
-    Ok([piece, ..]) -> Ok(piece)
-  }
+  one(
+    connection,
+    "select reference, station_id, assignee, state = 'in_flow' from piece
+      where id = ?1 and station_id is not null
+        and state in ('in_flow', 'paused')",
+    [sqlight.text(piece_id)],
+    decoder,
+    or: PieceNotHere,
+  )
 }
 
 /// The Work Station that made the defect, not the one that raised it.
@@ -816,18 +758,13 @@ fn rework_station(
   connection: sqlight.Connection,
   rework_id: String,
 ) -> Result(String, FlowError) {
-  let found =
-    sqlight.query(
-      "select station_id from rework where id = ?1",
-      on: connection,
-      with: [sqlight.text(rework_id)],
-      expecting: decode.at([0], decode.string),
-    )
-  case found {
-    Ok([station_id, ..]) -> Ok(station_id)
-    Ok([]) -> Error(UnknownRework)
-    Error(_) -> Error(StoreFailed)
-  }
+  one(
+    connection,
+    "select station_id from rework where id = ?1",
+    [sqlight.text(rework_id)],
+    decode.at([0], decode.string),
+    or: UnknownRework,
+  )
 }
 
 fn member_name(
@@ -835,20 +772,15 @@ fn member_name(
   station_id: String,
   team_member_id: String,
 ) -> Result(String, FlowError) {
-  let found =
-    sqlight.query(
-      "select pe.name from station_team_member sp
-         join team_member pe on pe.id = sp.team_member_id
-        where sp.station_id = ?1 and sp.team_member_id = ?2",
-      on: connection,
-      with: [sqlight.text(station_id), sqlight.text(team_member_id)],
-      expecting: decode.at([0], decode.string),
-    )
-  case found {
-    Ok([name, ..]) -> Ok(name)
-    Ok([]) -> Error(NotOfStation)
-    Error(_) -> Error(StoreFailed)
-  }
+  one(
+    connection,
+    "select pe.name from station_team_member sp
+       join team_member pe on pe.id = sp.team_member_id
+      where sp.station_id = ?1 and sp.team_member_id = ?2",
+    [sqlight.text(station_id), sqlight.text(team_member_id)],
+    decode.at([0], decode.string),
+    or: NotOfStation,
+  )
 }
 
 /// Whether the Work Station can pull now without a Deviation (F20).
@@ -881,23 +813,16 @@ pub fn raise_andon(
   use station <- result.try(load_station(connection, station_id))
   use stopped <- result.try(stopped_by_andon(connection, station.id))
   use <- bool.guard(stopped, Ok(Nil))
-  let raised =
-    sqlight.query(
-      "insert into andon (station_id, raised_by)
-       values (?1, (select sp.team_member_id from station_team_member sp
-                     where sp.station_id = ?1 and sp.team_member_id = ?2))
-       returning raised_by",
-      on: connection,
-      with: [
-        sqlight.text(station.id),
-        sqlight.nullable(sqlight.text, team_member),
-      ],
-      expecting: decode.at([0], decode.optional(decode.string)),
-    )
-  use raised_by <- result.try(case raised {
-    Ok([raised_by, ..]) -> Ok(raised_by)
-    _ -> Error(StoreFailed)
-  })
+  use raised_by <- result.try(one(
+    connection,
+    "insert into andon (station_id, raised_by)
+     values (?1, (select sp.team_member_id from station_team_member sp
+                   where sp.station_id = ?1 and sp.team_member_id = ?2))
+     returning raised_by",
+    [sqlight.text(station.id), sqlight.nullable(sqlight.text, team_member)],
+    decode.at([0], decode.optional(decode.string)),
+    or: StoreFailed,
+  ))
   record_event(
     connection,
     "andon_raised",
@@ -917,23 +842,21 @@ pub fn close_andon(
 ) -> Result(Nil, FlowError) {
   use <- in_transaction(connection)
   use station <- result.try(load_station(connection, station_id))
-  let closed =
-    sqlight.query(
-      "update andon
-          set closed_by = ?2, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        where station_id = ?1 and closed_at is null
-          and ?2 = (select team_leader from work_station where id = ?1)
-        returning id",
-      on: connection,
-      with: [sqlight.text(station.id), sqlight.text(team_member)],
-      expecting: decode.at([0], decode.int),
-    )
+  use closed <- result.try(rows(
+    connection,
+    "update andon
+        set closed_by = ?2, closed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where station_id = ?1 and closed_at is null
+        and ?2 = (select team_leader from work_station where id = ?1)
+      returning id",
+    [sqlight.text(station.id), sqlight.text(team_member)],
+    decode.at([0], decode.int),
+  ))
   use stopped <- result.try(stopped_by_andon(connection, station.id))
   case closed, stopped {
-    Error(_), _ -> Error(StoreFailed)
-    Ok([]), True -> Error(NotTeamLeader)
-    Ok([]), False -> Error(NoAndon)
-    Ok(_), _ ->
+    [], True -> Error(NotTeamLeader)
+    [], False -> Error(NoAndon)
+    _, _ ->
       record_event(
         connection,
         "andon_closed",
@@ -950,18 +873,11 @@ fn stopped_by_andon(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Bool, FlowError) {
-  let open =
-    sqlight.query(
-      "select count(*) from andon where station_id = ?1 and closed_at is null",
-      on: connection,
-      with: [sqlight.text(station_id)],
-      expecting: decode.at([0], decode.int),
-    )
-  case open {
-    Ok([count, ..]) -> Ok(count > 0)
-    Ok([]) -> Ok(False)
-    Error(_) -> Error(StoreFailed)
-  }
+  exists(
+    connection,
+    "select count(*) from andon where station_id = ?1 and closed_at is null",
+    [sqlight.text(station_id)],
+  )
 }
 
 fn upstream_of(made_by: Station, found_by: Station) -> Bool {
@@ -982,26 +898,20 @@ fn author_of(
     use name <- decode.field(1, decode.string)
     decode.success(#(id, name))
   }
-  let found =
-    sqlight.query(
-      "select pp.team_member_id, pe.name
-         from piece_pass pp
-         join team_member pe on pe.id = pp.team_member_id
-        where pp.station_id = ?2
-          and (pp.piece_id = ?1
-               or pp.piece_id in (select s.id from piece s
-                                   where s.parent_id = ?1))
-        order by pp.at desc
-        limit 1",
-      on: connection,
-      with: [sqlight.text(piece_id), sqlight.text(station_id)],
-      expecting: decoder,
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok(None)
-    Ok([author, ..]) -> Ok(Some(author))
-  }
+  maybe_one(
+    connection,
+    "select pp.team_member_id, pe.name
+       from piece_pass pp
+       join team_member pe on pe.id = pp.team_member_id
+      where pp.station_id = ?2
+        and (pp.piece_id = ?1
+             or pp.piece_id in (select s.id from piece s
+                                 where s.parent_id = ?1))
+      order by pp.at desc
+      limit 1",
+    [sqlight.text(piece_id), sqlight.text(station_id)],
+    decoder,
+  )
 }
 
 type Kind {
@@ -1015,26 +925,21 @@ fn pull_kind(
   connection: sqlight.Connection,
   station: Station,
 ) -> Result(Kind, FlowError) {
-  use first <- result.try(edge_position(connection, "min"))
-  use <- bool.guard(station.position == first, Ok(FromBacklog))
-
-  let upstream =
-    sqlight.query(
-      "select branch from work_station
-       where position = (select max(position) from work_station
-                         where position < ?1)",
-      on: connection,
-      with: [sqlight.int(station.position)],
-      expecting: decode.at([0], decode.optional(decode.string)),
-    )
-  case upstream {
-    Error(_) -> Error(StoreFailed)
-    Ok(branches) ->
+  case station.upstream {
+    None -> Ok(FromBacklog)
+    Some(upstream) -> {
+      use branches <- result.try(rows(
+        connection,
+        "select branch from work_station where position = ?1",
+        [sqlight.int(upstream)],
+        decode.at([0], decode.optional(decode.string)),
+      ))
       case station.branch, list.any(branches, option.is_some) {
         Some(_), False -> Ok(AtSplit)
         None, True -> Ok(Assembly)
         _, _ -> Ok(Straight)
       }
+    }
   }
 }
 
@@ -1074,50 +979,36 @@ fn split_off(
   source: Source,
 ) -> Result(#(#(String, String), List(String)), FlowError) {
   let branch = option.unwrap(station.branch, "")
-  let created =
-    sqlight.query(
-      "insert into piece (id, demand_id, reference, state, station_id, since,
-                          parent_id, branch)
-       select id || '-' || lower(replace(?2, ' ', '-')), demand_id,
-              reference || ' · ' || ?2, 'in_flow', ?3,
-              strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), id, ?2
-       from piece where id = ?1
-       returning id, reference",
-      on: connection,
-      with: [
-        sqlight.text(source.id),
-        sqlight.text(branch),
-        sqlight.text(station.id),
-      ],
-      expecting: {
-        use id <- decode.field(0, decode.string)
-        use reference <- decode.field(1, decode.string)
-        decode.success(#(id, reference))
-      },
-    )
-  use sub_piece <- result.try(case created {
-    Ok([sub_piece, ..]) -> Ok(sub_piece)
-    _ -> Error(StoreFailed)
-  })
+  use sub_piece <- result.try(one(
+    connection,
+    "insert into piece (id, demand_id, reference, state, station_id, since,
+                        parent_id, branch)
+     select id || '-' || lower(replace(?2, ' ', '-')), demand_id,
+            reference || ' · ' || ?2, 'in_flow', ?3,
+            strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), id, ?2
+     from piece where id = ?1
+     returning id, reference",
+    [sqlight.text(source.id), sqlight.text(branch), sqlight.text(station.id)],
+    id_and_reference(),
+    or: StoreFailed,
+  ))
 
-  let left =
-    sqlight.query(
-      "update piece
-          set state = 'split', station_id = null,
-              since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-        where id = ?1
-          and (select count(*) from piece s where s.parent_id = ?1)
-           >= (select count(distinct branch) from work_station
-               where position = ?2)
-        returning id",
-      on: connection,
-      with: [sqlight.text(source.id), sqlight.int(station.position)],
-      expecting: decode.at([0], decode.string),
-    )
+  use left <- result.try(maybe_one(
+    connection,
+    "update piece
+        set state = 'split', station_id = null,
+            since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id = ?1
+        and (select count(*) from piece s where s.parent_id = ?1)
+         >= (select count(distinct branch) from work_station
+             where position = ?2)
+      returning id",
+    [sqlight.text(source.id), sqlight.int(station.position)],
+    decode.at([0], decode.string),
+  ))
   use sent <- result.try(case left {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok([])
-    Ok(_) -> {
+    None -> Ok([])
+    Some(_) -> {
       // The Piece leaves the trunk's Blue Bin here, which ends its Station
       // Lead Time there.
       use _ <- result.try(record_event(
@@ -1139,14 +1030,12 @@ fn assemble(
   station: Station,
   source: Source,
 ) -> Result(#(#(String, String), List(String)), FlowError) {
-  let branch_ends =
-    sqlight.query(
-      "select station_id from piece where parent_id = ?1 order by branch",
-      on: connection,
-      with: [sqlight.text(source.id)],
-      expecting: decode.at([0], decode.string),
-    )
-  use branch_ends <- result.try(result.replace_error(branch_ends, StoreFailed))
+  use branch_ends <- result.try(rows(
+    connection,
+    "select station_id from piece where parent_id = ?1 order by branch",
+    [sqlight.text(source.id)],
+    decode.at([0], decode.string),
+  ))
 
   use _ <- result.try(
     write(
@@ -1186,8 +1075,15 @@ fn send_kanbans(
   |> result.map(option.values)
 }
 
+/// `upstream` is the position just before this Work Station's: None at the
+/// first one, which pulls from the Backlog.
 type Station {
-  Station(id: String, position: Int, branch: Option(String), blue_bins: Int)
+  Station(
+    id: String,
+    position: Int,
+    branch: Option(String),
+    upstream: Option(Int),
+  )
 }
 
 /// `station_id` is the Work Station whose Blue Bin the Piece leaves; None from
@@ -1213,40 +1109,30 @@ fn load_station(
     use id <- decode.field(0, decode.string)
     use position <- decode.field(1, decode.int)
     use branch <- decode.field(2, decode.optional(decode.string))
-    use blue_bins <- decode.field(3, decode.int)
-    decode.success(Station(id:, position:, branch:, blue_bins:))
+    use upstream <- decode.field(3, decode.optional(decode.int))
+    decode.success(Station(id:, position:, branch:, upstream:))
   }
-  let found =
-    sqlight.query(
-      "select id, position, branch, blue_bins from work_station where id = ?1",
-      on: connection,
-      with: [sqlight.text(station_id)],
-      expecting: decoder,
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(UnknownStation)
-    Ok([station, ..]) -> Ok(station)
-  }
+  one(
+    connection,
+    "select w.id, w.position, w.branch,
+            (select max(u.position) from work_station u
+              where u.position < w.position)
+       from work_station w where w.id = ?1",
+    [sqlight.text(station_id)],
+    decoder,
+    or: UnknownStation,
+  )
 }
 
-/// `edge` is spliced into the SQL: only `"min"` or `"max"`.
-fn edge_position(
-  connection: sqlight.Connection,
-  edge: String,
-) -> Result(Int, FlowError) {
-  let found =
-    sqlight.query(
-      "select " <> edge <> "(position) from work_station",
-      on: connection,
-      with: [],
-      expecting: decode.at([0], decode.int),
-    )
-  case found {
-    Ok([position, ..]) -> Ok(position)
-    Ok([]) -> Error(UnknownStation)
-    Error(_) -> Error(StoreFailed)
-  }
+/// The position of the last Work Station, whose Blue Bin feeds production.
+fn last_position(connection: sqlight.Connection) -> Result(Int, FlowError) {
+  one(
+    connection,
+    "select max(position) from work_station",
+    [],
+    decode.at([0], decode.int),
+    or: UnknownStation,
+  )
 }
 
 fn next_backlog_piece(
@@ -1276,13 +1162,12 @@ fn next_upstream_piece(
      join demand d on d.id = p.demand_id
      join work_station w on w.id = p.station_id
      where p.state = 'in_bin'
-       and w.position = (select max(position) from work_station
-                         where position < ?1)
+       and w.position = ?1
        and w.branch is ?2
      order by p.since, p.rowid
      limit 1",
     [
-      sqlight.int(station.position),
+      sqlight.nullable(sqlight.int, station.upstream),
       sqlight.nullable(sqlight.text, station.branch),
     ],
     NothingToPull,
@@ -1300,14 +1185,13 @@ fn next_unsplit_piece(
      join demand d on d.id = p.demand_id
      join work_station w on w.id = p.station_id
      where p.state = 'in_bin'
-       and w.position = (select max(position) from work_station
-                         where position < ?1)
+       and w.position = ?1
        and not exists (select 1 from piece s
                        where s.parent_id = p.id and s.branch = ?2)
      order by p.since, p.rowid
      limit 1",
     [
-      sqlight.int(station.position),
+      sqlight.nullable(sqlight.int, station.upstream),
       sqlight.nullable(sqlight.text, station.branch),
     ],
     NothingToPull,
@@ -1330,13 +1214,11 @@ fn next_complete_piece(
          select 1 from piece s
          left join work_station w on w.id = s.station_id
          where s.parent_id = p.id
-           and not (s.state = 'in_bin'
-                    and w.position = (select max(position) from work_station
-                                      where position < ?1)))
+           and not (s.state = 'in_bin' and w.position = ?1))
      order by (select max(s.since) from piece s where s.parent_id = p.id),
               p.rowid
      limit 1",
-    [sqlight.int(station.position)],
+    [sqlight.nullable(sqlight.int, station.upstream)],
     NothingToAssemble,
   )
 }
@@ -1354,11 +1236,7 @@ fn find_source(
     use station_id <- decode.field(3, decode.optional(decode.string))
     decode.success(Source(id:, reference:, demand:, station_id:))
   }
-  case sqlight.query(sql, on: connection, with: values, expecting: decoder) {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(when_none)
-    Ok([piece, ..]) -> Ok(piece)
-  }
+  one(connection, sql, values, decoder, or: when_none)
 }
 
 fn load_piece_at(
@@ -1367,25 +1245,16 @@ fn load_piece_at(
   station_id: String,
   state: String,
 ) -> Result(Held, FlowError) {
-  let found =
-    sqlight.query(
-      "select p.id, p.reference, d.label, p.station_id
-       from piece p
-       join demand d on d.id = p.demand_id
-       where p.id = ?1 and p.station_id = ?2 and p.state = ?3",
-      on: connection,
-      with: [
-        sqlight.text(piece_id),
-        sqlight.text(station_id),
-        sqlight.text(state),
-      ],
-      expecting: held_decoder(),
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(PieceNotHere)
-    Ok([piece, ..]) -> Ok(piece)
-  }
+  one(
+    connection,
+    "select p.id, p.reference, d.label, p.station_id
+     from piece p
+     join demand d on d.id = p.demand_id
+     where p.id = ?1 and p.station_id = ?2 and p.state = ?3",
+    [sqlight.text(piece_id), sqlight.text(station_id), sqlight.text(state)],
+    held_decoder(),
+    or: PieceNotHere,
+  )
 }
 
 fn load_piece_in_last_bin(
@@ -1393,22 +1262,17 @@ fn load_piece_in_last_bin(
   piece_id: String,
   last_position: Int,
 ) -> Result(Held, FlowError) {
-  let found =
-    sqlight.query(
-      "select p.id, p.reference, d.label, p.station_id
-       from piece p
-       join demand d on d.id = p.demand_id
-       join work_station w on w.id = p.station_id
-       where p.id = ?1 and p.state = 'in_bin' and w.position = ?2",
-      on: connection,
-      with: [sqlight.text(piece_id), sqlight.int(last_position)],
-      expecting: held_decoder(),
-    )
-  case found {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Error(PieceNotHere)
-    Ok([piece, ..]) -> Ok(piece)
-  }
+  one(
+    connection,
+    "select p.id, p.reference, d.label, p.station_id
+     from piece p
+     join demand d on d.id = p.demand_id
+     join work_station w on w.id = p.station_id
+     where p.id = ?1 and p.state = 'in_bin' and w.position = ?2",
+    [sqlight.text(piece_id), sqlight.int(last_position)],
+    held_decoder(),
+    or: PieceNotHere,
+  )
 }
 
 fn held_decoder() -> decode.Decoder(Held) {
@@ -1419,23 +1283,23 @@ fn held_decoder() -> decode.Decoder(Held) {
   decode.success(Held(id:, reference:, demand:, station_id:))
 }
 
+fn id_and_reference() -> decode.Decoder(#(String, String)) {
+  use id <- decode.field(0, decode.string)
+  use reference <- decode.field(1, decode.string)
+  decode.success(#(id, reference))
+}
+
 fn oldest_kanban(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Option(String), FlowError) {
-  let oldest =
-    sqlight.query(
-      "select id from kanban where station_id = ?1
-       order by created_at, rowid limit 1",
-      on: connection,
-      with: [sqlight.text(station_id)],
-      expecting: decode.at([0], decode.string),
-    )
-  case oldest {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok(None)
-    Ok([kanban, ..]) -> Ok(Some(kanban))
-  }
+  maybe_one(
+    connection,
+    "select id from kanban where station_id = ?1
+     order by created_at, rowid limit 1",
+    [sqlight.text(station_id)],
+    decode.at([0], decode.string),
+  )
 }
 
 /// `kanban_sent` and `kanban_spent` date the Kanbans a Work Station holds,
@@ -1465,19 +1329,12 @@ fn raised_an_open_rework(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Bool, FlowError) {
-  let open =
-    sqlight.query(
-      "select count(*) from rework
-       where raised_by = ?1 and closed_at is null",
-      on: connection,
-      with: [sqlight.text(station_id)],
-      expecting: decode.at([0], decode.int),
-    )
-  case open {
-    Ok([count, ..]) -> Ok(count > 0)
-    Ok([]) -> Ok(False)
-    Error(_) -> Error(StoreFailed)
-  }
+  exists(
+    connection,
+    "select count(*) from rework
+     where raised_by = ?1 and closed_at is null",
+    [sqlight.text(station_id)],
+  )
 }
 
 /// A Team Member not of this Work Station leaves the Piece unassigned.
@@ -1489,28 +1346,22 @@ fn take_in_hand(
 ) -> Result(Option(String), FlowError) {
   case team_member {
     None -> Ok(None)
-    Some(team_member) -> {
-      let taken =
-        sqlight.query(
-          "update piece
-              set assignee = (select sp.team_member_id from station_team_member sp
-                               where sp.station_id = ?2 and sp.team_member_id = ?3)
-            where id = ?1
-            returning assignee",
-          on: connection,
-          with: [
-            sqlight.text(piece_id),
-            sqlight.text(station_id),
-            sqlight.text(team_member),
-          ],
-          expecting: decode.at([0], decode.optional(decode.string)),
-        )
-      case taken {
-        Ok([holder, ..]) -> Ok(holder)
-        Ok([]) -> Ok(None)
-        Error(_) -> Error(StoreFailed)
-      }
-    }
+    Some(team_member) ->
+      maybe_one(
+        connection,
+        "update piece
+            set assignee = (select sp.team_member_id from station_team_member sp
+                             where sp.station_id = ?2 and sp.team_member_id = ?3)
+          where id = ?1
+          returning assignee",
+        [
+          sqlight.text(piece_id),
+          sqlight.text(station_id),
+          sqlight.text(team_member),
+        ],
+        decode.at([0], decode.optional(decode.string)),
+      )
+      |> result.map(option.flatten)
   }
 }
 
@@ -1527,25 +1378,23 @@ fn record_pass(
   )
 }
 
-/// Negative when a Deviation already put a Piece over the count.
+/// The empty Blue Bins (F7) of the Work Station aliased `w`, as an SQL
+/// expression. Negative when a Deviation already put a Piece over the count.
+pub const free_blue_bins_sql =
+  "w.blue_bins - (select count(*) from piece p
+                  where p.station_id = w.id and p.state = 'in_bin')"
+
 fn free_blue_bins(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Int, FlowError) {
-  let found =
-    sqlight.query(
-      "select w.blue_bins - (select count(*) from piece p
-                             where p.station_id = w.id and p.state = 'in_bin')
-       from work_station w where w.id = ?1",
-      on: connection,
-      with: [sqlight.text(station_id)],
-      expecting: decode.at([0], decode.int),
-    )
-  case found {
-    Ok([free, ..]) -> Ok(free)
-    Ok([]) -> Error(UnknownStation)
-    Error(_) -> Error(StoreFailed)
-  }
+  one(
+    connection,
+    "select " <> free_blue_bins_sql <> " from work_station w where w.id = ?1",
+    [sqlight.text(station_id)],
+    decode.at([0], decode.int),
+    or: UnknownStation,
+  )
 }
 
 /// Never more Kanbans than empty Blue Bins: at the limit the insert writes
@@ -1554,24 +1403,20 @@ fn send_kanban(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Option(String), FlowError) {
-  let sent =
-    sqlight.query(
-      "insert into kanban (id, station_id)
-       select 'kb-' || lower(hex(randomblob(6))), ?1
-       where (select count(*) from kanban k where k.station_id = ?1)
-           < (select w.blue_bins - (select count(*) from piece p
-                                    where p.station_id = w.id
-                                      and p.state = 'in_bin')
-              from work_station w where w.id = ?1)
-       returning station_id",
-      on: connection,
-      with: [sqlight.text(station_id)],
-      expecting: decode.at([0], decode.string),
-    )
+  use sent <- result.try(maybe_one(
+    connection,
+    "insert into kanban (id, station_id)
+     select 'kb-' || lower(hex(randomblob(6))), ?1
+     where (select count(*) from kanban k where k.station_id = ?1)
+         < (select " <> free_blue_bins_sql <> "
+            from work_station w where w.id = ?1)
+     returning station_id",
+    [sqlight.text(station_id)],
+    decode.at([0], decode.string),
+  ))
   case sent {
-    Error(_) -> Error(StoreFailed)
-    Ok([]) -> Ok(None)
-    Ok([station, ..]) -> {
+    None -> Ok(None)
+    Some(station) -> {
       use _ <- result.try(record_event(
         connection,
         "kanban_sent",
@@ -1658,12 +1503,49 @@ fn write(
   sql: String,
   values: List(sqlight.Value),
 ) -> Result(Nil, FlowError) {
-  case
-    sqlight.query(sql, on: connection, with: values, expecting: decode.dynamic)
-  {
-    Ok(_) -> Ok(Nil)
-    Error(_) -> Error(StoreFailed)
-  }
+  rows(connection, sql, values, decode.dynamic) |> result.replace(Nil)
+}
+
+fn rows(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(sqlight.Value),
+  decoder: decode.Decoder(a),
+) -> Result(List(a), FlowError) {
+  sqlight.query(sql, on: connection, with: values, expecting: decoder)
+  |> result.replace_error(StoreFailed)
+}
+
+/// The first row, or `none` when the query answers no row.
+fn one(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(sqlight.Value),
+  decoder: decode.Decoder(a),
+  or none: FlowError,
+) -> Result(a, FlowError) {
+  use found <- result.try(rows(connection, sql, values, decoder))
+  list.first(found) |> result.replace_error(none)
+}
+
+fn maybe_one(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(sqlight.Value),
+  decoder: decode.Decoder(a),
+) -> Result(Option(a), FlowError) {
+  rows(connection, sql, values, decoder)
+  |> result.map(fn(found) { list.first(found) |> option.from_result })
+}
+
+/// Whether a `select count(*)` query counts more than zero.
+fn exists(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(sqlight.Value),
+) -> Result(Bool, FlowError) {
+  maybe_one(connection, sql, values, decode.at([0], decode.int))
+  |> result.map(fn(count) { option.unwrap(count, 0) > 0 })
 }
 
 /// One action's state, flow event and Deviations commit together or not at
@@ -1672,19 +1554,5 @@ fn in_transaction(
   connection: sqlight.Connection,
   run: fn() -> Result(a, FlowError),
 ) -> Result(a, FlowError) {
-  case sqlight.exec("begin immediate;", connection) {
-    Error(_) -> Error(StoreFailed)
-    Ok(Nil) ->
-      case run() {
-        Ok(value) ->
-          case sqlight.exec("commit;", connection) {
-            Ok(Nil) -> Ok(value)
-            Error(_) -> Error(StoreFailed)
-          }
-        Error(failure) -> {
-          let _ = sqlight.exec("rollback;", connection)
-          Error(failure)
-        }
-      }
-  }
+  db.transaction(connection, fn(_) { StoreFailed }, run)
 }

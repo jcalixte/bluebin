@@ -6,6 +6,7 @@ import gleam/http
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
+import gleam/string
 import sqlight
 
 /// What an Account may do in one Line (H10).
@@ -23,46 +24,54 @@ pub type Need {
   Own
 }
 
-/// The role table. `segments` is the path inside the Line, `["api"]` for
-/// the Line itself. A route missing here is refused (§8).
-pub fn need(method: http.Method, segments: List(String)) -> Result(Need, Nil) {
-  case method, segments {
-    http.Get, ["api"]
-    | http.Get, ["api", "events"]
-    | http.Get, ["api", "demands"]
-    | http.Get, ["api", "line"]
-    | http.Get, ["api", "backlog"]
-    | http.Get, ["api", "andons"]
-    | http.Get, ["api", "team-members"]
-    | http.Get, ["api", "team-members", _, "next"]
-    | http.Get, ["api", "design"]
-    | http.Get, ["api", "labels"]
-    | http.Get, ["api", "measures"]
-    | http.Get, ["api", "calendar"]
-    -> Ok(Read)
+/// Why `need` found no Need: the path is no route inside a Line, or the
+/// route takes other methods.
+pub type Refusal {
+  NoSuchRoute
+  WrongMethod(allowed: List(http.Method))
+}
 
-    http.Post, ["api", "demands"]
-    | http.Post, ["api", "backlog", "urgent"]
-    | http.Post, ["api", "pull"]
-    | http.Post, ["api", "finish"]
-    | http.Post, ["api", "deliver"]
-    | http.Post, ["api", "rework"]
-    | http.Post, ["api", "rework", "repair"]
-    | http.Post, ["api", "andon"]
-    | http.Post, ["api", "andon", "close"]
-    | http.Post, ["api", "assign"]
-    -> Ok(Flow)
+/// The role table, the one list of routes inside a Line. `segments` is the
+/// path inside the Line, `["api"]` for the Line itself (§8).
+pub fn need(
+  method: http.Method,
+  segments: List(String),
+) -> Result(Need, Refusal) {
+  case routes(segments) {
+    [] -> Error(NoSuchRoute)
+    allowed ->
+      list.key_find(allowed, method)
+      |> result.replace_error(WrongMethod(list.map(allowed, fn(one) { one.0 })))
+  }
+}
 
-    http.Put, ["api"]
-    | http.Put, ["api", "sharing"]
-    | http.Post, ["api", "team-members"]
-    | http.Put, ["api", "design"]
-    | http.Put, ["api", "steps", _]
-    | http.Put, ["api", "calendar"]
-    | http.Post, ["api", "reset"]
-    -> Ok(Own)
-
-    _, _ -> Error(Nil)
+fn routes(segments: List(String)) -> List(#(http.Method, Need)) {
+  case segments {
+    ["api"] -> [#(http.Get, Read), #(http.Put, Own)]
+    ["api", "events"] -> [#(http.Get, Read)]
+    ["api", "demands"] -> [#(http.Get, Read), #(http.Post, Flow)]
+    ["api", "line"] -> [#(http.Get, Read)]
+    ["api", "backlog"] -> [#(http.Get, Read)]
+    ["api", "backlog", "urgent"] -> [#(http.Post, Flow)]
+    ["api", "pull"] -> [#(http.Post, Flow)]
+    ["api", "finish"] -> [#(http.Post, Flow)]
+    ["api", "deliver"] -> [#(http.Post, Flow)]
+    ["api", "rework"] -> [#(http.Post, Flow)]
+    ["api", "rework", "repair"] -> [#(http.Post, Flow)]
+    ["api", "andons"] -> [#(http.Get, Read)]
+    ["api", "andon"] -> [#(http.Post, Flow)]
+    ["api", "andon", "close"] -> [#(http.Post, Flow)]
+    ["api", "assign"] -> [#(http.Post, Flow)]
+    ["api", "team-members"] -> [#(http.Get, Read), #(http.Post, Own)]
+    ["api", "team-members", _, "next"] -> [#(http.Get, Read)]
+    ["api", "design"] -> [#(http.Get, Read), #(http.Put, Own)]
+    ["api", "labels"] -> [#(http.Get, Read)]
+    ["api", "measures"] -> [#(http.Get, Read)]
+    ["api", "calendar"] -> [#(http.Get, Read), #(http.Put, Own)]
+    ["api", "steps", _] -> [#(http.Put, Own)]
+    ["api", "sharing"] -> [#(http.Put, Own)]
+    ["api", "reset"] -> [#(http.Post, Own)]
+    _ -> []
   }
 }
 
@@ -181,4 +190,157 @@ pub fn actor(
       }
     _, _ -> Error(Nil)
   }
+}
+
+/// A Team Member linked to another Account acts only through that Account
+/// (R7). `email` is `None` unless the Account is signed in.
+pub fn linked_elsewhere(
+  accounts_database: String,
+  email: Option(String),
+  workspace: String,
+  line: String,
+  team_member: String,
+) -> Bool {
+  case email {
+    None -> False
+    Some(email) ->
+      case accounts.links(accounts_database, workspace, line) {
+        Error(Nil) -> True
+        Ok(links) ->
+          list.any(links, fn(link) {
+            case link.team_member == team_member, link.account {
+              True, Some(account) ->
+                string.lowercase(account.email) != string.lowercase(email)
+              _, _ -> False
+            }
+          })
+      }
+  }
+}
+
+/// A Workspace the Account can open, with the Lines it opens there.
+pub type OpenWorkspace {
+  OpenWorkspace(
+    owner: String,
+    name: Option(String),
+    own: Bool,
+    lines: List(OpenLine),
+  )
+}
+
+/// `team_member` is the Account's own Team Member in the Line, if any.
+pub type OpenLine {
+  OpenLine(
+    line: lines.Line,
+    shared: Bool,
+    role: Role,
+    team_member: Option(String),
+  )
+}
+
+/// Every Line the Account can open, by Workspace, its own first (F46).
+/// `email` is `None` unless SSO is on and the Account is signed in: then
+/// only its own Workspace opens (F52). `start` is how the caller's own first
+/// Line starts, when this call makes it.
+pub fn workspaces(
+  accounts_database: String,
+  caller: String,
+  email: Option(String),
+  start: db.Start,
+) -> Result(List(OpenWorkspace), Nil) {
+  // The owner can be a Team Member of their own Lines too (F45).
+  use held <- result.try(case email {
+    Some(email) -> live_links(accounts_database, email, caller)
+    None -> Ok([])
+  })
+  use own <- result.try(lines.list(caller, start) |> result.replace_error(Nil))
+  use own <- result.try(
+    list.try_map(own, fn(line) {
+      use shared <- result.map(case email {
+        Some(_) -> accounts.is_shared(accounts_database, caller, line.id)
+        None -> Ok(False)
+      })
+      OpenLine(
+        line:,
+        shared:,
+        role: Owner,
+        team_member: list.key_find(held, line.id) |> option.from_result,
+      )
+    }),
+  )
+  case email {
+    None ->
+      Ok([OpenWorkspace(owner: caller, name: None, own: True, lines: own)])
+    Some(email) -> {
+      use name <- result.try(accounts.name_of_uid(accounts_database, caller))
+      use others <- result.map(other_workspaces(
+        accounts_database,
+        caller,
+        email,
+      ))
+      [OpenWorkspace(owner: caller, name:, own: True, lines: own), ..others]
+    }
+  }
+}
+
+/// The Workspaces where `email` is a Team Member: its Lines there, and the
+/// Shared Lines of those Workspaces, by owner name.
+fn other_workspaces(
+  accounts_database: String,
+  caller: String,
+  email: String,
+) -> Result(List(OpenWorkspace), Nil) {
+  use links <- result.try(accounts.links_of(accounts_database, email))
+  let workspaces =
+    list.map(links, fn(link) { link.0 })
+    |> list.unique
+    |> list.filter(fn(workspace) { workspace != caller })
+  use found <- result.map(
+    list.try_map(workspaces, fn(workspace) {
+      use held <- result.try(live_links(accounts_database, email, workspace))
+      case held {
+        [] -> Ok(None)
+        _ -> {
+          use all <- result.try(
+            lines.list(workspace, db.Empty) |> result.replace_error(Nil),
+          )
+          use entries <- result.try(
+            list.try_map(all, fn(line) {
+              use shared <- result.map(accounts.is_shared(
+                accounts_database,
+                workspace,
+                line.id,
+              ))
+              case list.key_find(held, line.id), shared {
+                Ok(team_member), _ ->
+                  Some(OpenLine(
+                    line:,
+                    shared:,
+                    role: Member(team_member),
+                    team_member: Some(team_member),
+                  ))
+                Error(Nil), True ->
+                  Some(OpenLine(line:, shared:, role: Viewer, team_member: None))
+                Error(Nil), False -> None
+              }
+            }),
+          )
+          use name <- result.map(accounts.name_of_uid(
+            accounts_database,
+            workspace,
+          ))
+          Some(OpenWorkspace(
+            owner: workspace,
+            name:,
+            own: False,
+            lines: option.values(entries),
+          ))
+        }
+      }
+    }),
+  )
+  option.values(found)
+  |> list.sort(fn(one, other) {
+    string.compare(option.unwrap(one.name, ""), option.unwrap(other.name, ""))
+  })
 }

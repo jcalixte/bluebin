@@ -271,6 +271,34 @@ pub fn a_reset_removes_the_links_of_the_line_test() {
   assert left == []
 }
 
+pub fn a_failed_reset_keeps_the_links_test() {
+  let #(context, owner, ada, path) = setup(True)
+
+  let #(_, design) = call(context, http.Get, "/api/design", owner, "")
+  let _ =
+    call(
+      context,
+      http.Put,
+      "/api/design",
+      owner,
+      with_email_for_ines(design, "ada@example.com"),
+    )
+  let assert Ok(Nil) = {
+    use connection <- db.with_connection_at(db.workspace_path(owner.0))
+    sqlight.exec(
+      "create trigger no_reset before delete on demand
+       begin select raise(abort, 'no reset'); end;",
+      connection,
+    )
+  }
+  let #(reset, _) = call_as_admin(context, http.Post, "/api/reset", owner)
+  let left = emails(path, owner.0)
+  clean(owner, ada, path)
+
+  assert reset == 500
+  assert left == [#("pe-ines", "ada@example.com")]
+}
+
 pub fn only_akadmin_resets_a_line_test() {
   let #(context, owner, ada, path) = setup(True)
 

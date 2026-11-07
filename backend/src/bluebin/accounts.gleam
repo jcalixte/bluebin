@@ -1,4 +1,5 @@
 import bluebin/db
+import bluebin/text
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/http/request.{type Request}
@@ -36,7 +37,7 @@ pub type LinkError {
   LinkStoreFailed
 }
 
-pub const max_email_length = 254
+const max_email_length = 254
 
 /// Additive only: during a rolling deploy the old code runs on this file too.
 const schema =
@@ -237,23 +238,15 @@ pub fn save_links(
 ) -> Result(Nil, LinkError) {
   let saved = {
     use connection <- open(database)
-    use _ <- result.try(exec(connection, "begin immediate;"))
-    case change_links(connection, workspace, line, wanted, kept) {
-      Ok(Nil) -> exec(connection, "commit;") |> result.replace(Ok(Nil))
-      Error(error) -> {
-        let _ = exec(connection, "rollback;")
-        Ok(Error(error))
-      }
-    }
+    Ok({
+      use <- db.transaction(connection, fn(_) { LinkStoreFailed })
+      change_links(connection, workspace, line, wanted, kept)
+    })
   }
   case saved {
     Ok(outcome) -> outcome
     Error(Nil) -> Error(LinkStoreFailed)
   }
-}
-
-fn exec(connection: sqlight.Connection, sql: String) -> Result(Nil, Nil) {
-  sqlight.exec(sql, connection) |> result.replace_error(Nil)
 }
 
 fn change_links(
@@ -345,14 +338,68 @@ fn change_links(
 
 /// One email for each Line: an Account is at most one Team Member there.
 pub fn unique_emails(emails: List(String)) -> Result(Nil, LinkError) {
+  case first_duplicate(emails) {
+    None -> Ok(Nil)
+    Some(email) -> Error(EmailTaken(email))
+  }
+}
+
+fn first_duplicate(emails: List(String)) -> Option(String) {
   case emails {
-    [] -> Ok(Nil)
+    [] -> None
     [email, ..rest] ->
       case list.contains(rest, email) {
-        True -> Error(EmailTaken(email))
-        False -> unique_emails(rest)
+        True -> Some(email)
+        False -> first_duplicate(rest)
       }
   }
+}
+
+/// The email of each Team Member in a Design body; one with no `email`
+/// field, sent by an SPA older than the links, keeps its link.
+pub fn emails_decoder() -> decode.Decoder(List(#(String, String))) {
+  use team_members <- decode.field(
+    "teamMembers",
+    decode.list({
+      use id <- decode.field("id", decode.string)
+      use email <- decode.optional_field(
+        "email",
+        None,
+        decode.map(decode.string, Some),
+      )
+      decode.success(#(id, email))
+    }),
+  )
+  list.filter_map(team_members, fn(pair) {
+    option.to_result(pair.1, Nil) |> result.map(fn(email) { #(pair.0, email) })
+  })
+  |> decode.success
+}
+
+/// Each (Team Member, email) pair with its email made normal, or the reason
+/// to show the owner: an email that is none, or one given twice.
+pub fn check_emails(
+  emails: List(#(String, String)),
+) -> Result(List(#(String, String)), String) {
+  use checked <- result.try(
+    list.try_map(emails, fn(pair) {
+      case normal_email(pair.1) {
+        Ok(email) -> Ok(#(pair.0, email))
+        Error(Nil) ->
+          Error("\"" <> string.trim(pair.1) <> "\" is not an email.")
+      }
+    }),
+  )
+  let given =
+    list.map(checked, fn(pair) { pair.1 }) |> list.filter(fn(e) { e != "" })
+  case first_duplicate(given) {
+    None -> Ok(checked)
+    Some(email) -> Error(email_taken(email))
+  }
+}
+
+pub fn email_taken(email: String) -> String {
+  "Two Team Members have the email " <> email <> "."
 }
 
 fn write_link(
@@ -459,12 +506,13 @@ pub fn full_name(account: Account) -> String {
 }
 
 fn check_name(name: String) -> Result(String, AccountError) {
-  let name = string.trim(name)
-  case string.is_empty(name), string.length(name) > max_name_length {
-    True, _ -> Error(EmptyName)
-    _, True -> Error(NameTooLong)
-    False, False -> Ok(name)
-  }
+  text.check(name, max_name_length)
+  |> result.map_error(fn(error) {
+    case error {
+      text.Empty -> EmptyName
+      text.TooLong -> NameTooLong
+    }
+  })
 }
 
 fn account_decoder() -> decode.Decoder(Account) {

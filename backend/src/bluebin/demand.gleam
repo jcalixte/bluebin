@@ -1,5 +1,7 @@
 import bluebin/calendar.{type Calendar}
+import bluebin/db
 import bluebin/design
+import bluebin/text
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/float
@@ -238,16 +240,28 @@ pub fn create(
   due_on: String,
   pieces: Int,
 ) -> Result(String, CreateError) {
-  let label = string.trim(label)
-  let client = string.trim(client)
-  use _ <- result.try(check_text(label, "A Demand needs a label."))
-  use _ <- result.try(check_text(client, "A Demand needs a Client."))
+  use label <- result.try(check_text(label, "A Demand needs a label."))
+  use client <- result.try(check_text(client, "A Demand needs a Client."))
   use <- bool.guard(
     pieces < 1 || pieces > max_pieces,
     Error(Invalid(
       "A Demand asks for 1 to " <> int.to_string(max_pieces) <> " Pieces.",
     )),
   )
+  use _ <- result.try(check_due(connection, due_on))
+  use labels <- result.try(
+    design.load_labels(connection) |> result.replace_error(StoreFailed),
+  )
+
+  use <- db.transaction(connection, fn(_) { StoreFailed })
+  insert(connection, label, client, due_on, pieces, initials(labels.piece))
+}
+
+/// A due date is a day, today or later.
+fn check_due(
+  connection: sqlight.Connection,
+  due_on: String,
+) -> Result(Nil, CreateError) {
   use due <- result.try(
     query(
       connection,
@@ -260,66 +274,61 @@ pub fn create(
       },
     ),
   )
-  use _ <- result.try(case due {
+  case due {
     [#(True, True)] -> Ok(Nil)
     [#(True, False)] -> Error(Invalid("The due date cannot be in the past."))
     _ -> Error(Invalid("The due date must be a day like 2026-12-31."))
-  })
-  use labels <- result.try(
-    design.load_labels(connection) |> result.replace_error(StoreFailed),
-  )
+  }
+}
 
-  use _ <- result.try(exec(connection, "begin immediate;"))
-  let created = {
-    use rows <- result.try(query(
-      connection,
-      "insert into demand
-         (id, label, client, started_on, due_on, pieces_asked, state)
-       values ('d-' || lower(hex(randomblob(6))), ?1, ?2, date('now'), ?3, ?4,
-               'active')
-       returning id",
-      [
-        sqlight.text(label),
-        sqlight.text(client),
-        sqlight.text(due_on),
-        sqlight.int(pieces),
-      ],
-      decode.at([0], decode.string),
-    ))
-    use id <- result.try(list.first(rows) |> result.replace_error(StoreFailed))
-    use _ <- result.try(query(
-      connection,
-      "with recursive n(i) as (select 1 union all select i + 1 from n where i < ?2)
-       insert into piece (id, demand_id, reference, state, entered_at)
-       select 'p-' || substr(?1, 3) || '-' || i, ?1, ?3 || '-' || i, 'backlog',
-              strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-         from n order by i",
-      [
-        sqlight.text(id),
-        sqlight.int(pieces),
-        sqlight.text(initials(labels.piece)),
-      ],
-      decode.success(Nil),
-    ))
-    use _ <- result.try(query(
-      connection,
-      "insert into flow_event (kind, payload)
-       values ('demand_entered', json_object('demand', ?1, 'pieces', ?2))",
-      [sqlight.text(id), sqlight.int(pieces)],
-      decode.success(Nil),
-    ))
-    Ok(id)
-  }
-  case created {
-    Ok(id) -> {
-      use _ <- result.try(exec(connection, "commit;"))
-      Ok(id)
-    }
-    Error(error) -> {
-      let _ = exec(connection, "rollback;")
-      Error(error)
-    }
-  }
+/// The Demand, its Pieces in the Backlog referenced `prefix-1`, `prefix-2`…,
+/// and its flow event. Returns its id.
+fn insert(
+  connection: sqlight.Connection,
+  label: String,
+  client: String,
+  due_on: String,
+  pieces: Int,
+  prefix: String,
+) -> Result(String, CreateError) {
+  use rows <- result.try(query(
+    connection,
+    "insert into demand
+       (id, label, client, started_on, due_on, pieces_asked, state)
+     values ('d-' || lower(hex(randomblob(6))), ?1, ?2, date('now'), ?3, ?4,
+             'active')
+     returning id",
+    [
+      sqlight.text(label),
+      sqlight.text(client),
+      sqlight.text(due_on),
+      sqlight.int(pieces),
+    ],
+    decode.at([0], decode.string),
+  ))
+  use id <- result.try(list.first(rows) |> result.replace_error(StoreFailed))
+  use _ <- result.try(query(
+    connection,
+    "with recursive n(i) as (select 1 union all select i + 1 from n where i < ?2)
+     insert into piece (id, demand_id, reference, state, entered_at)
+     select 'p-' || substr(?1, 3) || '-' || i, ?1, ?3 || '-' || i, 'backlog',
+            strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+       from n order by i",
+    [
+      sqlight.text(id),
+      sqlight.int(pieces),
+      sqlight.text(prefix),
+    ],
+    decode.success(Nil),
+  ))
+  use _ <- result.try(query(
+    connection,
+    "insert into flow_event (kind, payload)
+     values ('demand_entered', json_object('demand', ?1, 'pieces', ?2))",
+    [sqlight.text(id), sqlight.int(pieces)],
+    decode.success(Nil),
+  ))
+  Ok(id)
 }
 
 /// "User Story" gives "US", the prefix of each Piece reference.
@@ -335,19 +344,24 @@ pub fn initials(label: String) -> String {
   }
 }
 
-fn check_text(text: String, when_empty: String) -> Result(Nil, CreateError) {
-  case text == "", string.length(text) > max_text_length {
-    True, _ -> Error(Invalid(when_empty))
-    _, True ->
-      Error(Invalid(
-        "\""
-        <> text
-        <> "\" is longer than "
-        <> int.to_string(max_text_length)
-        <> " characters.",
-      ))
-    False, False -> Ok(Nil)
-  }
+fn check_text(
+  value: String,
+  when_empty: String,
+) -> Result(String, CreateError) {
+  text.check(value, max_text_length)
+  |> result.map_error(fn(error) {
+    case error {
+      text.Empty -> Invalid(when_empty)
+      text.TooLong ->
+        Invalid(
+          "\""
+          <> string.trim(value)
+          <> "\" is longer than "
+          <> int.to_string(max_text_length)
+          <> " characters.",
+        )
+    }
+  })
 }
 
 fn query(
@@ -358,11 +372,4 @@ fn query(
 ) -> Result(List(a), CreateError) {
   sqlight.query(sql, on: connection, with: values, expecting: decoder)
   |> result.replace_error(StoreFailed)
-}
-
-fn exec(
-  connection: sqlight.Connection,
-  sql: String,
-) -> Result(Nil, CreateError) {
-  sqlight.exec(sql, connection) |> result.replace_error(StoreFailed)
 }

@@ -1,3 +1,4 @@
+import bluebin/db
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -84,46 +85,33 @@ pub fn save(
     sqlight.query(sql, on: connection, with: values, expecting: decode.dynamic)
     |> result.replace_error(StoreFailed)
   }
+  use <- db.transaction(connection, fn(_) { StoreFailed })
   use _ <- result.try(
-    sqlight.exec("begin immediate;", connection)
-    |> result.replace_error(StoreFailed),
+    run(
+      "insert or replace into working_calendar (id, days, day_start, day_end)
+     values (1, ?1, ?2, ?3)",
+      [
+        sqlight.text(days),
+        sqlight.text(format_time(calendar.start)),
+        sqlight.text(format_time(calendar.end)),
+      ],
+    ),
   )
-  let saved = {
-    use _ <- result.try(
+  use _ <- result.try(run("delete from holiday", []))
+  list.try_each(calendar.holidays, fn(holiday) {
+    use inserted <- result.try(
       run(
-        "insert or replace into working_calendar (id, days, day_start, day_end)
-       values (1, ?1, ?2, ?3)",
-        [
-          sqlight.text(days),
-          sqlight.text(format_time(calendar.start)),
-          sqlight.text(format_time(calendar.end)),
-        ],
+        "insert or replace into holiday (day, label)
+       select ?1, ?2 where date(?1) is ?1
+       returning day",
+        [sqlight.text(holiday.day), sqlight.text(string.trim(holiday.label))],
       ),
     )
-    use _ <- result.try(run("delete from holiday", []))
-    list.try_each(calendar.holidays, fn(holiday) {
-      use inserted <- result.try(
-        run(
-          "insert or replace into holiday (day, label)
-         select ?1, ?2 where date(?1) is ?1
-         returning day",
-          [sqlight.text(holiday.day), sqlight.text(string.trim(holiday.label))],
-        ),
-      )
-      case inserted {
-        [] -> Error(Invalid("A holiday needs a date like 2026-12-25."))
-        _ -> Ok(Nil)
-      }
-    })
-  }
-  case saved {
-    Ok(Nil) ->
-      sqlight.exec("commit;", connection) |> result.replace_error(StoreFailed)
-    Error(failure) -> {
-      let _ = sqlight.exec("rollback;", connection)
-      Error(failure)
+    case inserted {
+      [] -> Error(Invalid("A holiday needs a date like 2026-12-25."))
+      _ -> Ok(Nil)
     }
-  }
+  })
 }
 
 fn validate(calendar: Calendar) -> Result(Nil, Invalid) {
@@ -190,7 +178,7 @@ fn weekday(day: Int) -> Int {
 }
 
 /// `day` counts days since 1970-01-01, like `Holiday.index`.
-pub fn is_working_day(calendar: Calendar, day: Int) -> Bool {
+fn is_working_day(calendar: Calendar, day: Int) -> Bool {
   list.contains(calendar.days, weekday(day))
   && !list.any(calendar.holidays, fn(holiday) { holiday.index == day })
 }
@@ -307,7 +295,7 @@ fn floor_day(seconds: Int) -> Int {
 }
 
 /// "09:30" is 570 minutes after midnight.
-pub fn parse_time(text: String) -> Result(Int, Nil) {
+fn parse_time(text: String) -> Result(Int, Nil) {
   case string.split(text, ":") {
     [hours, minutes] -> {
       use hours <- result.try(int.parse(hours))
@@ -322,7 +310,7 @@ pub fn parse_time(text: String) -> Result(Int, Nil) {
   }
 }
 
-pub fn format_time(minutes: Int) -> String {
+fn format_time(minutes: Int) -> String {
   let pad = fn(value) { string.pad_start(int.to_string(value), 2, "0") }
   pad(minutes / 60) <> ":" <> pad(minutes % 60)
 }

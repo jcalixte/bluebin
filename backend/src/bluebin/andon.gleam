@@ -1,8 +1,9 @@
 import bluebin/assignment
 import bluebin/calendar.{type Calendar}
+import bluebin/db
+import bluebin/demand
 import bluebin/measures
 import gleam/dynamic/decode
-import gleam/float
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
@@ -50,16 +51,15 @@ pub type Bottleneck {
 }
 
 /// One hour of Working Time (F15).
-pub const rework_wait_limit = 3600
+const rework_wait_limit = 3600
 
-pub fn now(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
-  sqlight.query(
-    "select cast(strftime('%s', 'now') as integer)",
-    on: connection,
-    with: [],
-    expecting: decode.at([0], decode.int),
-  )
-  |> result.map(fn(rows) { list.first(rows) |> result.unwrap(0) })
+/// The Andons open now, with their wait in Working Time.
+pub fn current(
+  connection: sqlight.Connection,
+) -> Result(List(Andon), sqlight.Error) {
+  use calendar <- result.try(calendar.load(connection))
+  use now <- result.try(db.now(connection))
+  andons(connection, calendar, now)
 }
 
 pub fn andons(
@@ -306,7 +306,10 @@ pub fn bottlenecks_json(bottlenecks: List(Bottleneck)) -> Json {
       #("station", json.string(one.station_id)),
       #(
         "capacityHours",
-        json.nullable(option.map(one.capacity, round_to_tenth), json.float),
+        json.nullable(
+          option.map(one.capacity, demand.round_to_tenth),
+          json.float,
+        ),
       ),
       #("slower", json.bool(one.slower)),
       #("fullInFront", json.bool(one.full_in_front)),
@@ -315,9 +318,5 @@ pub fn bottlenecks_json(bottlenecks: List(Bottleneck)) -> Json {
 }
 
 fn hours(seconds: Int) -> Float {
-  round_to_tenth(int.to_float(seconds) /. 3600.0)
-}
-
-fn round_to_tenth(value: Float) -> Float {
-  int.to_float(float.round(value *. 10.0)) /. 10.0
+  demand.round_to_tenth(int.to_float(seconds) /. 3600.0)
 }

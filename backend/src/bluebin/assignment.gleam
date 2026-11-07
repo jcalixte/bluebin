@@ -234,10 +234,7 @@ pub type Station {
   )
 }
 
-pub fn help_downstream(
-  mine: List(Station),
-  all: List(Station),
-) -> Option(Next) {
+fn help_downstream(mine: List(Station), all: List(Station)) -> Option(Next) {
   all
   |> list.filter(fn(other) {
     !list.contains(mine, other)
@@ -352,21 +349,17 @@ pub fn stations(
       stopped: stopped > 0,
     ))
   }
-  sqlight.query(
-    "select w.id, w.name, w.position, w.branch,
+  sqlight.query(stations_sql, on: connection, with: [], expecting: decoder)
+}
+
+const stations_sql = "select w.id, w.name, w.position, w.branch,
             (select group_concat(sp.team_member_id) from station_team_member sp
               where sp.station_id = w.id),
-            w.blue_bins - (select count(*) from piece p
-                            where p.station_id = w.id and p.state = 'in_bin'),
+            " <> flow.free_blue_bins_sql <> ",
             (select count(*) from rework r
               where r.raised_by = w.id and r.closed_at is null)
        from work_station w
-      order by w.position, w.branch",
-    on: connection,
-    with: [],
-    expecting: decoder,
-  )
-}
+      order by w.position, w.branch"
 
 pub fn priority_list(
   connection: sqlight.Connection,

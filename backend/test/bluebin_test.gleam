@@ -895,8 +895,15 @@ pub fn a_step_can_be_renamed_test() {
 pub fn a_rename_is_dated_in_the_flow_event_log_test() {
   use connection <- with_seeded_database()
   let before = count(connection, "select count(*) from flow_event")
-  let assert Ok(_) = line.rename_step(connection, 2, "Design")
+  let assert Ok(_) = line.rename_step(connection, 2, "  Design ")
   assert count(connection, "select count(*) from flow_event") == before + 1
+  assert count(
+      connection,
+      "select count(*) from flow_event
+       where kind = 'step_renamed' and json_valid(payload)
+         and payload ->> '$.name' = 'Design'",
+    )
+    == 1
   assert count(
       connection,
       "select count(*) from line_step
@@ -1141,7 +1148,7 @@ const always_working =
   )
 
 fn andons_now(connection: sqlight.Connection) -> List(andon.Andon) {
-  let assert Ok(now) = andon.now(connection)
+  let assert Ok(now) = db.now(connection)
   let assert Ok(found) = andon.andons(connection, always_working, now)
   found
 }
@@ -1258,7 +1265,7 @@ pub fn the_wait_of_a_rework_counts_only_working_time_test() {
     "update rework set assignee = null, started_at = null,
        opened_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hours')",
   )
-  let assert Ok(now) = andon.now(connection)
+  let assert Ok(now) = db.now(connection)
   let no_working_day =
     calendar.Calendar(days: [], start: 540, end: 960, holidays: [])
   assert andon.andons(connection, no_working_day, now) == Ok([])
@@ -1266,7 +1273,7 @@ pub fn the_wait_of_a_rework_counts_only_working_time_test() {
 
 pub fn an_assignment_with_no_event_for_a_working_day_is_stale_test() {
   use connection <- with_seeded_database()
-  let assert Ok(now) = andon.now(connection)
+  let assert Ok(now) = db.now(connection)
   let assert Ok(#(stale, active)) = andon.stale(connection, always_working, now)
   assert stale == []
   // Bob, Nina, Yasmine and Marc hold a Piece; Alice repairs rw-1.
@@ -1295,7 +1302,7 @@ pub fn a_new_event_freshens_a_stale_assignment_test() {
      insert into flow_event (kind, piece_id) values ('assignment_changed',
        'p-checkout-8-web')",
   )
-  let assert Ok(now) = andon.now(connection)
+  let assert Ok(now) = db.now(connection)
   let assert Ok(#([], _)) = andon.stale(connection, always_working, now)
 }
 

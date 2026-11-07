@@ -1,11 +1,12 @@
-import gleam/bool
+import bluebin/db
+import bluebin/text
+import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
-import gleam/string
 import sqlight
 
 pub type Station {
@@ -86,117 +87,66 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
   use quality <- result.try(query_quality(connection))
   use deviations <- result.try(query_deviations(connection))
 
-  stations
-  |> list.map(fn(station) {
-    station_json(
-      station,
-      parked,
-      members,
-      in_progress,
-      kanbans,
-      rework,
-      quality,
-      deviations,
+  let rows =
+    Rows(
+      parked: by_station(parked, fn(one) { one.station_id }),
+      members: by_station(members, fn(one) { one.station_id }),
+      in_progress: by_station(in_progress, fn(one) { one.station_id }),
+      kanbans: list.map(kanbans, fn(one) { #(one.station_id, one.count) })
+        |> dict.from_list,
+      rework: by_station(rework, fn(one) { one.station_id }),
+      quality: list.map(quality, fn(one) { #(one.station_id, one) })
+        |> dict.from_list,
+      deviations: by_station(deviations, fn(one) { one.station_id }),
     )
-  })
+  stations
+  |> list.map(station_json(_, rows))
   |> json.preprocessed_array
   |> Ok
 }
 
-fn station_json(
-  station: Station,
-  parked: List(Parked),
-  members: List(Member),
-  in_progress: List(InProgress),
-  kanbans: List(Kanbans),
-  rework: List(Rework),
-  quality: List(Quality),
-  deviations: List(Deviation),
-) -> Json {
-  let waiting =
-    parked |> list.filter(fn(piece) { piece.station_id == station.id })
-  let #(in_bins, over) = list.split(waiting, station.blue_bins)
-  let station_bins = bin_rows(1, station.blue_bins, in_bins)
-  let station_overflow =
-    over
-    |> list.map(fn(piece) {
-      json.object([
-        #("id", json.string(piece.id)),
-        #("piece", json.string(piece.reference)),
-        #("demand", json.string(piece.demand)),
-      ])
+/// The rows of every Work Station, by its id.
+type Rows {
+  Rows(
+    parked: Dict(String, List(Parked)),
+    members: Dict(String, List(Member)),
+    in_progress: Dict(String, List(InProgress)),
+    kanbans: Dict(String, Int),
+    rework: Dict(String, List(Rework)),
+    quality: Dict(String, Quality),
+    deviations: Dict(String, List(Deviation)),
+  )
+}
+
+/// Keeps the order of `rows` within each Work Station.
+fn by_station(
+  rows: List(a),
+  station_id: fn(a) -> String,
+) -> Dict(String, List(a)) {
+  list.fold_right(rows, dict.new(), fn(groups, row) {
+    dict.upsert(groups, station_id(row), fn(found) {
+      [row, ..option.unwrap(found, [])]
     })
+  })
+}
 
-  let station_members =
-    members
-    |> list.filter(fn(member) { member.station_id == station.id })
-    |> list.map(fn(member) {
-      json.object([
-        #("id", json.string(member.id)),
-        #("name", json.string(member.name)),
-        #("busy", json.bool(member.busy)),
-      ])
-    })
+fn of(groups: Dict(String, List(a)), station: Station) -> List(a) {
+  dict.get(groups, station.id) |> result.unwrap([])
+}
 
-  let station_pieces =
-    in_progress
-    |> list.filter(fn(piece) { piece.station_id == station.id })
-    |> list.map(fn(piece) {
-      json.object([
-        #("id", json.string(piece.id)),
-        #("piece", json.string(piece.piece)),
-        #("demand", json.string(piece.demand)),
-        #("teamMember", json.nullable(piece.team_member, json.string)),
-        #("teamMemberId", json.nullable(piece.team_member_id, json.string)),
-        #("paused", json.bool(piece.paused)),
-      ])
-    })
+fn station_json(station: Station, rows: Rows) -> Json {
+  let #(in_bins, over) = list.split(of(rows.parked, station), station.blue_bins)
+  let quality = dict.get(rows.quality, station.id)
 
-  let station_rework =
-    rework
-    |> list.filter(fn(item) { item.station_id == station.id })
-    |> list.map(fn(item) {
-      json.object([
-        #("id", json.string(item.id)),
-        #("piece", json.string(item.piece)),
-        #("description", json.string(item.description)),
-        #("foundBy", json.string(item.found_by)),
-        #("assignee", json.nullable(item.assignee, json.string)),
-        #("assigneeId", json.nullable(item.assignee_id, json.string)),
-      ])
-    })
-
-  let station_deviations =
-    deviations
-    |> list.filter(fn(item) { item.station_id == station.id })
-    |> list.take(3)
-    |> list.map(fn(item) {
-      json.object([
-        #("rule", json.string(item.rule)),
-        #("piece", json.nullable(item.piece, json.string)),
-        #("reason", json.string(item.reason)),
-        #("at", json.string(item.at)),
-      ])
-    })
-
-  let station_quality =
-    quality |> list.find(fn(item) { item.station_id == station.id })
-
-  let first_pass_yield = case station_quality {
+  let first_pass_yield = case quality {
     Ok(Quality(passes: passes, defects: defects, ..)) if passes > 0 ->
       Some(int.to_float(int.max(passes - defects, 0)) /. int.to_float(passes))
     _ -> None
   }
-  let rework_hours = case station_quality {
+  let rework_hours = case quality {
     Ok(one) -> one.rework_hours
     Error(_) -> 0.0
   }
-
-  let kanban_count =
-    kanbans
-    |> list.find(fn(item) { item.station_id == station.id })
-    |> result.map(fn(item) { item.count })
-    |> result.unwrap(0)
 
   json.object([
     #("id", json.string(station.id)),
@@ -205,15 +155,71 @@ fn station_json(
     #("branch", json.nullable(station.branch, json.string)),
     #("blueBinCount", json.int(station.blue_bins)),
     #("teamLeader", json.nullable(station.team_leader, json.string)),
-    #("blueBins", json.preprocessed_array(station_bins)),
-    #("overflow", json.preprocessed_array(station_overflow)),
-    #("teamMembers", json.preprocessed_array(station_members)),
-    #("inProgress", json.preprocessed_array(station_pieces)),
-    #("rework", json.preprocessed_array(station_rework)),
+    #(
+      "blueBins",
+      json.preprocessed_array(bin_rows(1, station.blue_bins, in_bins)),
+    ),
+    #("overflow", json.array(over, overflow_json)),
+    #("teamMembers", json.array(of(rows.members, station), member_json)),
+    #("inProgress", json.array(of(rows.in_progress, station), in_progress_json)),
+    #("rework", json.array(of(rows.rework, station), rework_json)),
     #("firstPassYield", json.nullable(first_pass_yield, json.float)),
     #("reworkHours", json.float(rework_hours)),
-    #("deviations", json.preprocessed_array(station_deviations)),
-    #("kanbans", json.int(kanban_count)),
+    #(
+      "deviations",
+      json.array(of(rows.deviations, station) |> list.take(3), deviation_json),
+    ),
+    #(
+      "kanbans",
+      json.int(dict.get(rows.kanbans, station.id) |> result.unwrap(0)),
+    ),
+  ])
+}
+
+fn overflow_json(piece: Parked) -> Json {
+  json.object([
+    #("id", json.string(piece.id)),
+    #("piece", json.string(piece.reference)),
+    #("demand", json.string(piece.demand)),
+  ])
+}
+
+fn member_json(member: Member) -> Json {
+  json.object([
+    #("id", json.string(member.id)),
+    #("name", json.string(member.name)),
+    #("busy", json.bool(member.busy)),
+  ])
+}
+
+fn in_progress_json(piece: InProgress) -> Json {
+  json.object([
+    #("id", json.string(piece.id)),
+    #("piece", json.string(piece.piece)),
+    #("demand", json.string(piece.demand)),
+    #("teamMember", json.nullable(piece.team_member, json.string)),
+    #("teamMemberId", json.nullable(piece.team_member_id, json.string)),
+    #("paused", json.bool(piece.paused)),
+  ])
+}
+
+fn rework_json(item: Rework) -> Json {
+  json.object([
+    #("id", json.string(item.id)),
+    #("piece", json.string(item.piece)),
+    #("description", json.string(item.description)),
+    #("foundBy", json.string(item.found_by)),
+    #("assignee", json.nullable(item.assignee, json.string)),
+    #("assigneeId", json.nullable(item.assignee_id, json.string)),
+  ])
+}
+
+fn deviation_json(item: Deviation) -> Json {
+  json.object([
+    #("rule", json.string(item.rule)),
+    #("piece", json.nullable(item.piece, json.string)),
+    #("reason", json.string(item.reason)),
+    #("at", json.string(item.at)),
   ])
 }
 
@@ -485,7 +491,8 @@ pub type RenameError {
   StoreFailed
 }
 
-/// The longest step name the wall-TV column layout holds without breaking.
+/// The longest name (step, Work Station, Branch, Team Member, label) the
+/// wall-TV column layout holds without breaking.
 pub const max_name_length = 40
 
 pub fn list_steps(
@@ -518,13 +525,17 @@ pub fn rename_step(
   position: Int,
   name: String,
 ) -> Result(Step, RenameError) {
-  let trimmed = string.trim(name)
-  use <- bool.guard(trimmed == "", Error(EmptyName))
-  use <- bool.guard(
-    string.length(trimmed) > max_name_length,
-    Error(NameTooLong),
+  use trimmed <- result.try(
+    text.check(name, max_name_length)
+    |> result.map_error(fn(error) {
+      case error {
+        text.Empty -> EmptyName
+        text.TooLong -> NameTooLong
+      }
+    }),
   )
-
+  // The new name and its flow event commit together.
+  use <- db.transaction(connection, fn(_) { StoreFailed })
   let update =
     sqlight.query(
       "update line_step
@@ -546,7 +557,8 @@ pub fn rename_step(
     Ok([step, ..]) -> {
       let event =
         sqlight.query(
-          "insert into flow_event (kind, payload) values ('step_renamed', ?)
+          "insert into flow_event (kind, payload)
+           values ('step_renamed', json_object('name', ?))
            returning id",
           on: connection,
           with: [sqlight.text(trimmed)],

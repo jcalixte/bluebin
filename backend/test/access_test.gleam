@@ -13,7 +13,7 @@ import simplifile
 import wisp/simulate
 
 /// Every route inside a Line, as the router knows it. A route added to the
-/// router and not to the role table is refused: add it here too.
+/// router and not to the role table answers 404: add it here too.
 const routes = [
   #(http.Get, ["api"], access.Read),
   #(http.Get, ["api", "events"], access.Read),
@@ -54,9 +54,50 @@ pub fn each_route_has_its_need_test() {
 }
 
 pub fn a_route_missing_from_the_table_is_refused_test() {
-  assert access.need(http.Get, ["api", "nothing"]) == Error(Nil)
-  assert access.need(http.Delete, ["api", "demands"]) == Error(Nil)
-  assert access.need(http.Get, ["api", "reset"]) == Error(Nil)
+  assert access.need(http.Get, ["api", "nothing"]) == Error(access.NoSuchRoute)
+  assert access.need(http.Delete, ["api", "demands"])
+    == Error(access.WrongMethod([http.Get, http.Post]))
+  assert access.need(http.Get, ["api", "reset"])
+    == Error(access.WrongMethod([http.Post]))
+}
+
+/// An unknown path inside a Line answers 404 and a known one with another
+/// method 405, once the Line opens to the caller.
+pub fn an_unknown_route_in_a_line_is_not_found_test() {
+  let world = world(True)
+  let #(unknown, _) =
+    call(
+      world.context,
+      http.Get,
+      in_owner(world, "main", "/nothing"),
+      world.owner,
+      "",
+    )
+  let #(wrong_method, _) =
+    call(
+      world.context,
+      http.Delete,
+      in_owner(world, "main", "/demands"),
+      world.owner,
+      "",
+    )
+  let #(legacy, _) =
+    call(world.context, http.Get, "/api/nothing", world.owner, "")
+  let #(hidden, _) =
+    call(
+      world.context,
+      http.Delete,
+      in_owner(world, "main", "/demands"),
+      world.bob,
+      "",
+    )
+  clean(world)
+
+  assert unknown == 404
+  assert wrong_method == 405
+  assert legacy == 404
+  // A Private Line does not show it exists, nor which routes it has (F48).
+  assert hidden == 404
 }
 
 pub fn each_role_reaches_only_its_routes_test() {
@@ -459,6 +500,21 @@ pub fn with_sso_off_no_other_workspace_opens_test() {
   assert ada == 404
   assert !string.contains(menu, world.owner.0)
   assert share == 403
+}
+
+pub fn sharing_with_no_email_is_unauthorized_test() {
+  let world = world(True)
+  let #(status, _) =
+    call(
+      world.context,
+      http.Put,
+      "/api/lines/main/sharing",
+      #(world.owner.0, ""),
+      "{\"shared\": true}",
+    )
+  clean(world)
+
+  assert status == 401
 }
 
 fn look(world: World, path: String) -> String {

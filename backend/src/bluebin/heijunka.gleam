@@ -244,7 +244,7 @@ where d.state = 'active'
 order by s.day
 "
 
-pub const mix_days = 5
+const mix_days = 5
 
 pub fn product_mix(
   connection: sqlight.Connection,

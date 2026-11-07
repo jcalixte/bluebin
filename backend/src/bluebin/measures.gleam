@@ -1,4 +1,5 @@
 import bluebin/calendar.{type Calendar}
+import bluebin/db
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/float
@@ -238,11 +239,7 @@ pub fn replenishment(
   use filled <- result.try(option.to_result(pass.filled, Nil))
   let span = span(calendar, pass.start, filled, pass.touch)
   let working = lead_working(span)
-  let held =
-    clip(pass.held, pass.start, filled)
-    |> list.fold(0, fn(total, one) {
-      total + calendar.working_seconds(calendar, one.0, one.1)
-    })
+  let held = working_total(calendar, clip(pass.held, pass.start, filled))
   Ok(Replenishment(
     filled:,
     calendar: lead(span),
@@ -303,13 +300,21 @@ pub fn span(
   touches: List(Interval),
 ) -> Span {
   let touched = union(clip(touches, from, to))
-  let touch = list.fold(touched, 0, fn(total, one) { total + one.1 - one.0 })
-  let stagnation_working =
-    gaps(touched, from, to)
-    |> list.fold(0, fn(total, gap) {
-      total + calendar.working_seconds(calendar, gap.0, gap.1)
-    })
+  let touch = calendar_total(touched)
+  let stagnation_working = working_total(calendar, gaps(touched, from, to))
   Span(touch:, stagnation: int.max(0, to - from) - touch, stagnation_working:)
+}
+
+/// The sum of `intervals`, in Calendar Time.
+fn calendar_total(intervals: List(Interval)) -> Int {
+  list.fold(intervals, 0, fn(total, one) { total + one.1 - one.0 })
+}
+
+/// The sum of `intervals`, in Working Time.
+fn working_total(calendar: Calendar, intervals: List(Interval)) -> Int {
+  list.fold(intervals, 0, fn(total, one) {
+    total + calendar.working_seconds(calendar, one.0, one.1)
+  })
 }
 
 fn clip(intervals: List(Interval), from: Int, to: Int) -> List(Interval) {
@@ -492,101 +497,22 @@ pub fn load(
   from: String,
   to: String,
 ) -> Result(Measures, MeasuresError) {
-  use period <- result.try(
-    query(
-      connection,
-      "select date(?1) is ?1 and date(?2) is ?2 and ?1 <= ?2,
-              cast(strftime('%s', ?1) as integer),
-              cast(strftime('%s', ?2, '+1 day') as integer),
-              cast(strftime('%s', 'now') as integer)",
-      [sqlight.text(from), sqlight.text(to)],
-      {
-        use valid <- decode.field(0, decode.optional(decode.int))
-        use start <- decode.field(1, decode.optional(decode.int))
-        use end <- decode.field(2, decode.optional(decode.int))
-        use now <- decode.field(3, decode.int)
-        decode.success(#(valid, start, end, now))
-      },
-    ),
-  )
-  use #(period, now) <- result.try(case period {
-    [#(Some(1), Some(start), Some(end), now)] ->
-      Ok(#(Period(from:, to:, start:, end:), now))
-    _ -> Error(InvalidPeriod)
-  })
+  use period <- result.try(load_period(connection, from, to))
+  use now <- result.try(db.now(connection) |> result.replace_error(StoreFailed))
   use #(calendar, events, pieces, children, passes) <- result.try(load_passes(
     connection,
     now,
   ))
-  use reworks <- result.try(
-    query(
-      connection,
-      "select piece_id, cast(strftime('%s', started_at) as integer),
-            cast(strftime('%s', coalesce(closed_at, 'now')) as integer)
-       from rework where started_at is not null",
-      [],
-      {
-        use piece <- decode.field(0, decode.string)
-        use start <- decode.field(1, decode.int)
-        use end <- decode.field(2, decode.int)
-        decode.success(#(piece, #(start, end)))
-      },
-    ),
-  )
-  use stops <- result.try(
-    query(
-      connection,
-      "select station_id, cast(strftime('%s', raised_at) as integer),
-            cast(strftime('%s', coalesce(closed_at, 'now')) as integer)
-       from andon",
-      [],
-      {
-        use station <- decode.field(0, decode.string)
-        use start <- decode.field(1, decode.int)
-        use end <- decode.field(2, decode.int)
-        decode.success(#(station, #(start, end)))
-      },
-    ),
-  )
-  use stations <- result.try(
-    query(
-      connection,
-      "select id, name, branch, position from work_station
-      order by position, branch",
-      [],
-      {
-        use id <- decode.field(0, decode.string)
-        use name <- decode.field(1, decode.string)
-        use branch <- decode.field(2, decode.optional(decode.string))
-        use position <- decode.field(3, decode.int)
-        decode.success(#(id, name, branch, position))
-      },
-    ),
-  )
-  use demands <- result.try(
-    query(
-      connection,
-      "select id, label, client from demand order by due_on",
-      [],
-      {
-        use id <- decode.field(0, decode.string)
-        use label <- decode.field(1, decode.string)
-        use client <- decode.field(2, decode.string)
-        decode.success(#(id, label, client))
-      },
-    ),
-  )
-  use delivery_rows <- result.try(
-    query(connection, on_time_sql, [sqlight.text(from), sqlight.text(to)], {
-      use delivered <- decode.field(0, decode.int)
-      use on_time <- decode.field(1, decode.int)
-      decode.success(#(delivered, on_time))
-    }),
-  )
-  let #(delivered, on_time) = case delivery_rows {
-    [row, ..] -> row
-    [] -> #(0, 0)
-  }
+  use reworks <- result.try(query(connection, reworks_sql, [], timed_decoder()))
+  use stops <- result.try(query(connection, stops_sql, [], timed_decoder()))
+  use stations <- result.try(query(
+    connection,
+    stations_sql,
+    [],
+    station_decoder(),
+  ))
+  use demands <- result.try(query(connection, demands_sql, [], demand_decoder()))
+  use #(delivered, on_time) <- result.try(load_deliveries(connection, from, to))
   use deviations <- result.try(query(
     connection,
     deviations_sql,
@@ -594,184 +520,314 @@ pub fn load(
     deviation_decoder(),
   ))
 
-  let touches = fn(units: List(String)) {
-    list.append(
-      passes
-        |> list.filter(fn(pass) { list.contains(units, pass.unit) })
-        |> list.flat_map(fn(pass) { pass.touch }),
-      reworks
-        |> list.filter(fn(rework) { list.contains(units, rework.0) })
-        |> list.map(fn(rework) { rework.1 }),
+  let context =
+    Context(
+      calendar:,
+      period:,
+      now:,
+      children:,
+      passes_by_unit: group(passes, fn(pass) { pass.unit }),
+      reworks_by_unit: group(reworks, fn(rework) { rework.0 })
+        |> dict.map_values(fn(_, found) { list.map(found, fn(one) { one.1 }) }),
     )
-  }
-  let units_of = fn(piece: PieceRow) {
-    [piece.id, ..result.unwrap(dict.get(children, piece.id), [])]
-  }
-  let in_period = fn(at: Int) { at >= period.start && at < period.end }
-
-  let produced =
-    list.filter_map(pieces, fn(piece) {
-      case piece.parent, piece.produced {
-        None, Some(produced) ->
-          case in_period(produced) {
-            True -> {
-              let first_pull =
-                passes
-                |> list.filter(fn(pass) { pass.unit == piece.id })
-                |> list.map(fn(pass) { pass.start })
-                |> list.reduce(int.min)
-              Ok(PieceMeasure(
-                id: piece.id,
-                demand: piece.demand,
-                produced:,
-                span: span(
-                  calendar,
-                  piece.entered,
-                  produced,
-                  touches(units_of(piece)),
-                ),
-                backlog: first_pull
-                  |> result.map(fn(pulled) {
-                    span(calendar, piece.entered, pulled, [])
-                  })
-                  |> option.from_result,
-              ))
-            }
-            False -> Error(Nil)
-          }
-        _, _ -> Error(Nil)
-      }
-    })
-
-  let demand_measures =
-    list.filter_map(demands, fn(demand) {
-      let #(id, label, client) = demand
-      case list.filter(produced, fn(piece) { piece.demand == id }) {
-        [] -> Error(Nil)
-        measured -> {
-          let all =
-            list.filter(pieces, fn(piece) {
-              piece.demand == id && piece.parent == None
-            })
-          let last =
-            all
-            |> list.map(fn(piece) { option.unwrap(piece.produced, period.end) })
-            |> list.fold(0, int.max)
-          let whole = case
-            list.all(all, fn(piece) { piece.produced != None })
-            && last < period.end
-          {
-            True -> {
-              let first =
-                all
-                |> list.map(fn(piece) { piece.entered })
-                |> list.reduce(int.min)
-                |> result.unwrap(last)
-              Some(span(
-                calendar,
-                first,
-                last,
-                list.flat_map(all, fn(piece) { touches(units_of(piece)) }),
-              ))
-            }
-            False -> None
-          }
-          Ok(DemandMeasure(id:, label:, client:, pieces: measured, lead: whole))
-        }
-      }
-    })
-
-  let held = kanban_held(events, now)
-  let in_measured = fn(intervals) {
-    let intervals = clip(intervals, period.start, int.min(period.end, now))
-    #(
-      list.fold(intervals, 0, fn(total, one) { total + one.1 - one.0 }),
-      list.fold(intervals, 0, fn(total, one) {
-        total + calendar.working_seconds(calendar, one.0, one.1)
-      }),
-    )
-  }
-  let station_measures =
-    list.map(stations, fn(station) {
-      let #(id, name, branch, position) = station
-      let station_passes =
-        list.filter_map(passes, fn(pass) {
-          case pass.station == id, pass.end {
-            True, Some(end) ->
-              case in_period(end) {
-                True ->
-                  Ok(span(
-                    calendar,
-                    pass.start,
-                    end,
-                    list.append(
-                      pass.touch,
-                      touches_of_reworks(reworks, pass.unit),
-                    ),
-                  ))
-                False -> Error(Nil)
-              }
-            _, _ -> Error(Nil)
-          }
-        })
-      let replenishments =
-        list.filter_map(passes, fn(pass) {
-          case pass.station == id {
-            True ->
-              replenishment(calendar, pass)
-              |> result.try(fn(one) {
-                case in_period(one.filled) {
-                  True -> Ok(one)
-                  False -> Error(Nil)
-                }
-              })
-            False -> Error(Nil)
-          }
-        })
-      let #(starvation, starvation_working) =
-        dict.get(held, id) |> result.unwrap([]) |> in_measured
-      let station_stops =
-        list.filter_map(stops, fn(stop) {
-          case stop.0 == id {
-            True -> Ok(stop.1)
-            False -> Error(Nil)
-          }
-        })
-      let #(andon, andon_working) = in_measured(station_stops)
-      StationMeasure(
-        id:,
-        name:,
-        branch:,
-        position:,
-        passes: station_passes,
-        replenishments:,
-        starvation:,
-        starvation_working:,
-        andon:,
-        andon_working:,
-        andons: list.count(station_stops, fn(stop) { in_period(stop.0) }),
-        pulls: list.count(events, fn(event) {
-          { event.kind == "piece_pulled" || event.kind == "piece_assembled" }
-          && event.station == Some(id)
-          && in_period(event.at)
-        }),
-        deviations: list.count(deviations, fn(row) { row.station == id }),
-      )
-    })
-
+  let produced = piece_measures(context, pieces)
   let #(andon, andon_working) =
-    stops |> list.map(fn(stop) { stop.1 }) |> union |> in_measured
+    stops |> list.map(fn(stop) { stop.1 }) |> union |> measured(context, _)
   Ok(Measures(
     period:,
     pieces: produced,
-    demands: demand_measures,
-    stations: station_measures,
+    demands: demand_measures(context, demands, pieces, produced),
+    stations: station_measures(
+      context,
+      stations,
+      passes,
+      events,
+      stops,
+      deviations,
+    ),
     deviations:,
     andon:,
     andon_working:,
     delivered:,
     on_time:,
   ))
+}
+
+/// What the measures of one `load` share. The passes and the Rework touches
+/// are grouped by Piece or Sub-Piece once, so no measure rescans them.
+type Context {
+  Context(
+    calendar: Calendar,
+    period: Period,
+    now: Int,
+    children: Dict(String, List(String)),
+    passes_by_unit: Dict(String, List(Pass)),
+    reworks_by_unit: Dict(String, List(Interval)),
+  )
+}
+
+type StationRow {
+  StationRow(id: String, name: String, branch: Option(String), position: Int)
+}
+
+type DemandRow {
+  DemandRow(id: String, label: String, client: String)
+}
+
+fn load_period(
+  connection: sqlight.Connection,
+  from: String,
+  to: String,
+) -> Result(Period, MeasuresError) {
+  use rows <- result.try(
+    query(
+      connection,
+      "select date(?1) is ?1 and date(?2) is ?2 and ?1 <= ?2,
+              cast(strftime('%s', ?1) as integer),
+              cast(strftime('%s', ?2, '+1 day') as integer)",
+      [sqlight.text(from), sqlight.text(to)],
+      {
+        use valid <- decode.field(0, decode.optional(decode.int))
+        use start <- decode.field(1, decode.optional(decode.int))
+        use end <- decode.field(2, decode.optional(decode.int))
+        decode.success(#(valid, start, end))
+      },
+    ),
+  )
+  case rows {
+    [#(Some(1), Some(start), Some(end))] -> Ok(Period(from:, to:, start:, end:))
+    _ -> Error(InvalidPeriod)
+  }
+}
+
+/// Demands delivered in the period, and those of them on time.
+fn load_deliveries(
+  connection: sqlight.Connection,
+  from: String,
+  to: String,
+) -> Result(#(Int, Int), MeasuresError) {
+  use rows <- result.try(
+    query(connection, on_time_sql, [sqlight.text(from), sqlight.text(to)], {
+      use delivered <- decode.field(0, decode.int)
+      use on_time <- decode.field(1, decode.int)
+      decode.success(#(delivered, on_time))
+    }),
+  )
+  case rows {
+    [row, ..] -> Ok(row)
+    [] -> Ok(#(0, 0))
+  }
+}
+
+fn in_period(context: Context, at: Int) -> Bool {
+  at >= context.period.start && at < context.period.end
+}
+
+/// Calendar Time and Working Time of `intervals` inside the period, up to now.
+fn measured(context: Context, intervals: List(Interval)) -> #(Int, Int) {
+  let intervals =
+    clip(
+      intervals,
+      context.period.start,
+      int.min(context.period.end, context.now),
+    )
+  #(calendar_total(intervals), working_total(context.calendar, intervals))
+}
+
+/// The touches of a Piece and its Sub-Pieces: their passes and their Rework.
+fn touches(context: Context, piece: String) -> List(Interval) {
+  [piece, ..lookup(context.children, piece)]
+  |> list.flat_map(fn(unit) {
+    list.append(
+      lookup(context.passes_by_unit, unit)
+        |> list.flat_map(fn(pass) { pass.touch }),
+      lookup(context.reworks_by_unit, unit),
+    )
+  })
+}
+
+/// The Pieces that reached production in the period.
+fn piece_measures(
+  context: Context,
+  pieces: List(PieceRow),
+) -> List(PieceMeasure) {
+  list.filter_map(pieces, fn(piece) {
+    case piece.parent, piece.produced {
+      None, Some(produced) ->
+        case in_period(context, produced) {
+          True -> {
+            let first_pull =
+              lookup(context.passes_by_unit, piece.id)
+              |> list.map(fn(pass) { pass.start })
+              |> list.reduce(int.min)
+            Ok(PieceMeasure(
+              id: piece.id,
+              demand: piece.demand,
+              produced:,
+              span: span(
+                context.calendar,
+                piece.entered,
+                produced,
+                touches(context, piece.id),
+              ),
+              backlog: first_pull
+                |> result.map(fn(pulled) {
+                  span(context.calendar, piece.entered, pulled, [])
+                })
+                |> option.from_result,
+            ))
+          }
+          False -> Error(Nil)
+        }
+      _, _ -> Error(Nil)
+    }
+  })
+}
+
+/// The Demands with a Piece produced in the period. The Demand Lead Time
+/// shows once every Piece of the Demand is in production.
+fn demand_measures(
+  context: Context,
+  demands: List(DemandRow),
+  pieces: List(PieceRow),
+  produced: List(PieceMeasure),
+) -> List(DemandMeasure) {
+  let produced_by_demand = group(produced, fn(piece) { piece.demand })
+  let pieces_by_demand =
+    pieces
+    |> list.filter(fn(piece) { piece.parent == None })
+    |> group(fn(piece) { piece.demand })
+  list.filter_map(demands, fn(demand) {
+    case lookup(produced_by_demand, demand.id) {
+      [] -> Error(Nil)
+      measured ->
+        Ok(DemandMeasure(
+          id: demand.id,
+          label: demand.label,
+          client: demand.client,
+          pieces: measured,
+          lead: demand_lead(context, lookup(pieces_by_demand, demand.id)),
+        ))
+    }
+  })
+}
+
+/// `all` is every Piece of the Demand.
+fn demand_lead(context: Context, all: List(PieceRow)) -> Option(Span) {
+  let end = context.period.end
+  let last =
+    all
+    |> list.map(fn(piece) { option.unwrap(piece.produced, end) })
+    |> list.fold(0, int.max)
+  case list.all(all, fn(piece) { piece.produced != None }) && last < end {
+    True -> {
+      let first =
+        all
+        |> list.map(fn(piece) { piece.entered })
+        |> list.reduce(int.min)
+        |> result.unwrap(last)
+      Some(span(
+        context.calendar,
+        first,
+        last,
+        list.flat_map(all, fn(piece) { touches(context, piece.id) }),
+      ))
+    }
+    False -> None
+  }
+}
+
+fn station_measures(
+  context: Context,
+  stations: List(StationRow),
+  passes: List(Pass),
+  events: List(Event),
+  stops: List(#(String, Interval)),
+  deviations: List(DeviationRow),
+) -> List(StationMeasure) {
+  let passes_by_station = group(passes, fn(pass) { pass.station })
+  let stops_by_station =
+    group(stops, fn(stop) { stop.0 })
+    |> dict.map_values(fn(_, found) { list.map(found, fn(stop) { stop.1 }) })
+  let pulls_by_station =
+    list.filter_map(events, fn(event) {
+      case event.kind, event.station {
+        "piece_pulled", Some(station) | "piece_assembled", Some(station) ->
+          case in_period(context, event.at) {
+            True -> Ok(station)
+            False -> Error(Nil)
+          }
+        _, _ -> Error(Nil)
+      }
+    })
+    |> group(fn(station) { station })
+  let deviations_by_station = group(deviations, fn(row) { row.station })
+  let held = kanban_held(events, context.now)
+  list.map(stations, fn(station) {
+    let id = station.id
+    let station_passes = lookup(passes_by_station, id)
+    let station_stops = lookup(stops_by_station, id)
+    let #(starvation, starvation_working) = measured(context, lookup(held, id))
+    let #(andon, andon_working) = measured(context, station_stops)
+    StationMeasure(
+      id:,
+      name: station.name,
+      branch: station.branch,
+      position: station.position,
+      passes: closed_spans(context, station_passes),
+      replenishments: list.filter_map(station_passes, fn(pass) {
+        replenishment(context.calendar, pass)
+        |> result.try(fn(one) {
+          case in_period(context, one.filled) {
+            True -> Ok(one)
+            False -> Error(Nil)
+          }
+        })
+      }),
+      starvation:,
+      starvation_working:,
+      andon:,
+      andon_working:,
+      andons: list.count(station_stops, fn(stop) { in_period(context, stop.0) }),
+      pulls: list.length(lookup(pulls_by_station, id)),
+      deviations: list.length(lookup(deviations_by_station, id)),
+    )
+  })
+}
+
+/// The Station Lead Time of each pass that ended in the period, with the
+/// Rework of its Piece as touch.
+fn closed_spans(context: Context, passes: List(Pass)) -> List(Span) {
+  list.filter_map(passes, fn(pass) {
+    case pass.end {
+      Some(end) ->
+        case in_period(context, end) {
+          True ->
+            Ok(span(
+              context.calendar,
+              pass.start,
+              end,
+              list.append(
+                pass.touch,
+                lookup(context.reworks_by_unit, pass.unit),
+              ),
+            ))
+          False -> Error(Nil)
+        }
+      None -> Error(Nil)
+    }
+  })
+}
+
+/// `items` grouped by `key`, each group in the order of `items`: the order
+/// of the passes breaks ties when the suggestion sorts them.
+fn group(items: List(a), key: fn(a) -> k) -> Dict(k, List(a)) {
+  // `list.group` prepends, so grouping the reversed list keeps the order.
+  items |> list.reverse |> list.group(key)
+}
+
+fn lookup(groups: Dict(k, List(a)), key: k) -> List(a) {
+  dict.get(groups, key) |> result.unwrap([])
 }
 
 fn query(
@@ -821,16 +877,8 @@ pub fn suggestions(
   connection: sqlight.Connection,
   takt_hours: Float,
 ) -> Result(Dict(String, Suggestion), MeasuresError) {
-  use now <- result.try(query(
-    connection,
-    "select cast(strftime('%s', 'now') as integer)",
-    [],
-    decode.at([0], decode.int),
-  ))
-  use #(calendar, _, _, _, passes) <- result.try(load_passes(
-    connection,
-    list.first(now) |> result.unwrap(0),
-  ))
+  use now <- result.try(db.now(connection) |> result.replace_error(StoreFailed))
+  use #(calendar, _, _, _, passes) <- result.try(load_passes(connection, now))
   passes
   |> list.filter_map(fn(pass) {
     replenishment(calendar, pass)
@@ -841,18 +889,6 @@ pub fn suggestions(
     suggest(list.map(entries, fn(entry) { entry.1 }), takt_hours)
   })
   |> Ok
-}
-
-fn touches_of_reworks(
-  reworks: List(#(String, Interval)),
-  unit: String,
-) -> List(Interval) {
-  list.filter_map(reworks, fn(rework) {
-    case rework.0 == unit {
-      True -> Ok(rework.1)
-      False -> Error(Nil)
-    }
-  })
 }
 
 const events_sql =
@@ -874,6 +910,28 @@ select p.id, p.parent_id, p.demand_id,
        cast(strftime('%s', p.produced_at) as integer)
   from piece p join demand d on d.id = p.demand_id
 "
+
+const reworks_sql =
+  "
+select piece_id, cast(strftime('%s', started_at) as integer),
+       cast(strftime('%s', coalesce(closed_at, 'now')) as integer)
+  from rework where started_at is not null
+"
+
+const stops_sql =
+  "
+select station_id, cast(strftime('%s', raised_at) as integer),
+       cast(strftime('%s', coalesce(closed_at, 'now')) as integer)
+  from andon
+"
+
+const stations_sql =
+  "
+select id, name, branch, position from work_station
+ order by position, branch
+"
+
+const demands_sql = "select id, label, client from demand order by due_on"
 
 /// A Demand is delivered on the day of its last Piece in production.
 const on_time_sql =
@@ -915,6 +973,29 @@ fn piece_decoder() -> decode.Decoder(PieceRow) {
   use entered <- decode.field(3, decode.int)
   use produced <- decode.field(4, decode.optional(decode.int))
   decode.success(PieceRow(id:, parent:, demand:, entered:, produced:))
+}
+
+/// A Rework of a Piece, or an Andon of a Work Station, with its interval.
+fn timed_decoder() -> decode.Decoder(#(String, Interval)) {
+  use id <- decode.field(0, decode.string)
+  use start <- decode.field(1, decode.int)
+  use end <- decode.field(2, decode.int)
+  decode.success(#(id, #(start, end)))
+}
+
+fn station_decoder() -> decode.Decoder(StationRow) {
+  use id <- decode.field(0, decode.string)
+  use name <- decode.field(1, decode.string)
+  use branch <- decode.field(2, decode.optional(decode.string))
+  use position <- decode.field(3, decode.int)
+  decode.success(StationRow(id:, name:, branch:, position:))
+}
+
+fn demand_decoder() -> decode.Decoder(DemandRow) {
+  use id <- decode.field(0, decode.string)
+  use label <- decode.field(1, decode.string)
+  use client <- decode.field(2, decode.string)
+  decode.success(DemandRow(id:, label:, client:))
 }
 
 fn deviation_decoder() -> decode.Decoder(DeviationRow) {

@@ -1,4 +1,5 @@
 import bluebin/db
+import bluebin/text
 import gleam/dynamic/decode
 import gleam/int
 import gleam/list
@@ -66,11 +67,18 @@ pub fn database(
   line: String,
   start: db.Start,
 ) -> Result(String, LineError) {
+  open(workspace, line, start, fn(_) { Ok(path(workspace, line)) })
+}
+
+/// Like `database`, then `run` on the same connection.
+fn open(
+  workspace: String,
+  line: String,
+  start: db.Start,
+  run: fn(sqlight.Connection) -> Result(a, LineError),
+) -> Result(a, LineError) {
   use <- guard_known(workspace, line)
-  let path = path(workspace, line)
-  db.ready(path, start)
-  |> result.replace(path)
-  |> result.replace_error(StoreFailed)
+  db.open(path(workspace, line), start, fn(_) { StoreFailed }, run)
 }
 
 /// Never makes a file: a link into another Workspace must not create it.
@@ -119,8 +127,8 @@ pub fn list(
 
   [first, ..others]
   |> list.try_map(fn(id) {
-    use database <- result.try(database(workspace, id, start))
-    use name <- result.map(name_of(database))
+    use connection <- open(workspace, id, start)
+    use name <- result.map(name_of(connection))
     Line(id:, name:)
   })
   |> result.map(list.sort(_, by_name))
@@ -131,8 +139,7 @@ fn by_name(one: Line, other: Line) -> order.Order {
   |> order.break_tie(string.compare(one.id, other.id))
 }
 
-fn name_of(database: String) -> Result(String, LineError) {
-  use connection <- db.with_connection_at(database)
+fn name_of(connection: sqlight.Connection) -> Result(String, LineError) {
   case
     sqlight.query(
       "select name from line_label where id = 1",
@@ -195,12 +202,13 @@ fn save_name(connection: sqlight.Connection, name: String) -> Result(Nil, Nil) {
 }
 
 fn check_name(name: String) -> Result(String, LineError) {
-  let name = string.trim(name)
-  case string.is_empty(name), string.length(name) > max_name_length {
-    True, _ -> Error(EmptyName)
-    _, True -> Error(NameTooLong)
-    False, False -> Ok(name)
-  }
+  text.check(name, max_name_length)
+  |> result.map_error(fn(error) {
+    case error {
+      text.Empty -> EmptyName
+      text.TooLong -> NameTooLong
+    }
+  })
 }
 
 /// 48 random bits: the ids live in one account's directory, so they only

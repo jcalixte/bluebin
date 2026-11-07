@@ -1,4 +1,5 @@
 import gleam/dynamic/decode
+import gleam/function
 import gleam/int
 import gleam/list
 import gleam/result
@@ -15,7 +16,10 @@ pub const workspaces_directory = "data/workspaces"
 /// add the step that brings a database from the previous version.
 const schema_version = 1
 
-/// Parents before children. `foreign_keys` holds for this connection only.
+/// Parents before children. `foreign_keys` holds only on the connection that
+/// runs this schema and the seed, and only outside a transaction: `ready`
+/// runs it inside one, where SQLite ignores the pragma, and request
+/// connections leave it off. So foreign keys are not enforced at runtime.
 const schema =
   "
 pragma foreign_keys = on;
@@ -403,24 +407,35 @@ pub type Start {
 /// requests at once on its first load, so the slow path holds the write lock:
 /// the other requests wait, then see the current version.
 pub fn ready(database: String, start: Start) -> Result(Nil, sqlight.Error) {
+  open(database, start, function.identity, fn(_) { Ok(Nil) })
+}
+
+/// `ready`, then `run` on the same connection. A store failure of `ready`
+/// goes through `on_store_error`.
+pub fn open(
+  database: String,
+  start: Start,
+  on_store_error store_error: fn(sqlight.Error) -> e,
+  run run: fn(sqlight.Connection) -> Result(a, e),
+) -> Result(a, e) {
   // The data can be wiped while the server runs: SQLite makes the file, not
   // its directory.
   let _ = simplifile.create_directory_all(directory_of(database))
   use connection <- with_connection_at(database)
-  use version <- result.try(user_version(connection))
-  case version == schema_version {
-    True -> Ok(Nil)
-    False -> {
-      use _ <- result.try(sqlight.exec("begin immediate;", connection))
-      case prepare(connection, start) {
-        Ok(Nil) -> sqlight.exec("commit;", connection)
-        Error(error) -> {
-          let _ = sqlight.exec("rollback;", connection)
-          Error(error)
-        }
-      }
+  use version <- result.try(
+    user_version(connection) |> result.map_error(store_error),
+  )
+  use _ <- result.try(
+    case version == schema_version {
+      True -> Ok(Nil)
+      False ->
+        transaction(connection, function.identity, fn() {
+          prepare(connection, start)
+        })
     }
-  }
+    |> result.map_error(store_error),
+  )
+  run(connection)
 }
 
 pub fn directory_of(path: String) -> String {
@@ -497,7 +512,7 @@ fn user_version(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
   }
 }
 
-pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use _ <- result.try(seed_when_empty(connection, "demand", seed_demands_sql))
   use _ <- result.try(seed_when_empty(
     connection,
@@ -508,7 +523,7 @@ pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 }
 
 pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  use <- in_transaction(connection)
+  use <- transaction(connection, function.identity)
   use _ <- result.try(sqlight.exec(
     empty_sql <> default_calendar_and_labels_sql,
     connection,
@@ -521,25 +536,51 @@ pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
 pub fn reset_empty(
   connection: sqlight.Connection,
 ) -> Result(Nil, sqlight.Error) {
-  use <- in_transaction(connection)
+  use <- transaction(connection, function.identity)
   sqlight.exec(empty_sql <> start_empty_sql, connection)
 }
 
-fn in_transaction(
+/// Runs `run` in one write transaction: commits on Ok, rolls back on Error.
+/// `begin immediate` takes the write lock at once, so a busy database waits
+/// at the start instead of failing at the first write. A failed begin or
+/// commit goes through `on_store_error`.
+pub fn transaction(
   connection: sqlight.Connection,
-  run: fn() -> Result(Nil, sqlight.Error),
-) -> Result(Nil, sqlight.Error) {
-  use _ <- result.try(sqlight.exec("begin immediate;", connection))
+  on_store_error store_error: fn(sqlight.Error) -> e,
+  run run: fn() -> Result(a, e),
+) -> Result(a, e) {
+  use _ <- result.try(
+    sqlight.exec("begin immediate;", connection)
+    |> result.map_error(store_error),
+  )
   case run() {
-    Ok(Nil) -> sqlight.exec("commit;", connection)
-    Error(error) -> {
+    Ok(value) ->
+      case sqlight.exec("commit;", connection) {
+        Ok(Nil) -> Ok(value)
+        Error(error) -> {
+          let _ = sqlight.exec("rollback;", connection)
+          Error(store_error(error))
+        }
+      }
+    Error(failure) -> {
       let _ = sqlight.exec("rollback;", connection)
-      Error(error)
+      Error(failure)
     }
   }
 }
 
-/// Children before parents, for `pragma foreign_keys = on`.
+/// The current time, in seconds since the Unix epoch, from SQLite's clock.
+pub fn now(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
+  sqlight.query(
+    "select cast(strftime('%s', 'now') as integer)",
+    on: connection,
+    with: [],
+    expecting: decode.at([0], decode.int),
+  )
+  |> result.map(fn(rows) { list.first(rows) |> result.unwrap(0) })
+}
+
+/// Children before parents, so it also runs where `foreign_keys` is on.
 const empty_sql =
   "
 delete from andon;

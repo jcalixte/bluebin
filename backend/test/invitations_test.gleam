@@ -99,6 +99,12 @@ pub fn only_akadmin_makes_an_invitation_test() {
   )
 
   assert call(context(True, path), signed_in("ada")).status == 403
+  // Signed in with no email: like `/api/account`.
+  let no_email = [
+    #("x-authentik-uid", "a1b2c3"),
+    #("x-authentik-username", "akadmin"),
+  ]
+  assert call(context(True, path), no_email).status == 401
   // With SSO off any client can send the header.
   assert call(context(False, path), signed_in("akadmin")).status == 403
   let _ = simplifile.delete_all([path, path <> "-wal", path <> "-shm"])
