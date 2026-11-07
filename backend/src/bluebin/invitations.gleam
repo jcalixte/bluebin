@@ -36,7 +36,6 @@ pub type Failure {
   Unreachable
   /// authentik answered with this status, as 403 when the token lacks a permission.
   Refused(status: Int)
-  /// authentik answered with a body Bluebin does not understand.
   UnknownAnswer
 }
 

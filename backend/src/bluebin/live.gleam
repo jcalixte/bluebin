@@ -21,7 +21,6 @@ pub opaque type Message {
   StreamDown(Monitor)
 }
 
-/// An open stream and the workspace it listens to.
 type Stream {
   Stream(monitor: Monitor, workspace: String, subject: Subject(Signal))
 }
@@ -106,7 +105,6 @@ pub fn announce(hub: Hub, workspace: String, action: String) -> Nil {
   process.send(hub, Announce(workspace, action))
 }
 
-/// The action of a `Changed` signal; `Error(Nil)` for anything else.
 pub fn changed_action(signal: Signal) -> Result(String, Nil) {
   case signal {
     Changed(action) -> Ok(action)

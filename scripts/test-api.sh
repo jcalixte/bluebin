@@ -164,7 +164,6 @@ check "closing an Andon nobody raised is refused" test \
   "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
      -d '{"station": "ws-nowhere", "teamMember": "pe-nobody"}' "$BASE/api/andon/close")" = 404
 
-# The stream never ends, so curl stops it after 2 s and only its headers count.
 backlog=$(curl -fsS "$BASE/api/backlog")
 check "the Backlog lists its Heijunka Sequence" assert_json \
   '.sequence | type == "array"' "$backlog"
@@ -192,6 +191,7 @@ labels=$(curl -fsS "$BASE/api/labels")
 check "the labels name the Demands and the Pieces" assert_json \
   'all(.demand, .demands, .piece, .pieces; length > 0)' "$labels"
 
+# The stream never ends, so curl stops it after 2 s and only its headers count.
 events=$(curl -s -N --max-time 2 -D - -o /dev/null "$BASE/api/events" || true)
 check "the event stream opens as Server-Sent Events" \
   sh -c 'printf "%s" "$1" | grep -qi "^content-type: text/event-stream"' _ "$events"

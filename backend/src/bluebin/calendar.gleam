@@ -67,8 +67,7 @@ pub type Invalid {
   StoreFailed
 }
 
-/// Replaces the Working Calendar in one transaction. Holiday indexes are
-/// ignored: the store computes them.
+/// Holiday indexes are ignored: the store computes them.
 pub fn save(
   connection: sqlight.Connection,
   calendar: Calendar,

@@ -15,7 +15,6 @@ pub const directory = "data/holidays"
 const max_age_seconds = 2_592_000
 
 pub type Failure {
-  /// Nager.Date did not answer.
   Unreachable
   /// Nager.Date answered with this status, as 404 for an unknown country.
   Refused(status: Int)

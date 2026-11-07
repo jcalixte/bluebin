@@ -30,7 +30,6 @@ type View = (typeof views)[number]
 const { labels } = useLabels()
 const { account, checked } = useAccount()
 
-/** The Account that signs in for the first time gives its name before anything else. */
 const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
 )

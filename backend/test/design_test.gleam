@@ -126,8 +126,6 @@ fn refused(result: Result(a, design.DesignError), words: String) -> Bool {
   }
 }
 
-// --- Shape -----------------------------------------------------------------
-
 pub fn a_split_between_two_trunk_steps_is_a_valid_shape_test() {
   assert design.check_structure([
       trunk("Analysis"),
@@ -175,8 +173,6 @@ pub fn nested_splits_are_refused_test() {
 pub fn an_empty_line_is_refused_test() {
   let assert Error(_) = design.check_structure([])
 }
-
-// --- Change while running -----------------------------------------------------
 
 pub fn the_seed_design_shows_the_work_held_test() {
   use connection <- with_seeded_database()

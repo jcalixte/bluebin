@@ -489,7 +489,6 @@ pub fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   seed_when_empty(connection, "line_step", seed_steps_sql)
 }
 
-/// Empties every table and seeds the demo data again, in one transaction.
 pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use <- in_transaction(connection)
   use _ <- result.try(sqlight.exec(

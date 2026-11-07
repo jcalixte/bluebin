@@ -119,7 +119,6 @@ pub fn handle_request(
     segments -> {
       use workspace <- require_workspace(request)
       case segments {
-        // Not in a Line: one cache serves every account.
         ["api", "holidays", "countries"] -> {
           use <- wisp.require_method(request, http.Get)
           holidays.countries(holidays.http_fetch, in: holidays.directory)
@@ -165,8 +164,8 @@ pub fn handle_request(
         }
         ["api", "lines", line, ..rest] ->
           in_line(request, context.hub, workspace, line, ["api", ..rest])
-        // The routes of the first Line, as before an account could
-        // own several: scripts and an SPA still open during a deploy use them.
+        // Legacy routes of the first Line: scripts and SPAs open during a
+        // deploy still call them.
         ["api", ..] ->
           in_line(request, context.hub, workspace, lines.first, segments)
         _ -> wisp.not_found()
@@ -305,7 +304,6 @@ fn account_response(
   |> wisp.json_response(200)
 }
 
-/// A sign-up link for one more person; only authentik's admin makes one.
 fn create_invitation(
   request: wisp.Request,
   context: Context,
@@ -686,8 +684,6 @@ fn reset(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-/// Every write that succeeds changes what the open screens show, so the rule
-/// lives here once and a new endpoint cannot forget it.
 fn announce_change(
   request: wisp.Request,
   hub: live.Hub,

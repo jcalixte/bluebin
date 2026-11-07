@@ -249,7 +249,6 @@ pub fn deliver(
   ))
 }
 
-/// The last Piece of a Demand in production delivers the Demand.
 fn deliver_demand_when_complete(
   connection: sqlight.Connection,
   piece_id: String,

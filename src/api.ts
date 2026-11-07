@@ -24,7 +24,6 @@ export function viewPath(): string {
   return lineUrl.exec(location.pathname)?.[2] ?? location.pathname
 }
 
-/** The page URL of one view in the current or another Line. */
 export function pageUrl(view: string, line = lineId): string {
   return `/lines/${line}${view}`
 }

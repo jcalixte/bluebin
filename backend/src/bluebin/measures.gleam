@@ -276,8 +276,6 @@ fn add(
   })
 }
 
-// --- Measures of one period -------------------------------------------------
-
 pub type Period {
   Period(from: String, to: String, start: Int, end: Int)
 }
@@ -744,8 +742,6 @@ fn deviation_decoder() -> decode.Decoder(DeviationRow) {
   ))
 }
 
-// --- JSON -------------------------------------------------------------------
-
 pub fn to_json(measures: Measures) -> json.Json {
   let pieces = measures.pieces
   json.object([
@@ -875,8 +871,6 @@ fn average_touch(spans: List(Span)) -> json.Json {
   average(spans, fn(span) { #(span.touch, span.touch) })
 }
 
-/// The average per Span of a measure in Calendar and Working Time, or null
-/// when there is nothing to average.
 fn average(spans: List(Span), measure: fn(Span) -> #(Int, Int)) -> json.Json {
   case list.length(spans) {
     0 -> json.null()

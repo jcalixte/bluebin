@@ -1,9 +1,4 @@
 //// Design and change a running Line without code (F39–F41).
-////
-//// The designer sends the whole Line it wants; `save` compares it with
-//// the one that runs, refuses what would lose or move work (R1), and applies
-//// the rest in one transaction with one dated `line_changed` event per
-//// change (F40).
 
 import gleam/bool
 import gleam/dict.{type Dict}
@@ -48,8 +43,7 @@ pub type Design {
   Design(labels: Labels, team_members: List(TeamMember), steps: List(Step))
 }
 
-/// What the running flow holds at one Work Station. A locked Work Station holds
-/// a Piece, an open Rework or an open Andon.
+/// A locked Work Station holds a Piece, an open Rework or an open Andon.
 pub type Held {
   Held(position: Int, locked: Bool, in_bins: Int, kanbans: Int)
 }
@@ -58,8 +52,6 @@ pub type DesignError {
   Invalid(String)
   StoreFailed
 }
-
-// --- Read ------------------------------------------------------------------
 
 pub fn load_labels(connection: sqlight.Connection) -> Result(Labels, Nil) {
   sqlight.query(
@@ -183,8 +175,6 @@ pub fn load(
 
   Ok(#(Design(labels:, team_members:, steps:), held))
 }
-
-// --- Check -----------------------------------------------------------------
 
 /// The shape of the steps alone: one trunk Work Station per step, or a Split
 /// into two or more named Branches that run side by side until the Assembly.
@@ -310,7 +300,6 @@ pub fn check_change(
 
   let known_team_members =
     list.map(current.team_members, fn(team_member) { team_member.id })
-  // A Team Member left out of `wanted.team_members` is removed, so no Work Station can keep them.
   let kept_team_members =
     list.map(wanted.team_members, fn(team_member) { team_member.id })
   let placed = placed(wanted.steps)
@@ -344,7 +333,6 @@ pub fn check_change(
     }),
   )
 
-  // Removed Work Stations: only the ones that hold no work.
   use _ <- result.try(
     dict.to_list(current_stations)
     |> list.try_each(fn(entry) {
@@ -362,7 +350,6 @@ pub fn check_change(
 
   use _ <- result.try(check_locked_order(placed, held))
 
-  // A Team Member with work in hand at a Work Station stays in it, so in the Line.
   use _ <- result.try(
     list.try_each(busy, fn(pair) {
       let #(station_id, team_member_id) = pair
@@ -384,7 +371,6 @@ pub fn check_change(
     }),
   )
 
-  // A Piece waiting at a Split for some Branches still needs them all.
   let branches_now = branch_names(current.steps)
   let branches_wanted = branch_names(wanted.steps)
   case partial_split && !set.is_subset(branches_now, branches_wanted) {
@@ -503,8 +489,6 @@ fn check_locked_order(
   }
 }
 
-// --- Write -----------------------------------------------------------------
-
 pub fn add_team_member(
   connection: sqlight.Connection,
   name: String,
@@ -542,7 +526,6 @@ pub fn add_team_member(
   Ok(team_member)
 }
 
-/// Applies `wanted` in one transaction, or nothing at all.
 pub fn save(
   connection: sqlight.Connection,
   wanted: Design,
@@ -965,7 +948,6 @@ fn save_steps(
   })
 }
 
-/// One dated event per change to the Line (F40).
 fn changed(
   connection: sqlight.Connection,
   payload: List(#(String, Json)),
@@ -994,8 +976,6 @@ fn station_payload(
     #("teamMembers", json.array(station.team_members, json.string)),
   ]
 }
-
-// --- JSON ------------------------------------------------------------------
 
 pub fn labels_json(labels: Labels) -> Json {
   json.object([
@@ -1100,9 +1080,6 @@ pub fn decoder() -> decode.Decoder(Design) {
   decode.success(Design(labels:, team_members:, steps:))
 }
 
-// --- Helpers ---------------------------------------------------------------
-
-/// Each Work Station with its 1-based step position.
 fn placed(steps: List(Step)) -> List(#(Int, Station)) {
   list.index_map(steps, fn(step, index) {
     list.map(step.stations, fn(station) { #(index + 1, station) })
@@ -1130,7 +1107,6 @@ fn id_of(station: Station) -> Result(String, Nil) {
   option.to_result(station.id, Nil)
 }
 
-/// A blank Branch name means no Branch.
 fn clean(branch: Option(String)) -> Option(String) {
   case option.map(branch, string.trim) {
     Some("") -> None

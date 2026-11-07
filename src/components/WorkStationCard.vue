@@ -169,7 +169,6 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         </p>
       </section>
 
-      <!-- The card reads in the order of its flow: Kanbans in, work in hand, Blue Bins out. -->
       <section aria-label="Pull">
         <button
           class="btn btn-sm btn-primary w-full justify-between"

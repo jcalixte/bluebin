@@ -56,8 +56,6 @@ fn refused(result: Result(a, demand.CreateError), words: String) -> Bool {
   }
 }
 
-// --- Create a Demand ---------------------------------------------------------
-
 pub fn a_new_demand_is_checked_before_anything_is_written_test() {
   use connection <- with_seeded_database()
   let due = today(connection)
@@ -115,8 +113,6 @@ pub fn the_reference_takes_the_initials_of_the_piece_label_test() {
   assert demand.initials("") == "P"
 }
 
-// --- Delivery ------------------------------------------------------------------
-
 fn put_in_last_blue_bin(connection: sqlight.Connection, piece: String) -> Nil {
   exec(connection, "delete from kanban where station_id = 'ws-uat'")
   exec(connection, "update piece set state = 'in_bin', station_id = 'ws-uat'
@@ -152,8 +148,6 @@ pub fn a_piece_of_an_unfinished_demand_does_not_deliver_it_test() {
   assert text(connection, "select state from demand where id = 'd-billing'")
     == "active"
 }
-
-// --- Forecast ------------------------------------------------------------------
 
 /// Friday 2026-11-06, day 20_763 since 1970-01-01.
 const friday = 20_763
@@ -223,8 +217,6 @@ pub fn no_forecast_before_the_first_piece_or_years_away_test() {
     == None
 }
 
-// --- On time -------------------------------------------------------------------
-
 pub fn the_on_time_share_counts_the_demands_delivered_in_the_period_test() {
   use connection <- with_seeded_database()
   exec(
@@ -246,8 +238,6 @@ pub fn the_on_time_share_counts_the_demands_delivered_in_the_period_test() {
     "\"onTime\":{\"delivered\":2,\"onTime\":1}",
   )
 }
-
-// --- Start empty ---------------------------------------------------------------
 
 pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
   use connection <- with_seeded_database()

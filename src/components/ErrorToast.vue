@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, watch } from "vue"
 
-/** A message that floats over the page, so it never pushes the layout down. */
 const message = defineModel<string | null>({ required: true })
 
 withDefaults(defineProps<{ tone?: "warning" | "error" }>(), { tone: "warning" })

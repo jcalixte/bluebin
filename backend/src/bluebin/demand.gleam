@@ -222,8 +222,6 @@ pub fn behind_count(demands: List(Demand)) -> Int {
   demands |> list.filter(andon) |> list.length
 }
 
-// --- Create ------------------------------------------------------------------
-
 pub const max_text_length = 60
 
 pub const max_pieces = 200
