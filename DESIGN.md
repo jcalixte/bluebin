@@ -8,7 +8,7 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ## House of Quality
 
-The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Row colours match the parts of the TPS house in §1; the blue boxes mark the 3 Functions with the highest weight. Red and green are kept for OK / NOK status only, so neither house uses them.
+The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Row colours match the parts of the TPS house in §1; the blue boxes mark the 3 Functions with the highest weight. In the comparative evaluation, each alternative has its own colour: Bluebin blue, Jira orange, Linear purple, physical board brown. Red and green are kept for OK / NOK status only, so neither house uses them.
 
 ```tikz
 % =====================================================================
@@ -304,6 +304,21 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \definecolor{bbJidoka}{HTML}{6B46C1}
 \definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
+% Comparative evaluation: one colour per alternative (no red, no green)
+\definecolor{bbAltBluebin}{HTML}{2B6CB0}
+\definecolor{bbAltJira}{HTML}{DD6B20}
+\definecolor{bbAltLinear}{HTML}{805AD5}
+\definecolor{bbAltBoard}{HTML}{8C5A2B}
+\tikzset{
+  qfdalt1mk/.append style={draw=bbAltBluebin, fill=bbAltBluebin},
+  qfdalt1ln/.append style={draw=bbAltBluebin},
+  qfdalt2mk/.append style={draw=bbAltJira, fill=bbAltJira},
+  qfdalt2ln/.append style={draw=bbAltJira},
+  qfdalt3mk/.append style={draw=bbAltLinear, fill=bbAltLinear},
+  qfdalt3ln/.append style={draw=bbAltLinear},
+  qfdalt4mk/.append style={draw=bbAltBoard, fill=bbAltBoard},
+  qfdalt4ln/.append style={draw=bbAltBoard},
+}
 \def\qfdNW{10}
 \def\qfdNH{11}
 \def\qfdWhatW{4.6}
@@ -796,6 +811,28 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **Diagrams lag G11 and G12.** The TPS house (§1) and the House of Quality do not show G11, G12 or F43–F52. Open: redraw both after the build.
 - **"A user has one workspace for now".** The comment in `backend/src/bluebin/workspace.gleam` and the README's "Sign-in and Workspaces" say the **Workspace** comes only from `X-authentik-uid`. Open: fixed with C7 and H12.
 - **F9 and the automatic pause.** F9 also warned before a second active **Assignment**, but taking an **Assignment** pauses the current one automatically, so a second active one cannot happen. Resolved: F9 covers only the second **Piece** in a **Blue Bin**.
+
+---
+
+## 11. Build order — G11 and G12
+
+Each slice ships alone, from the SPA to the store, and leaves production safe. A slice that opens a **Workspace** to another **Account** ships with its guard, never before it.
+
+| Slice | Name                                | Functions and components         | What ships                                                                                                                                                                                                          | Done when                                                                  |
+| :---: | ----------------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+|   1   | The **Account**                     | C6, C8, F44, F52, R10            | `data/accounts.db` with each **Account** and the dated log of link changes (R8); `X-authentik-email` and `X-authentik-name` in the Coolify labels and the Vite dev proxy; the SSO setting; the first sign-in screen | Each **Account** gives its name once; with SSO off, no **Account** is made |
+|   2   | Link a **Team Member** by email     | F43, F47                         | An email and "not linked yet" on each **Team Member** in Design; the link made at the next sign-in; the **Account**'s name on each linked **Team Member**                                                           | 100 % linked at the next sign-in (§8)                                      |
+|   3   | Open other **Workspaces**, guarded  | H12, C7, F46, F48, F49, F50, F51 | `/api/w/<owner-uid>/lines/<id>/…` and `/w/<owner-uid>/lines/<id>/<view>`; the access guard on every **Line** route and the live stream; the **Line** menu grouped by **Workspace**; **Shared** or **Private**       | 0 leaks, 0 actions as someone else (§8); one test for each role × route    |
+|   4   | My work after sign-in               | F45                              | The signed-in **Team Member**'s own **Assignments** as the first screen                                                                                                                                             | 0 clicks (§8)                                                              |
+|   5   | The **Public Workspace**, look-only | F53                              | authentik unauthenticated paths for the look-only routes; changes only by `akadmin`                                                                                                                                 | 0 changes by anyone else                                                   |
+|   6   | Rename Person on the wire and disk  | §10 "Person vs Team Member"      | The `person` and `station_person` tables, the `person_*` event kinds, `/api/people`, the JSON fields `person` and `people`, the `?person=` link                                                                     | The wire and the disk use Team Member names; old stored events still read  |
+
+Why this order:
+
+- **Slice 1 first.** Every other Function of G11 and G12 needs an **Account**. It changes no access, so it is safe alone.
+- **Slice 3 is one deploy.** Today each flow action takes the **Team Member** from the request body (§10). URLs that open another **Workspace** without the guard let any client act as anyone.
+- **Slice 4 after slice 3.** The first screen must know the **Line** of the **Team Member**, and that **Line** can be in another owner's **Workspace**.
+- **Slice 6 last.** It touches every route and the stored events. It waits until the access routes stop changing.
 
 ---
 
