@@ -145,12 +145,13 @@ pub fn with_sso_on_an_account_needs_an_email_test() {
   let no_email = [#("x-authentik-uid", "a1b2c3")]
   let looked = call(context, http.Get, no_email, "")
   let saved = call(context, http.Put, no_email, ada_named)
-  let visitor = call(context, http.Get, [], "") |> simulate.read_body
+  // No uid with SSO on: the request passed no sign-in.
+  let visitor = call(context, http.Get, [], "")
   remove(path)
 
   assert looked.status == 401
   assert saved.status == 401
-  assert visitor == "{\"signedIn\":false}"
+  assert visitor.status == 401
 }
 
 fn no_invite() {

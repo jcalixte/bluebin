@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue"
-import { api, pageUrl, settleLineUrl, viewPath } from "./api"
+import { api, lineId, lookOnly, pageUrl, settleLineUrl, viewPath, workspaceOwner } from "./api"
 import AppModal from "./components/AppModal.vue"
 import ErrorToast from "./components/ErrorToast.vue"
 import FirstSignIn from "./components/FirstSignIn.vue"
@@ -171,7 +171,16 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
     </header>
 
     <main class="mx-auto max-w-[110rem] px-6 py-8">
-      <p v-if="role === 'viewer'" role="status" class="alert alert-info mb-6">
+      <p v-if="lookOnly" role="status" class="alert alert-info mb-6">
+        <span>
+          You look at this Shared Line. Only its Team Members act in it:
+          <a :href="pageUrl(current.path, lineId, workspaceOwner, false)" class="link font-medium"
+            >sign in</a
+          >
+          to act.
+        </span>
+      </p>
+      <p v-else-if="role === 'viewer'" role="status" class="alert alert-info mb-6">
         You look at this Shared Line. Only its Team Members act in it.
       </p>
       <DemandsView v-if="current.id === 'demands'" />

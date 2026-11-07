@@ -4,10 +4,14 @@ import type { FlowConfirm } from "./types"
 export const firstLine = "main"
 
 const lastLineKey = "bluebin.line"
-/** `/lines/<id>/<view>` in the Account's own Workspace, `/w/<owner-uid>/lines/<id>/<view>` in another (H12). */
-const lineUrl = /^(?:\/w\/([A-Za-z0-9_-]+))?\/lines\/([a-z0-9-]+)(\/.*)?$/
+/**
+ * `/lines/<id>/<view>` in the Account's own Workspace, `/w/<owner-uid>/lines/<id>/<view>` in
+ * another (H12), `/s/<owner-uid>/lines/<id>/<view>` for the look-only link of a Shared Line, which
+ * opens with no sign-in (F53).
+ */
+const lineUrl = /^(?:\/([ws])\/([A-Za-z0-9_-]+))?\/lines\/([a-z0-9-]+)(\/.*)?$/
 
-type Page = { owner: string | null; id: string; view: string }
+type Page = { owner: string | null; id: string; view: string; look: boolean }
 
 /** The last Line opened: a bare id in the own Workspace, `<owner-uid>/<id>` in another. */
 function rememberedLine(): { owner: string | null; id: string } {
@@ -19,9 +23,9 @@ function rememberedLine(): { owner: string | null; id: string } {
 function lineOfPage(): Page {
   const match = lineUrl.exec(location.pathname)
   if (match) {
-    return { owner: match[1] ?? null, id: match[2], view: match[3] ?? "/" }
+    return { owner: match[2] ?? null, id: match[3], view: match[4] ?? "/", look: match[1] === "s" }
   }
-  return { ...rememberedLine(), view: location.pathname }
+  return { ...rememberedLine(), view: location.pathname, look: false }
 }
 
 const page = lineOfPage()
@@ -32,13 +36,21 @@ export const lineId = page.id
 /** The owner of the Workspace this page shows; `null` for the Account's own. */
 export const workspaceOwner = page.owner
 
+/** Opened by the look-only link of a Shared Line: no Account, no Line menu, nothing to act on. */
+export const lookOnly = page.look
+
 /** The view part of the URL, without the Line prefix. */
 export function viewPath(): string {
-  return lineUrl.exec(location.pathname)?.[3] ?? location.pathname
+  return lineUrl.exec(location.pathname)?.[4] ?? location.pathname
 }
 
-export function pageUrl(view: string, line = lineId, owner = workspaceOwner): string {
-  return `${owner ? `/w/${owner}` : ""}/lines/${line}${view}`
+export function pageUrl(
+  view: string,
+  line = lineId,
+  owner = workspaceOwner,
+  look = lookOnly,
+): string {
+  return `${owner ? `/${look ? "s" : "w"}/${owner}` : ""}/lines/${line}${view}`
 }
 
 /** Puts the Line in the URL of a page opened without it, as `/demands`. */

@@ -405,7 +405,7 @@ export type LineRole = "owner" | "member" | "viewer"
 export type LineEntry = {
   id: string
   name: string
-  /** Every Account that can open the Workspace sees a Shared Line. */
+  /** Anyone with its look-only link sees a Shared Line, signed in or not. */
   shared: boolean
   role: LineRole
   /** The Account's own Team Member, for a member. */

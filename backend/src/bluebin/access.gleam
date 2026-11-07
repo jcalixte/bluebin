@@ -27,7 +27,8 @@ pub type Need {
 /// the Line itself. A route missing here is refused (§8).
 pub fn need(method: http.Method, segments: List(String)) -> Result(Need, Nil) {
   case method, segments {
-    http.Get, ["api", "events"]
+    http.Get, ["api"]
+    | http.Get, ["api", "events"]
     | http.Get, ["api", "demands"]
     | http.Get, ["api", "line"]
     | http.Get, ["api", "backlog"]
@@ -87,28 +88,36 @@ pub fn role(
   case workspace == caller, email {
     True, _ -> Ok(Owner)
     False, None -> Ok(NoRole)
-    False, Some(email) ->
-      case lines.exists(workspace, line) {
-        False -> Ok(NoRole)
-        True -> {
-          use held <- result.try(live_links(accounts_database, email, workspace))
-          case list.key_find(held, line), held {
-            Ok(team_member), _ -> Ok(Member(team_member))
-            Error(Nil), [] -> Ok(NoRole)
-            Error(Nil), _ -> {
-              use shared <- result.map(accounts.is_shared(
-                accounts_database,
-                workspace,
-                line,
-              ))
-              case shared {
-                True -> Viewer
-                False -> NoRole
-              }
-            }
-          }
-        }
+    False, Some(email) -> {
+      use held <- result.try(live_links(accounts_database, email, workspace))
+      case list.key_find(held, line) {
+        Ok(team_member) -> Ok(Member(team_member))
+        Error(Nil) -> anyone(accounts_database, workspace, line)
       }
+    }
+  }
+}
+
+/// The Role of anyone, signed in or not, who is no Team Member of `line`:
+/// a Shared Line shows, look-only (F53).
+pub fn anyone(
+  accounts_database: String,
+  workspace: String,
+  line: String,
+) -> Result(Role, Nil) {
+  case lines.exists(workspace, line) {
+    False -> Ok(NoRole)
+    True -> {
+      use shared <- result.map(accounts.is_shared(
+        accounts_database,
+        workspace,
+        line,
+      ))
+      case shared {
+        True -> Viewer
+        False -> NoRole
+      }
+    }
   }
 }
 

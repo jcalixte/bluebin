@@ -17,6 +17,7 @@ import bluebin/measures
 import bluebin/spa
 import bluebin/workspace
 import envoy
+import gleam/bool
 import gleam/bytes_tree
 import gleam/dynamic/decode
 import gleam/erlang/process
@@ -65,6 +66,8 @@ pub fn main() {
         ["api", "lines", line, "events"] -> events(request, context, None, line)
         ["api", "w", owner, "lines", line, "events"] ->
           events(request, context, Some(owner), line)
+        ["api", "s", owner, "lines", line, "events"] ->
+          look_events(request, context, owner, line)
         _ -> api(request)
       }
     }
@@ -84,25 +87,59 @@ fn events(
   owner: Option(String),
   line: String,
 ) -> response.Response(mist.ResponseData) {
+  {
+    use caller <- result.try(
+      caller_of(request, context) |> result.replace_error(401),
+    )
+    use workspace <- result.try(case owner {
+      None -> Ok(caller)
+      Some(owner) -> workspace.parse(owner) |> result.replace_error(404)
+    })
+    use <- bool.guard(!lines.is_id(line), Error(404))
+    use role <- result.map(
+      role_of(request, context, caller, workspace, line)
+      |> result.replace_error(500),
+    )
+    #(workspace, role)
+  }
+  |> stream(request, context, line, _)
+}
+
+/// The live stream of a Shared Line, for anyone with its look-only link.
+fn look_events(
+  request: request.Request(mist.Connection),
+  context: Context,
+  owner: String,
+  line: String,
+) -> response.Response(mist.ResponseData) {
+  {
+    use workspace <- result.try(
+      workspace.parse(owner) |> result.replace_error(404),
+    )
+    use role <- result.map(
+      look_role(context, workspace, line) |> result.replace_error(500),
+    )
+    #(workspace, role)
+  }
+  |> stream(request, context, line, _)
+}
+
+fn stream(
+  request: request.Request(mist.Connection),
+  context: Context,
+  line: String,
+  found: Result(#(String, access.Role), Int),
+) -> response.Response(mist.ResponseData) {
   let empty = fn(status) {
     response.new(status) |> response.set_body(mist.Bytes(bytes_tree.new()))
   }
-  let target = case owner {
-    None -> workspace.from_request(request)
-    Some(owner) -> workspace.parse(owner)
-  }
-  case workspace.from_request(request), target, lines.is_id(line) {
-    Error(Nil), _, _ -> empty(401)
-    Ok(_), Error(Nil), _ | Ok(_), _, False -> empty(404)
-    Ok(caller), Ok(workspace), True ->
-      case role_of(request, context, caller, workspace, line) {
-        Error(Nil) -> empty(500)
-        Ok(role) ->
-          case access.allows(role, access.Read) {
-            True ->
-              live.stream(request, context.hub, lines.channel(workspace, line))
-            False -> empty(404)
-          }
+  case found {
+    Error(status) -> empty(status)
+    Ok(#(workspace, role)) ->
+      case access.allows(role, access.Read) {
+        True ->
+          live.stream(request, context.hub, lines.channel(workspace, line))
+        False -> empty(404)
       }
   }
 }
@@ -157,8 +194,10 @@ pub fn handle_request(
       use <- wisp.require_method(request, http.Get)
       wisp.ok()
     }
+    ["api", "s", owner, "lines", line, ..rest] ->
+      look(request, context, owner, line, ["api", ..rest])
     segments -> {
-      use workspace <- require_workspace(request)
+      use workspace <- require_workspace(request, context)
       case segments {
         ["api", "holidays", "countries"] -> {
           use <- wisp.require_method(request, http.Get)
@@ -247,7 +286,7 @@ fn in_line(
               open_line(
                 request,
                 context,
-                caller,
+                identity_of(request, context, caller),
                 role,
                 workspace,
                 line,
@@ -258,10 +297,55 @@ fn in_line(
   }
 }
 
+/// A Shared Line, look-only, for anyone with its link, signed in or not
+/// (F53). authentik lets `/api/s/` through with no sign-in, so the request
+/// has no identity and none is read. Sharing needs SSO on (F52).
+fn look(
+  request: wisp.Request,
+  context: Context,
+  owner: String,
+  line: String,
+  segments: List(String),
+) -> wisp.Response {
+  case workspace.parse(owner) {
+    Error(Nil) -> wisp.not_found()
+    Ok(workspace) ->
+      case look_role(context, workspace, line) {
+        Error(Nil) -> wisp.internal_server_error()
+        Ok(access.NoRole) -> wisp.not_found()
+        Ok(role) ->
+          case access.need(request.method, segments) {
+            Ok(access.Read) ->
+              open_line(
+                request,
+                context,
+                SignedOut,
+                role,
+                workspace,
+                line,
+                segments,
+              )
+            _ -> wisp.response(403)
+          }
+      }
+  }
+}
+
+fn look_role(
+  context: Context,
+  workspace: String,
+  line: String,
+) -> Result(access.Role, Nil) {
+  case context.sso {
+    False -> Ok(access.NoRole)
+    True -> access.anyone(context.accounts, workspace, line)
+  }
+}
+
 fn open_line(
   request: wisp.Request,
   context: Context,
-  caller: String,
+  identity: Identity,
   role: access.Role,
   workspace: String,
   line: String,
@@ -277,7 +361,6 @@ fn open_line(
         lines.channel(workspace, line),
         segments,
       )
-      let identity = identity_of(request, context, caller)
       let linking = case identity {
         SignedIn(..) -> Some(Linking(context.accounts, workspace, line))
         SignedOut | NoEmail -> None
@@ -292,7 +375,14 @@ fn open_line(
         ))
       }
       case segments {
-        ["api"] -> rename_line(request, workspace, line)
+        ["api"] ->
+          case request.method {
+            http.Put -> rename_line(request, workspace, line)
+            _ -> {
+              use <- wisp.require_method(request, http.Get)
+              line_name(workspace, line)
+            }
+          }
         ["api", "sharing"] ->
           share_line(request, context, identity, workspace, line)
         _ -> route(request, segments, database, linking, act_as)
@@ -697,6 +787,18 @@ fn create_line(request: wisp.Request, workspace: String) -> wisp.Response {
   line_response(lines.create(workspace, name), 201)
 }
 
+/// The Line's name, for a page opened by a link and not from the menu.
+fn line_name(workspace: String, line: String) -> wisp.Response {
+  case lines.list(workspace) {
+    Error(_) -> wisp.internal_server_error()
+    Ok(found) ->
+      case list.find(found, fn(one) { one.id == line }) {
+        Ok(found) -> wisp.json_response(json.to_string(line_json(found)), 200)
+        Error(Nil) -> wisp.not_found()
+      }
+  }
+}
+
 fn rename_line(
   request: wisp.Request,
   workspace: String,
@@ -744,11 +846,26 @@ fn line_json(line: lines.Line) -> json.Json {
 
 fn require_workspace(
   request: wisp.Request,
+  context: Context,
   next: fn(String) -> wisp.Response,
 ) -> wisp.Response {
-  case workspace.from_request(request) {
+  case caller_of(request, context) {
     Ok(workspace) -> next(workspace)
     Error(Nil) -> wisp.response(401)
+  }
+}
+
+/// The caller's own Workspace. With SSO on, forward auth sets the uid on
+/// every request it lets through signed in; one with no uid came through a
+/// path authentik does not guard (`/api/s/`, a crafted `..`), so it gets
+/// nothing, and never the `public` Workspace.
+fn caller_of(
+  request: request.Request(body),
+  context: Context,
+) -> Result(String, Nil) {
+  case workspace.from_request(request) {
+    Ok(caller) if context.sso && caller == workspace.public -> Error(Nil)
+    found -> found
   }
 }
 

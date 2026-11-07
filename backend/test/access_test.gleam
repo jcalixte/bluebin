@@ -1,5 +1,6 @@
 import bluebin
 import bluebin/access
+import bluebin/accounts
 import bluebin/db
 import bluebin/invitations
 import bluebin/live
@@ -14,6 +15,7 @@ import wisp/simulate
 /// Every route inside a Line, as the router knows it. A route added to the
 /// router and not to the role table is refused: add it here too.
 const routes = [
+  #(http.Get, ["api"], access.Read),
   #(http.Get, ["api", "events"], access.Read),
   #(http.Get, ["api", "demands"], access.Read),
   #(http.Get, ["api", "line"], access.Read),
@@ -119,6 +121,21 @@ fn call(
     simulate.request(method, path)
     |> simulate.header("x-authentik-uid", who.0)
     |> simulate.header("x-authentik-email", who.1)
+    |> simulate.string_body(body)
+    |> simulate.header("content-type", "application/json")
+    |> bluebin.handle_request(context)
+  #(response.status, simulate.read_body(response))
+}
+
+/// A visitor who is not signed in: forward auth sends no identity header.
+fn call_anonymous(
+  context: bluebin.Context,
+  method: http.Method,
+  path: String,
+  body: String,
+) -> #(Int, String) {
+  let response =
+    simulate.request(method, path)
     |> simulate.string_body(body)
     |> simulate.header("content-type", "application/json")
     |> bluebin.handle_request(context)
@@ -327,7 +344,7 @@ pub fn the_owner_does_not_act_for_a_linked_team_member_test() {
   assert for_bob == 204
 }
 
-pub fn a_shared_line_is_look_only_for_the_workspace_test() {
+pub fn a_shared_line_is_look_only_for_every_account_test() {
   let world = world(True)
   let main = in_owner(world, "main", "/line")
   let #(shared, _) =
@@ -347,8 +364,16 @@ pub fn a_shared_line_is_look_only_for_the_workspace_test() {
       world.carol,
       "{\"station\": \"ws-web\"}",
     )
-  // Bob is a Team Member in no Line of this Workspace: it does not open.
+  // Bob is a Team Member in no Line of this Workspace: he looks too.
   let #(bob, _) = call(world.context, http.Get, main, world.bob, "")
+  let #(bob_acts, _) =
+    call(
+      world.context,
+      http.Post,
+      in_owner(world, "main", "/andon"),
+      world.bob,
+      "{\"station\": \"ws-web\"}",
+    )
   let #(_, menu) =
     call(world.context, http.Get, "/api/workspaces", world.carol, "")
   clean(world)
@@ -356,7 +381,8 @@ pub fn a_shared_line_is_look_only_for_the_workspace_test() {
   assert shared == 200
   assert carol == 200
   assert carol_acts == 403
-  assert bob == 404
+  assert bob == 200
+  assert bob_acts == 403
   assert string.contains(menu, "\"name\":\"Olga Test\",\"own\":false")
   assert string.contains(
     menu,
@@ -406,4 +432,101 @@ pub fn with_sso_off_no_other_workspace_opens_test() {
   assert ada == 404
   assert !string.contains(menu, world.owner.0)
   assert share == 403
+}
+
+fn look(world: World, path: String) -> String {
+  "/api/s/" <> world.owner.0 <> "/lines/main" <> path
+}
+
+pub fn anyone_looks_at_a_shared_line_by_its_link_test() {
+  let world = world(True)
+  let #(private, _) =
+    call_anonymous(world.context, http.Get, look(world, "/line"), "")
+  let assert #(200, _) =
+    call(
+      world.context,
+      http.Put,
+      "/api/lines/main/sharing",
+      world.owner,
+      "{\"shared\": true}",
+    )
+  let #(line, _) =
+    call_anonymous(world.context, http.Get, look(world, "/line"), "")
+  let #(name_status, name) =
+    call_anonymous(world.context, http.Get, look(world, ""), "")
+  let #(design_status, design) =
+    call_anonymous(world.context, http.Get, look(world, "/design"), "")
+  let #(andon, _) =
+    call_anonymous(
+      world.context,
+      http.Post,
+      look(world, "/andon"),
+      "{\"station\": \"ws-web\"}",
+    )
+  let #(redesign, _) =
+    call_anonymous(world.context, http.Put, look(world, "/design"), design)
+  // Identity headers on a look-only link are not read: the owner only looks.
+  let #(owner_acts, _) =
+    call(
+      world.context,
+      http.Post,
+      look(world, "/andon"),
+      world.owner,
+      "{\"station\": \"ws-web\"}",
+    )
+  let #(other_line, _) =
+    call_anonymous(
+      world.context,
+      http.Get,
+      "/api/s/" <> world.owner.0 <> "/lines/" <> world.other_line <> "/line",
+      "",
+    )
+  clean(world)
+
+  assert private == 404
+  assert line == 200
+  assert name_status == 200
+  assert string.contains(name, "\"name\":\"Line\"")
+  assert design_status == 200
+  assert !string.contains(design, world.ada.1)
+  assert andon == 403
+  assert redesign == 403
+  assert owner_acts == 403
+  assert other_line == 404
+}
+
+pub fn with_sso_off_no_look_only_link_opens_test() {
+  let world = world(False)
+  let assert Ok(Nil) = access_share(world.path, world.owner.0, "main")
+  let #(line, _) =
+    call_anonymous(world.context, http.Get, look(world, "/line"), "")
+  clean(world)
+
+  assert line == 404
+}
+
+fn access_share(path: String, workspace: String, line: String) {
+  accounts.share(path, workspace, line, True)
+}
+
+/// With SSO on, a request with no uid passed no sign-in: it gets no
+/// Workspace, not even through a path that climbs out of `/api/s/`.
+pub fn with_sso_on_no_uid_gets_no_workspace_test() {
+  let world = world(True)
+  let #(lines, _) = call_anonymous(world.context, http.Get, "/api/lines", "")
+  let #(legacy, _) = call_anonymous(world.context, http.Get, "/api/line", "")
+  let #(climbing, _) =
+    call_anonymous(
+      world.context,
+      http.Get,
+      "/api/s/" <> world.owner.0 <> "/../../lines/main/line",
+      "",
+    )
+  let #(health, _) = call_anonymous(world.context, http.Get, "/api/health", "")
+  clean(world)
+
+  assert lines == 401
+  assert legacy == 401
+  assert climbing == 401
+  assert health == 200
 }

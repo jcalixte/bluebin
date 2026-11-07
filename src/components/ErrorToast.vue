@@ -3,7 +3,7 @@ import { onBeforeUnmount, watch } from "vue"
 
 const message = defineModel<string | null>({ required: true })
 
-withDefaults(defineProps<{ tone?: "warning" | "error" }>(), { tone: "warning" })
+withDefaults(defineProps<{ tone?: "info" | "warning" | "error" }>(), { tone: "warning" })
 
 let timer: ReturnType<typeof setTimeout> | undefined
 
@@ -22,7 +22,11 @@ onBeforeUnmount(() => clearTimeout(timer))
     <div
       role="alert"
       class="alert max-w-sm whitespace-normal shadow-lg"
-      :class="tone === 'error' ? 'alert-error' : 'alert-warning'"
+      :class="{
+        'alert-error': tone === 'error',
+        'alert-warning': tone === 'warning',
+        'alert-info': tone === 'info',
+      }"
     >
       <span>{{ message }}</span>
       <button

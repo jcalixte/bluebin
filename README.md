@@ -46,8 +46,9 @@ file at any other version is refused, never read.
 Traefik forward auth sends each request to the authentik outpost `bluebin`
 (provider and app `bluebin`), which signs people in on `auth.bluebin.app`. It
 copies the `X-authentik-uid` header from the outpost's answer, which replaces any value the client sends. The API trusts only that
-header: each uid is one Workspace. A request without it uses the shared
-`public` Workspace; a uid that is not a safe file name gets `401`. In dev, the
+header: each uid is one Workspace. A request without it gets `401` with
+`BLUEBIN_SSO=on`, and uses the shared `public` Workspace with SSO off; a uid
+that is not a safe file name gets `401`. In dev, the
 Vite proxy sends `X-authentik-uid: dev`.
 
 A Workspace holds as many named Lines as its owner makes, one SQLite
@@ -72,7 +73,25 @@ in `backend/src/bluebin/access.gleam` runs before each Line route and the live
 stream: a Line the Account may not open answers `404`, a route it may not use
 `403`, and a route missing from the role table is refused. The owner makes a
 Line Shared or Private with `PUT …/sharing {"shared"}`, kept as a dated log in
-`data/accounts.db`.
+`data/accounts.db`. Any signed-in Account opens a Shared Line, look only.
+
+A Shared Line also opens with no sign-in, look only, at its look-only link
+`/s/<owner-uid>/lines/<id>/<view>` (API `/api/s/<owner-uid>/lines/<id>/…`, the
+`GET` routes of the role table only). The Line menu has **Copy look-only
+link**. The API reads no identity on these paths, and answers `404` for a
+Private Line and with SSO off. authentik must let these paths through: in the
+proxy provider `bluebin`, **Unauthenticated Paths** (one regex per line,
+written to match the path alone and the full URL):
+
+```
+^(https?://[^/]+)?/s/
+^(https?://[^/]+)?/api/s/
+^(https?://[^/]+)?/assets/
+^(https?://[^/]+)?/favicon\.svg$
+```
+
+Traefik removes the `authResponseHeaders` a client sends, so a request on
+these paths reaches the API with no uid; any other route then answers `401`.
 
 With `BLUEBIN_SSO=on`, Traefik also copies `X-authentik-email` and
 `X-authentik-name`, and each uid is an **Account** in `data/accounts.db`,

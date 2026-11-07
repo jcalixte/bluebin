@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue"
-import { firstLine, lineApi, lineId, pageUrl, rememberLine, workspaceOwner } from "../api"
+import { firstLine, lineApi, lineId, lookOnly, pageUrl, rememberLine, workspaceOwner } from "../api"
 import { useAccount } from "../composables/useAccount"
 import { useWorkspaces } from "../composables/useWorkspaces"
 import type { LineEntry, Workspace } from "../types"
@@ -13,7 +13,7 @@ const props = defineProps<{ view: string }>()
 /** Must match `max_name_length` of `bluebin/lines` in the backend. */
 const maxNameLength = 60
 
-const { workspaces, current, problem, ready } = useWorkspaces()
+const { workspaces, workspace, current, problem, ready } = useWorkspaces()
 const { account } = useAccount()
 
 /** Sharing lives with the Accounts, so it needs sign-in (F52). */
@@ -41,26 +41,54 @@ async function answerOf(response: Response) {
   return response.json()
 }
 
+/** The name of a Line opened by its link and missing from the menu: a Shared Line to look at. */
+const linkedName = ref<string | null>(null)
+
+const name = computed(() => current.value?.name ?? linkedName.value)
+
 onMounted(async () => {
   await ready
   if (problem.value) return
   if (current.value) {
     rememberLine(lineId, workspaceOwner)
-  } else {
-    // A Line this Account cannot open, or an old bookmark.
-    rememberLine(null)
-    location.replace(pageUrl(props.view, firstLine, null))
+    return
   }
+  const response = await fetch(lineApi).catch(() => null)
+  if (response?.ok) {
+    linkedName.value = ((await response.json()) as { name: string }).name
+    return
+  }
+  if (lookOnly) {
+    problem.value = "This Line is not shared, or it does not exist."
+    return
+  }
+  // A Line this Account cannot open, or an old bookmark.
+  rememberLine(null)
+  location.replace(pageUrl(props.view, firstLine, null))
 })
 
+const copied = ref<string | null>(null)
+
+/** Anyone with this link looks at the Shared Line, signed in or not (F53). */
+async function copyLookOnlyLink() {
+  if (!workspace.value) return
+  const link = location.origin + pageUrl(props.view, lineId, workspace.value.owner, true)
+  try {
+    await navigator.clipboard.writeText(link)
+    copied.value = "Link copied. Anyone with it can look at this Line, signed in or not."
+  } catch {
+    copied.value = `Copy this link: ${link}`
+  }
+}
+
 const naming = ref<"create" | "rename" | null>(null)
-const name = ref("")
+const newName = ref("")
 const shareNew = ref(false)
 const saving = ref(false)
 const nameProblem = ref<string | null>(null)
 
 function startNaming(mode: "create" | "rename") {
-  name.value = mode === "rename" ? (current.value?.name ?? "") : ""
+  newName.value = mode === "rename" ? (current.value?.name ?? "") : ""
   shareNew.value = false
   nameProblem.value = null
   naming.value = mode
@@ -78,7 +106,7 @@ async function share(path: string, shared: boolean): Promise<boolean> {
 }
 
 async function saveName() {
-  const wanted = name.value.trim()
+  const wanted = newName.value.trim()
   if (wanted === "" || saving.value) return
   saving.value = true
   nameProblem.value = null
@@ -117,14 +145,15 @@ async function toggleSharing() {
 </script>
 
 <template>
-  <div class="dropdown">
+  <span v-if="lookOnly" class="max-w-72 truncate px-3 text-sm">{{ name ?? "Shared Line" }}</span>
+  <div v-else class="dropdown">
     <div
       tabindex="0"
       role="button"
       class="btn btn-sm btn-ghost max-w-72 font-normal [--btn-rest-fg:var(--color-primary-content)]"
       title="Open another Line, or make a new one"
     >
-      <span class="truncate">{{ current?.name ?? "Line" }}</span>
+      <span class="truncate">{{ name ?? "Line" }}</span>
       <span aria-hidden="true">▾</span>
     </div>
     <ul
@@ -162,7 +191,7 @@ async function toggleSharing() {
             :title="
               current.shared
                 ? 'Only you and its Team Members will see it'
-                : 'Every Account that can open your Workspace will see it'
+                : 'Anyone with its link will look at it, signed in or not'
             "
             @click="toggleSharing"
           >
@@ -170,6 +199,11 @@ async function toggleSharing() {
           </button>
         </li>
       </template>
+      <li v-if="current?.shared && workspace">
+        <button type="button" title="A link that opens with no sign-in" @click="copyLookOnlyLink">
+          Copy look-only link
+        </button>
+      </li>
     </ul>
   </div>
 
@@ -185,7 +219,7 @@ async function toggleSharing() {
       <label class="floating-label mt-4 block">
         <span>Name</span>
         <input
-          v-model="name"
+          v-model="newName"
           class="input w-full"
           placeholder="Name, for example Mobile app"
           :maxlength="maxNameLength"
@@ -207,7 +241,7 @@ async function toggleSharing() {
           <span>
             <span class="block">Shared</span>
             <span class="block text-sm opacity-80">
-              Also every Account that is a Team Member in one of your Lines, look only.
+              Also anyone with its link, signed in or not, look only.
             </span>
           </span>
         </label>
@@ -215,7 +249,7 @@ async function toggleSharing() {
       <p v-if="nameProblem" role="alert" class="mt-3 text-sm text-error">{{ nameProblem }}</p>
       <div class="modal-action">
         <button type="button" class="btn btn-ghost" @click="naming = null">Cancel</button>
-        <button type="submit" class="btn btn-primary" :disabled="saving || name.trim() === ''">
+        <button type="submit" class="btn btn-primary" :disabled="saving || newName.trim() === ''">
           {{ naming === "create" ? "Make it" : "Rename" }}
         </button>
       </div>
@@ -223,4 +257,5 @@ async function toggleSharing() {
   </AppModal>
 
   <ErrorToast v-model="problem" tone="error" />
+  <ErrorToast v-model="copied" tone="info" />
 </template>

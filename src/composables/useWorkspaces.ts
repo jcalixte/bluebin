@@ -1,5 +1,5 @@
 import { computed, ref } from "vue"
-import { lineId, workspaceOwner } from "../api"
+import { lineId, lookOnly, workspaceOwner } from "../api"
 import type { LineRole, Workspace } from "../types"
 
 const workspaces = ref<Workspace[]>([])
@@ -7,6 +7,11 @@ const loaded = ref(false)
 const problem = ref<string | null>(null)
 
 async function fetchWorkspaces() {
+  // A look-only visitor has no Account, so no Line menu.
+  if (lookOnly) {
+    loaded.value = true
+    return
+  }
   try {
     const response = await fetch("/api/workspaces")
     if (!response.ok) {

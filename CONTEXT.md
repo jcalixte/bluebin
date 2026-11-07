@@ -177,7 +177,7 @@ The one Workspace that everyone can look at, signed in or not, to see Bluebin ru
 _Avoid_: demo workspace, sandbox, shared workspace
 
 **Shared Line**:
-A Line that every Account able to open its Workspace can see.
+A Line that anyone can look at from its link, signed in or not.
 _Avoid_: public Line, open Line
 
 **Private Line**:
