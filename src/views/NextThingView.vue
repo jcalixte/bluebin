@@ -16,7 +16,10 @@ const teamMemberId = ref(
 )
 
 /** A Team Member with an Account sees their own work first. */
-const { current } = useWorkspaces()
+const { current, canActAs } = useWorkspaces()
+
+/** Who looks may not act as the Team Member picked: then no action shows. */
+const acting = computed(() => canActAs(teamMemberId.value))
 watch(
   () => current.value?.teamMember,
   (own) => {
@@ -48,7 +51,7 @@ function handOverTo(assignment: Assignment) {
   return (
     view.value?.priorityLists
       .find((list) => list.station === assignment.station)
-      ?.teamMembers.filter((one) => one.id !== teamMemberId.value) ?? []
+      ?.teamMembers.filter((one) => one.id !== teamMemberId.value && canActAs(one.id)) ?? []
   )
 }
 
@@ -199,7 +202,7 @@ function since(at: string) {
     <template v-else-if="view && next">
       <AndonAlert
         :andons="view.andons"
-        :team-member-id="teamMemberId"
+        :team-member-id="acting ? teamMemberId : undefined"
         :busy="busy"
         @close="(station) => run(() => closeAndon(station))"
       />
@@ -274,7 +277,7 @@ function since(at: string) {
               </div>
             </template>
 
-            <div v-if="focus.action" class="mt-auto pt-2">
+            <div v-if="focus.action && acting" class="mt-auto pt-2">
               <button
                 class="btn btn-primary btn-lg w-full sm:w-auto"
                 :disabled="busy"
@@ -402,7 +405,7 @@ function since(at: string) {
                   Stopped
                 </span>
                 <button
-                  v-else
+                  v-else-if="acting"
                   class="btn btn-ghost btn-sm shrink-0 gap-1.5"
                   :disabled="busy"
                   title="Stop this Work Station and call its Team Leader"

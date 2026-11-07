@@ -15,6 +15,8 @@ const props = defineProps<{
   stale: Set<string>
   bottleneck?: Bottleneck
   taktHours: number
+  /** Whether who looks may act as this Team Member, or at all with none (`access.actor`). */
+  canActAs: (teamMember?: string) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +31,9 @@ const emit = defineEmits<{
 }>()
 
 const teamMember = ref("")
+
+/** Who looks may hand over only to a Team Member they act as. */
+const handsOver = computed(() => props.station.teamMembers.some((one) => props.canActAs(one.id)))
 
 function handOver(kind: "piece" | "rework", id: string, event: Event) {
   const teamMember = (event.target as HTMLSelectElement).value
@@ -114,7 +119,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         closed.
       </p>
       <button
-        v-if="stop.teamLeaderId"
+        v-if="stop.teamLeaderId && canActAs(stop.teamLeaderId)"
         class="btn btn-xs mt-1 self-start"
         :disabled="busy"
         @click="$emit('closeAndon', stop.teamLeaderId)"
@@ -132,7 +137,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           </p>
         </div>
         <button
-          v-if="!stop"
+          v-if="!stop && canActAs()"
           class="btn btn-ghost btn-xs shrink-0 gap-1.5"
           :disabled="busy"
           title="Stop this Work Station and call its Team Leader"
@@ -169,7 +174,10 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         </p>
       </section>
 
-      <section aria-label="Pull">
+      <p v-if="!canActAs()" class="text-sm opacity-70">
+        {{ station.kanbans }} Kanban {{ station.kanbans === 1 ? "authorizes" : "authorize" }} a pull
+      </p>
+      <section v-else aria-label="Pull">
         <button
           class="btn btn-sm btn-primary w-full justify-between"
           :disabled="busy"
@@ -195,7 +203,12 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             title="The Team Member who takes the Piece in hand. Also names who raises an Andon."
           >
             <option value="">Nobody</option>
-            <option v-for="one in station.teamMembers" :key="one.id" :value="one.id">
+            <option
+              v-for="one in station.teamMembers"
+              :key="one.id"
+              :value="one.id"
+              :disabled="!canActAs(one.id)"
+            >
               {{ one.name }}
             </option>
           </select>
@@ -220,6 +233,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 <span class="opacity-80"> — {{ item.description }}</span>
               </p>
               <button
+                v-if="canActAs()"
                 class="btn btn-xs shrink-0"
                 :disabled="busy"
                 @click="$emit('repair', item.id)"
@@ -230,6 +244,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               <span class="opacity-70">Found by {{ item.foundBy }}</span>
               <select
+                v-if="handsOver"
                 class="select select-ghost select-xs w-auto"
                 :value="item.assigneeId ?? ''"
                 :disabled="busy"
@@ -238,10 +253,18 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 @change="handOver('rework', item.id, $event)"
               >
                 <option value="" disabled>nobody repairs it</option>
-                <option v-for="one in station.teamMembers" :key="one.id" :value="one.id">
+                <option
+                  v-for="one in station.teamMembers"
+                  :key="one.id"
+                  :value="one.id"
+                  :disabled="!canActAs(one.id)"
+                >
                   {{ one.name }} repairs
                 </option>
               </select>
+              <span v-else class="opacity-70">
+                {{ item.assignee ? `${item.assignee} repairs` : "nobody repairs it" }}
+              </span>
               <span
                 v-if="stale.has(`rework:${item.id}`)"
                 class="badge badge-xs badge-warning"
@@ -276,6 +299,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               {{ item.piece }}
             </span>
             <select
+              v-if="handsOver"
               class="select select-ghost select-xs w-auto"
               :value="item.teamMemberId ?? ''"
               :disabled="busy"
@@ -284,10 +308,16 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               @change="handOver('piece', item.id, $event)"
             >
               <option value="" disabled>unassigned</option>
-              <option v-for="one in station.teamMembers" :key="one.id" :value="one.id">
+              <option
+                v-for="one in station.teamMembers"
+                :key="one.id"
+                :value="one.id"
+                :disabled="!canActAs(one.id)"
+              >
                 {{ one.name }}
               </option>
             </select>
+            <span v-else class="opacity-70">{{ item.teamMember ?? "unassigned" }}</span>
             <span
               v-if="item.paused"
               class="badge badge-xs badge-warning"
@@ -302,7 +332,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             >
               stale
             </span>
-            <span class="ml-auto flex gap-1">
+            <span v-if="canActAs()" class="ml-auto flex gap-1">
               <button
                 class="btn btn-ghost btn-xs"
                 :disabled="busy || item.paused"
@@ -354,7 +384,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 {{ bin.pulledBy }} pulled
               </span>
               <button
-                v-if="last && bin.id"
+                v-if="last && bin.id && canActAs()"
                 class="btn btn-xs"
                 :disabled="busy"
                 @click="$emit('deliver', bin.id)"
@@ -373,7 +403,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <span class="truncate font-medium">{{ extra.piece }}</span>
             <span class="text-[0.6875rem]">over the count</span>
             <button
-              v-if="last"
+              v-if="last && canActAs()"
               class="btn btn-xs"
               :disabled="busy"
               @click="$emit('deliver', extra.id)"

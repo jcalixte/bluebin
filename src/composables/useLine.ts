@@ -62,7 +62,7 @@ export function useLine() {
       body: JSON.stringify({ name }),
     })
     if (!response.ok) {
-      throw new Error(await response.text())
+      throw new Error((await response.text()) || `API answered ${response.status}`)
     }
     const saved = (await response.json()) as { position: number; name: string }
     const step = line.value?.steps.find((one) => one.position === saved.position)

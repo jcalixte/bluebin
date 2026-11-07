@@ -4,10 +4,12 @@ import ErrorToast from "../components/ErrorToast.vue"
 import { useBacklog } from "../composables/useBacklog"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLabels } from "../composables/useLabels"
+import { useWorkspaces } from "../composables/useWorkspaces"
 
 const { backlog, error, loading, makeUrgent } = useBacklog()
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 const { labels } = useLabels()
+const { canAct } = useWorkspaces()
 
 function urgent(piece: string) {
   run((reason) => makeUrgent(piece, reason))
@@ -65,7 +67,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                 </p>
               </div>
               <button
-                v-if="piece.canBeUrgent"
+                v-if="piece.canBeUrgent && canAct"
                 type="button"
                 class="btn btn-ghost btn-xs"
                 :disabled="busy"

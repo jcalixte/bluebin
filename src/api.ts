@@ -88,7 +88,7 @@ export async function postAction(
     throw new Error(answer.message)
   }
   if (!response.ok) {
-    throw new Error(await response.text())
+    throw new Error((await response.text()) || `API answered ${response.status}`)
   }
   return null
 }

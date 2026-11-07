@@ -5,9 +5,11 @@ import DemandRow from "../components/DemandRow.vue"
 import NewDemandDialog from "../components/NewDemandDialog.vue"
 import { useDemands } from "../composables/useDemands"
 import { useLabels } from "../composables/useLabels"
+import { useWorkspaces } from "../composables/useWorkspaces"
 
 const { demands, andons, error, loading, load } = useDemands()
 const { labels } = useLabels()
+const { canAct } = useWorkspaces()
 
 const creating = ref(false)
 
@@ -72,7 +74,7 @@ const pieces = computed(() =>
             </dd>
           </div>
         </dl>
-        <button type="button" class="btn btn-primary btn-sm" @click="creating = true">
+        <button v-if="canAct" type="button" class="btn btn-primary btn-sm" @click="creating = true">
           New {{ labels.demand }}
         </button>
       </div>
@@ -94,10 +96,12 @@ const pieces = computed(() =>
       class="flex flex-col items-center gap-4 rounded-box border border-dashed border-base-content/30 p-8 text-center"
     >
       <p class="opacity-70">
-        No active {{ labels.demand }}. Create one when a Client asks for {{ labels.pieces }} by a
-        due date.
+        No active {{ labels.demand }}.
+        <template v-if="canAct">
+          Create one when a Client asks for {{ labels.pieces }} by a due date.
+        </template>
       </p>
-      <button type="button" class="btn btn-primary" @click="creating = true">
+      <button v-if="canAct" type="button" class="btn btn-primary" @click="creating = true">
         New {{ labels.demand }}
       </button>
     </div>

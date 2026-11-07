@@ -9,6 +9,7 @@ import ErrorToast from "../components/ErrorToast.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLine } from "../composables/useLine"
+import { useWorkspaces } from "../composables/useWorkspaces"
 import type { WorkStation } from "../types"
 
 const {
@@ -26,6 +27,8 @@ const {
   raiseAndon,
   closeAndon,
 } = useLine()
+
+const { role, canActAs } = useWorkspaces()
 
 const stale = computed(
   () => new Set((line.value?.stale ?? []).map((one) => `${one.kind}:${one.id}`)),
@@ -223,6 +226,7 @@ const taktLabel = computed(() => {
             <StepName
               :name="stepName(column.position)"
               :max-length="maxNameLength"
+              :readonly="role !== 'owner'"
               @rename="(name) => rename(column.position, name)"
             />
             <div
@@ -243,6 +247,7 @@ const taktLabel = computed(() => {
                 :stale="stale"
                 :bottleneck="bottleneckOf(station.id)"
                 :takt-hours="line?.taktTimeHours ?? 0"
+                :can-act-as="canActAs"
                 @andon="(who) => run(() => raiseAndon(station.id, who))"
                 @close-andon="(who) => run(() => closeAndon(station.id, who))"
                 @pull="(who) => run((why) => pull(station.id, who, why))"

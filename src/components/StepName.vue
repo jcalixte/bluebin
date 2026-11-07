@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref } from "vue"
 
-const props = defineProps<{ name: string; maxLength: number }>()
+const props = defineProps<{ name: string; maxLength: number; readonly?: boolean }>()
 const emit = defineEmits<{ rename: [name: string] }>()
 
 const editing = ref(false)
@@ -36,6 +36,9 @@ function save() {
       @keyup.escape="editing = false"
       @blur="save"
     />
+    <span v-else-if="readonly" class="text-xs font-semibold uppercase tracking-wide opacity-70">
+      {{ name }}
+    </span>
     <button
       v-else
       class="group flex items-center gap-1 text-xs font-semibold uppercase tracking-wide opacity-70 hover:opacity-100 focus-visible:opacity-100"
