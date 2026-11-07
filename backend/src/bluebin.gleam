@@ -6,6 +6,7 @@ import bluebin/demand
 import bluebin/design
 import bluebin/flow
 import bluebin/heijunka
+import bluebin/holidays
 import bluebin/line
 import bluebin/lines
 import bluebin/live
@@ -92,6 +93,26 @@ pub fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
     segments -> {
       use workspace <- require_workspace(request)
       case segments {
+        // Not in a Line: one cache serves every account.
+        ["api", "holidays", "countries"] -> {
+          use <- wisp.require_method(request, http.Get)
+          holidays.countries(holidays.http_fetch, in: holidays.directory)
+          |> holiday_response
+        }
+        ["api", "holidays", year, country] -> {
+          use <- wisp.require_method(request, http.Get)
+          case
+            holidays.public_holidays(
+              year,
+              country,
+              holidays.http_fetch,
+              in: holidays.directory,
+            )
+          {
+            Ok(answer) -> holiday_response(answer)
+            Error(Nil) -> wisp.bad_request("expected /api/holidays/2026/FR")
+          }
+        }
         ["api", "lines"] ->
           case request.method {
             http.Post -> create_line(request, workspace)
@@ -352,6 +373,18 @@ fn measures_of(request: wisp.Request, database: String) -> wisp.Response {
         "expected ?from=2026-10-30&to=2026-11-05, with from on or before to",
       )
     Error(measures.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+fn holiday_response(answer: Result(String, holidays.Failure)) -> wisp.Response {
+  case answer {
+    Ok(body) ->
+      wisp.json_response(body, 200)
+      |> wisp.set_header("cache-control", "private, max-age=86400")
+    Error(holidays.Refused(404)) -> wisp.not_found()
+    Error(_) ->
+      wisp.response(502)
+      |> wisp.string_body("the public holiday service did not answer")
   }
 }
 

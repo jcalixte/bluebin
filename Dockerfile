@@ -28,7 +28,8 @@ RUN gleam export erlang-shipment
 # Same image for the runtime: the esqlite NIF is built against this OTP, this
 # libc and this libsqlite3, so running it on a different base would fail to load.
 FROM ${GLEAM_IMAGE}
-RUN apk add --no-cache sqlite-libs
+# ca-certificates: the server checks the TLS certificate of Nager.Date.
+RUN apk add --no-cache sqlite-libs ca-certificates
 WORKDIR /app
 COPY --from=api /build/build/erlang-shipment ./
 COPY --from=web /app/dist ./static

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, watch } from "vue"
+import { onMounted, ref, watch } from "vue"
 import type { WorkingCalendar } from "../types"
-import { frenchHolidays } from "../frenchHolidays"
+import { fetchCountries, fetchPublicHolidays, type Country } from "../publicHolidays"
 
 const props = defineProps<{
   calendar: WorkingCalendar
@@ -42,17 +42,37 @@ function addHoliday() {
   draft.value.holidays.push({ day: "", label: "" })
 }
 
-const frenchYear = ref(new Date().getFullYear())
+const countries = ref<Country[]>([])
+const country = ref("FR")
+const year = ref(new Date().getFullYear())
+const importing = ref(false)
+const importError = ref<string | null>(null)
 
-/** Adds the French public holidays of the year the calendar does not hold yet. */
-function addFrenchHolidays() {
-  const days = new Set(draft.value.holidays.map((holiday) => holiday.day))
-  for (const holiday of frenchHolidays(frenchYear.value)) {
-    if (days.has(holiday.day)) continue
-    days.add(holiday.day)
-    draft.value.holidays.push(holiday)
+onMounted(async () => {
+  try {
+    countries.value = await fetchCountries()
+  } catch (cause) {
+    importError.value = cause instanceof Error ? cause.message : String(cause)
   }
-  draft.value.holidays.sort((a, b) => a.day.localeCompare(b.day))
+})
+
+/** Adds the public holidays of the country and year the calendar does not hold yet. */
+async function addPublicHolidays() {
+  importing.value = true
+  importError.value = null
+  try {
+    const days = new Set(draft.value.holidays.map((holiday) => holiday.day))
+    for (const holiday of await fetchPublicHolidays(year.value, country.value)) {
+      if (days.has(holiday.day)) continue
+      days.add(holiday.day)
+      draft.value.holidays.push(holiday)
+    }
+    draft.value.holidays.sort((a, b) => a.day.localeCompare(b.day))
+  } catch (cause) {
+    importError.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    importing.value = false
+  }
 }
 
 function removeHoliday(index: number) {
@@ -151,25 +171,41 @@ async function submit() {
             Add a holiday
           </button>
           <div class="join">
+            <select
+              v-model="country"
+              class="select select-sm join-item w-44"
+              aria-label="Country of the public holidays"
+            >
+              <option v-if="countries.length === 0" value="FR">France</option>
+              <option
+                v-for="option in countries"
+                :key="option.countryCode"
+                :value="option.countryCode"
+              >
+                {{ option.name }}
+              </option>
+            </select>
             <input
-              v-model.number="frenchYear"
+              v-model.number="year"
               type="number"
               min="1900"
               max="2100"
               class="input input-sm join-item w-24"
-              aria-label="Year of the French holidays"
+              aria-label="Year of the public holidays"
             />
             <button
               type="button"
               class="btn btn-ghost btn-sm join-item"
-              title="Add the 11 public holidays of metropolitan France for this year"
-              :disabled="!Number.isInteger(frenchYear)"
-              @click="addFrenchHolidays"
+              title="Add the nationwide public holidays of this country and year"
+              :disabled="importing || !Number.isInteger(year)"
+              @click="addPublicHolidays"
             >
-              Add French holidays
+              <span v-if="importing" class="loading loading-spinner loading-xs" />
+              Add public holidays
             </button>
           </div>
         </div>
+        <p v-if="importError" class="mt-2 text-sm text-error">{{ importError }}</p>
       </fieldset>
 
       <div v-if="saveError" class="alert alert-error text-sm">
