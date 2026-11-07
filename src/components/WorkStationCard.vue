@@ -180,7 +180,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             class="rounded-full bg-primary-content/10 px-2 py-0.5 text-xs font-medium tabular-nums"
             :title="
               station.kanbans > 0
-                ? `${station.kanbans} Kanban(s) authorize a pull`
+                ? `${station.kanbans} Kanban ${station.kanbans === 1 ? 'authorizes' : 'authorize'} a pull`
                 : 'No Kanban: a pull is a Deviation'
             "
           >
