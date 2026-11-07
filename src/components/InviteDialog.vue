@@ -77,8 +77,10 @@ function day(expires: string) {
         class="btn"
         :class="invitation ? '' : 'btn-primary'"
         :disabled="making"
+        :aria-busy="making"
         @click="make"
       >
+        <span v-if="making" class="loading loading-spinner loading-xs" />
         {{ invitation ? "Make another link" : "Make a link" }}
       </button>
     </div>
