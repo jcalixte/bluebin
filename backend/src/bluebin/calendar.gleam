@@ -19,7 +19,8 @@ pub type Holiday {
 }
 
 /// SQL condition on a `day` column: a working day of the Working Calendar.
-pub const working_day_sql = "instr((select days from working_calendar), strftime('%w', day)) > 0
+pub const working_day_sql =
+  "instr((select days from working_calendar), strftime('%w', day)) > 0
      and day not in (select day from holiday)"
 
 pub fn load(connection: sqlight.Connection) -> Result(Calendar, sqlight.Error) {

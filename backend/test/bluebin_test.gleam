@@ -1116,12 +1116,13 @@ pub fn a_day_is_on_plan_within_one_piece_of_gap_test() {
 
 /// Every hour of every day is Working Time, so a test never depends on the
 /// clock it runs at.
-const always_working = calendar.Calendar(
-  days: [0, 1, 2, 3, 4, 5, 6],
-  start: 0,
-  end: 1440,
-  holidays: [],
-)
+const always_working =
+  calendar.Calendar(
+    days: [0, 1, 2, 3, 4, 5, 6],
+    start: 0,
+    end: 1440,
+    holidays: [],
+  )
 
 fn andons_now(connection: sqlight.Connection) -> List(andon.Andon) {
   let assert Ok(now) = andon.now(connection)

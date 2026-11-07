@@ -9,9 +9,11 @@ import gleam/string
 import simplifile
 import wisp/simulate
 
-const flow_answer = "{\"pk\": \"f10f10f1-0000-4000-8000-000000000001\", \"slug\": \"bluebin-invitation\"}"
+const flow_answer =
+  "{\"pk\": \"f10f10f1-0000-4000-8000-000000000001\", \"slug\": \"bluebin-invitation\"}"
 
-const invitation_answer = "{\"pk\": \"dee58273-8435-43de-a789-1a7f3de09497\", \"name\": \"bluebin-x\"}"
+const invitation_answer =
+  "{\"pk\": \"dee58273-8435-43de-a789-1a7f3de09497\", \"name\": \"bluebin-x\"}"
 
 /// A fake authentik: answers the flow lookup, then the new invitation.
 fn authentik(request: request.Request(String)) -> Result(#(Int, String), Nil) {

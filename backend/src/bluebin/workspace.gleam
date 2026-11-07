@@ -11,7 +11,8 @@ const header = "x-authentik-uid"
 /// the app is public. Not hex, so no authentik uid can collide with it.
 pub const public = "public"
 
-const allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
+const allowed =
+  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
 
 /// The caller's own Workspace. Another owner's comes from the URL (`parse`),
 /// behind the guard of `bluebin/access`.

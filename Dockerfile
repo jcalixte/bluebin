@@ -3,7 +3,7 @@
 # Docker Compose build pack cannot, and stops the stack before starting again.
 
 # Before the first FROM, or the FROM lines below cannot read it.
-ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.17.0-erlang-alpine
+ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine
 
 FROM node:22-alpine AS web
 WORKDIR /app

@@ -54,9 +54,7 @@ with recursive
     select date(day, '+1 day') from days, span where day < last_day
   ),
   working_day(day) as (
-    select day from days where "
-  <> calendar.working_day_sql
-  <> "
+    select day from days where " <> calendar.working_day_sql <> "
   )
 select
   p.id,
@@ -228,9 +226,7 @@ with recursive
     select date(day, '-1 day') from days where day > date('now', '-13 day')
   ),
   shown(day) as (
-    select day from days where "
-  <> calendar.working_day_sql
-  <> "
+    select day from days where " <> calendar.working_day_sql <> "
     order by day desc limit ?1
   )
 select

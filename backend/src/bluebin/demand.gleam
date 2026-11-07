@@ -43,9 +43,7 @@ with recursive
     select date(day, '+1 day'), last_day from days where day < last_day
   ),
   working_day(day) as (
-    select day from days where "
-  <> calendar.working_day_sql
-  <> "
+    select day from days where " <> calendar.working_day_sql <> "
   )
 select
   d.id,

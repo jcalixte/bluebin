@@ -669,7 +669,8 @@ fn touches_of_reworks(
   })
 }
 
-const events_sql = "
+const events_sql =
+  "
 select cast(strftime('%s', at) as integer), kind, piece_id,
        json_extract(payload, '$.station'), json_extract(payload, '$.from')
   from flow_event
@@ -679,7 +680,8 @@ select cast(strftime('%s', at) as integer), kind, piece_id,
  order by at, id
 "
 
-const pieces_sql = "
+const pieces_sql =
+  "
 select p.id, p.parent_id, p.demand_id,
        cast(strftime('%s', coalesce(p.entered_at, d.started_on)) as integer),
        cast(strftime('%s', p.produced_at) as integer)
@@ -687,7 +689,8 @@ select p.id, p.parent_id, p.demand_id,
 "
 
 /// A Demand is delivered on the day of its last Piece in production.
-const on_time_sql = "
+const on_time_sql =
+  "
 select count(*), coalesce(sum(delivered_on <= due_on), 0)
   from (select d.due_on,
                (select date(max(p.produced_at)) from piece p
@@ -697,7 +700,8 @@ select count(*), coalesce(sum(delivered_on <= due_on), 0)
  where delivered_on between ?1 and ?2
 "
 
-const deviations_sql = "
+const deviations_sql =
+  "
 select d.at, d.rule, d.station_id, w.name, p.reference, d.reason
   from deviation d
   join work_station w on w.id = d.station_id

@@ -9,7 +9,7 @@
 # on top of gleam and erlang.
 set -eu
 
-IMAGE="ghcr.io/gleam-lang/gleam:v1.17.0-erlang-alpine"
+IMAGE="ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine"
 cd "$(dirname "$0")"
 
 native_possible() {

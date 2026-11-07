@@ -16,7 +16,8 @@ pub const workspaces_directory = "data/workspaces"
 const schema_version = 1
 
 /// Parents before children. `foreign_keys` holds for this connection only.
-const schema = "
+const schema =
+  "
 pragma foreign_keys = on;
 
 create table demand (
@@ -154,7 +155,8 @@ values (1, 'Feature', 'Features', 'User Story', 'User Stories');
 "
 
 /// The Pieces already past a Work Station get a pass, after the seed.
-const seed_passes_sql = "
+const seed_passes_sql =
+  "
 insert or ignore into piece_pass (piece_id, station_id, team_member_id, at)
 select p.id, w.id,
        (select sp.team_member_id from station_team_member sp
@@ -184,7 +186,8 @@ update rework
  where closed_at is null;
 "
 
-const seed_steps_sql = "
+const seed_steps_sql =
+  "
 insert into line_step (position, name)
 select w.position,
        case when w.position = (select min(position) from work_station)
@@ -194,7 +197,8 @@ from work_station w
 group by w.position;
 "
 
-const seed_demands_sql = "
+const seed_demands_sql =
+  "
 insert into demand (id, label, client, started_on, due_on, pieces_asked, state) values
   ('d-checkout', 'Checkout redesign', 'Retail',    date('now', '-10 day'), date('now', '+11 day'), 12, 'active'),
   ('d-offline',  'Offline mode',      'Field Ops', date('now', '-15 day'), date('now', '+5 day'),  10, 'active'),
@@ -226,7 +230,8 @@ select produced_at, 'piece_reached_production', id, null
 from piece where state = 'produced' order by produced_at;
 "
 
-const seed_line_sql = "
+const seed_line_sql =
+  "
 insert into team_member (id, name) values
   ('pe-ines', 'Inès'), ('pe-marc', 'Marc'), ('pe-sofia', 'Sofia'),
   ('pe-bob', 'Bob'), ('pe-lila', 'Lila'), ('pe-alice', 'Alice'),
@@ -522,7 +527,8 @@ fn in_transaction(
 }
 
 /// Children before parents, for `pragma foreign_keys = on`.
-const empty_sql = "
+const empty_sql =
+  "
 delete from andon;
 delete from deviation;
 delete from rework;
@@ -538,7 +544,8 @@ delete from line_step;
 delete from sqlite_sequence;
 "
 
-const default_calendar_and_labels_sql = "
+const default_calendar_and_labels_sql =
+  "
 delete from holiday;
 update working_calendar set days = '12345', day_start = '09:00', day_end = '16:00';
 update line_label
@@ -547,7 +554,8 @@ update line_label
 "
 
 /// The one Blue Bin is empty, so the Work Station holds its one Kanban.
-const start_empty_sql = "
+const start_empty_sql =
+  "
 insert into team_member (id, name)
 values ('pe-' || lower(hex(randomblob(6))), 'Team Member 1');
 

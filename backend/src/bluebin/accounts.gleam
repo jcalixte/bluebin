@@ -39,7 +39,8 @@ pub type LinkError {
 pub const max_email_length = 254
 
 /// Additive only: during a rolling deploy the old code runs on this file too.
-const schema = "
+const schema =
+  "
 create table if not exists account (
   uid        text primary key,
   email      text not null,
