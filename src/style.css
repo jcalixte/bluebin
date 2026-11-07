@@ -42,3 +42,9 @@
      warning itself (9.0:1 on base-100). */
   --color-warning-ink: light-dark(var(--color-warning-content), var(--color-warning));
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

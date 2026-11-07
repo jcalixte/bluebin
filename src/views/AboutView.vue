@@ -7,7 +7,8 @@ const sections = [
   { id: "push-pull", title: "Push or pull" },
   { id: "kanban", title: "The Kanban and the Blue Bin" },
   { id: "rules", title: "The pull rules" },
-  { id: "pace", title: "Pace, levelling and problems" },
+  { id: "stop", title: "Stop to fix" },
+  { id: "pace", title: "Pace, levelling and measures" },
   { id: "where", title: "Where to find it" },
   { id: "more", title: "Learn more" },
 ] as const
@@ -20,6 +21,7 @@ const section = Object.fromEntries(
 
 const active = ref<SectionId | null>(null)
 let pinned = false
+let unpinTimer: ReturnType<typeof setTimeout> | undefined
 
 /** The active section is the last one whose heading is above the top third of the window. */
 function updateActive() {
@@ -38,18 +40,32 @@ function updateActive() {
   active.value = current
 }
 
-/** A click marks its section at once and ignores the scroll of the jump, which can end at the bottom. */
+/**
+ * A click marks its section at once and ignores the smooth scroll of the jump, which can end at the bottom.
+ * The timeout covers a click that does not scroll, and browsers with no `scrollend`.
+ */
 function pick(id: SectionId) {
   active.value = id
   pinned = true
-  requestAnimationFrame(() => requestAnimationFrame(() => (pinned = false)))
+  clearTimeout(unpinTimer)
+  unpinTimer = setTimeout(unpin, 1000)
+}
+
+function unpin() {
+  pinned = false
+  clearTimeout(unpinTimer)
 }
 
 onMounted(() => {
   updateActive()
   addEventListener("scroll", updateActive, { passive: true })
+  addEventListener("scrollend", unpin)
 })
-onBeforeUnmount(() => removeEventListener("scroll", updateActive))
+onBeforeUnmount(() => {
+  removeEventListener("scroll", updateActive)
+  removeEventListener("scrollend", unpin)
+  clearTimeout(unpinTimer)
+})
 
 /** One Blue Bin glyph. Full and empty differ by fill and border style, not by colour alone. */
 const fullBin = "size-7 rounded-field border-2 border-primary bg-primary"
@@ -104,6 +120,25 @@ const rules = [
   },
 ]
 
+const stops = [
+  {
+    title: "Anyone can stop",
+    text: "Any Team Member can raise an Andon on their Work Station with one button. It stops that Work Station and calls its Team Leader.",
+  },
+  {
+    title: "Bluebin raises some by itself",
+    text: "Bluebin raises an Andon when a Demand is one Piece or more behind its Takt Time, and when a Rework waits one hour of Working Time with nobody to repair it. These Andons show the problem to everybody but do not stop a Work Station.",
+  },
+  {
+    title: "Pull stops the rest",
+    text: "A stopped Work Station pulls a new Piece only as a Deviation. Upstream, its Blue Bins stay full and give no Kanban. Downstream, no new Piece comes. Nobody stops the full Line by hand.",
+  },
+  {
+    title: "The Team Leader helps, then closes",
+    text: "The Team Leader comes to the Work Station, helps to fix the problem and closes the Andon. A Team Leader never pushes work to a Team Member. Each stop counts as Andon Time in the Measures.",
+  },
+]
+
 const tools = [
   {
     term: "Takt Time",
@@ -112,10 +147,6 @@ const tools = [
   {
     term: "Heijunka",
     text: "Bluebin computes the order of the Backlog. It mixes the Pieces of all active Demands, each at the pace of its own Takt Time, so one large Demand does not hold back the small ones.",
-  },
-  {
-    term: "Andon",
-    text: "A signal that everybody in the Line sees when the flow has a problem. Any Team Member can raise one; it stops their Work Station until its Team Leader closes it.",
   },
   {
     term: "Measures",
@@ -448,6 +479,33 @@ const readings = [
                 </div>
               </li>
             </ol>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.stop.id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{ section.stop.number }}</span>
+              <h3 :id="section.stop.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
+                {{ section.stop.title }}
+              </h3>
+            </header>
+            <p class="text-lg text-pretty">
+              An <strong class="font-semibold">Andon</strong> stops the work where a problem
+              appears. The team fixes the cause at once, before more Pieces go through with the same
+              problem.
+            </p>
+            <ul class="grid gap-x-10 md:grid-cols-2">
+              <li
+                v-for="stop in stops"
+                :key="stop.title"
+                class="grid gap-1.5 border-t-2 border-base-300 py-5"
+              >
+                <h4 class="flex items-center gap-2 font-semibold leading-snug">
+                  <span class="size-2 shrink-0 rounded-full bg-andon" aria-hidden="true" />
+                  {{ stop.title }}
+                </h4>
+                <p class="text-pretty text-base-content/80">{{ stop.text }}</p>
+              </li>
+            </ul>
           </section>
 
           <section class="grid gap-6" :aria-labelledby="section.pace.id">
