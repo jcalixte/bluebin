@@ -2,6 +2,48 @@
 import BrandMark from "../components/BrandMark.vue"
 import ThemeToggle from "../components/ThemeToggle.vue"
 
+const sections = [
+  { id: "push-pull", title: "Push or pull" },
+  { id: "kanban", title: "The Kanban and the Blue Bin" },
+  { id: "rules", title: "The pull rules" },
+  { id: "pace", title: "Pace, levelling and problems" },
+  { id: "words", title: "Your words, Bluebin words" },
+  { id: "where", title: "Where to find it" },
+  { id: "more", title: "Learn more" },
+] as const
+
+type SectionId = (typeof sections)[number]["id"]
+
+const section = Object.fromEntries(
+  sections.map((s, i) => [s.id, { ...s, number: String(i + 1).padStart(2, "0") }]),
+) as Record<SectionId, { id: SectionId; title: string; number: string }>
+
+/** One Blue Bin glyph. Full and empty differ by fill and border style, not by colour alone. */
+const fullBin = "size-7 rounded-field border-2 border-primary bg-primary"
+const emptyBin = "size-7 rounded-field border-2 border-dashed border-primary"
+const piece = "size-2.5 rounded-xs bg-base-content/70"
+
+type Node =
+  | { kind: "end"; name: string }
+  | { kind: "station"; name: string }
+  | { kind: "bins"; bins: boolean[]; label: string }
+
+const line: Node[] = [
+  { kind: "end", name: "Backlog" },
+  { kind: "station", name: "Development" },
+  { kind: "bins", bins: [true, false], label: "1 full, 1 empty" },
+  { kind: "station", name: "QA" },
+  { kind: "bins", bins: [false], label: "1 empty" },
+  { kind: "end", name: "Production" },
+]
+
+const cycle = [
+  "Development finishes a Piece and puts it in a Blue Bin.",
+  "QA pulls the Piece out of the Blue Bin when it is ready to work on it.",
+  "Development gets a Kanban: a signal that it can make one more Piece.",
+  "Development makes the next Piece. With no Kanban, it does not start one.",
+]
+
 const rules = [
   {
     title: "No Kanban, no new work",
@@ -47,6 +89,56 @@ const tools = [
     text: "Lead Time, Touch Time, Stagnation Time and First Pass Yield show where each Piece waits and which Work Station makes the defects, so the team knows what to improve first.",
   },
 ]
+
+const words = [
+  {
+    yours: "Feature",
+    term: "Demand",
+    text: "a request for a quantity of Pieces by a due date",
+  },
+  { yours: "User Story", term: "Piece", text: "the work that flows, one at a time" },
+  { yours: "Team or step (design, development, QA)", term: "Work Station", text: "" },
+  { yours: "Board or workflow", term: "Line", text: "the ordered chain of Work Stations" },
+  {
+    yours: '"Done" column',
+    term: "Blue Bin",
+    text: "holds one finished Piece until the next step pulls it",
+  },
+  { yours: "Bug sent back to development", term: "Rework", text: "repaired where the Piece is" },
+]
+
+const places = [
+  {
+    href: "/demands",
+    name: "Demands",
+    text: "Add the work your Clients ask for, and follow its Takt Time and Forecast.",
+  },
+  { href: "/backlog", name: "Backlog", text: "The Pieces that wait, in Heijunka order." },
+  {
+    href: "/line",
+    name: "Line",
+    text: "Every Work Station with its Kanbans, Blue Bins and Andons.",
+  },
+  { href: "/next", name: "My next thing", text: "What a Team Member does now." },
+  {
+    href: "/measures",
+    name: "Measures",
+    text: "Where the work waits, and a Before and After period to see if a change helped.",
+  },
+]
+
+const readings = [
+  {
+    href: "https://thinking-people-system.house/",
+    name: "Explorable Thinking People System",
+    text: "The house of the Toyota Production System, the source of Bluebin: Just-in-Time, Jidoka, Heijunka, and how they help people improve their work.",
+  },
+  {
+    href: "https://thinking-people-system.house/pull-system",
+    name: "Exploring Pull System",
+    text: "How a pull system helps a team succeed, and why each step waits for the next one to ask.",
+  },
+]
 </script>
 
 <template>
@@ -60,205 +152,414 @@ const tools = [
         <ThemeToggle class="[--btn-rest-fg:var(--color-primary-content)]" />
       </div>
     </header>
-    <main class="px-6 py-8">
-      <article class="mx-auto grid max-w-4xl gap-10">
-        <header class="grid gap-3">
-          <p class="text-sm font-semibold uppercase tracking-wide text-primary">About Bluebin</p>
-          <h2 class="text-3xl font-semibold text-balance">
-            A pull system for software teams, built on the Toyota Production System
-          </h2>
-          <p class="text-lg text-pretty opacity-80">
-            In Bluebin, work moves only when the next step asks for it. The team finishes what it
-            started before it starts something new, at the pace its Clients need.
-          </p>
-        </header>
 
-        <section class="grid gap-4" aria-labelledby="push-pull">
-          <h3 id="push-pull" class="text-xl font-semibold">Push or pull</h3>
-          <div class="grid gap-4 md:grid-cols-2">
-            <div class="card border border-base-300 bg-base-100">
-              <div class="card-body gap-2">
-                <h4 class="font-semibold">Push: each step starts when it is free</h4>
-                <p class="text-pretty opacity-80">
-                  Each step takes new work as soon as it has finished its own. The work piles up in
-                  front of the slowest step, and many items are open at once while few reach
-                  production.
-                </p>
-              </div>
-            </div>
-            <div class="card border border-primary/40 bg-base-100">
-              <div class="card-body gap-2">
-                <h4 class="font-semibold">Pull: each step starts when the next one asks</h4>
-                <p class="text-pretty opacity-80">
-                  A step makes one more item only when the step after it takes one. The queue in
-                  front of each step stays as small as its Blue Bins. When one step stops, the steps
-                  around it soon have nothing to pull or nowhere to put their work, so the whole
-                  team sees the problem.
-                </p>
-              </div>
+    <main>
+      <section class="border-b border-base-300 bg-base-100" aria-labelledby="about-title">
+        <div class="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16">
+          <div class="grid max-w-3xl gap-5">
+            <p class="text-sm font-semibold uppercase tracking-wide text-primary">About Bluebin</p>
+            <h2
+              id="about-title"
+              class="text-[clamp(2rem,1.4rem+2.6vw,3.25rem)] font-semibold leading-[1.1] tracking-tight text-balance"
+            >
+              A pull system for software teams, built on the Toyota Production System
+            </h2>
+            <p class="max-w-2xl text-lg text-pretty text-base-content/80">
+              In Bluebin, work moves only when the next step asks for it. The team finishes what it
+              started before it starts something new, at the pace its Clients need.
+            </p>
+            <div class="flex flex-wrap gap-3 pt-2">
+              <a href="/line" class="btn btn-primary h-11 px-5">Open your Line</a>
+              <a href="#rules" class="btn btn-ghost h-11 px-5">Read the pull rules</a>
             </div>
           </div>
-        </section>
 
-        <section class="grid gap-4" aria-labelledby="kanban">
-          <h3 id="kanban" class="text-xl font-semibold">The Kanban and the Blue Bin</h3>
-          <p class="text-pretty">
-            In Bluebin, a <strong>Kanban</strong> is a signal. It tells one Work Station that it can
-            make one more Piece. When a Work Station finishes a Piece, it puts it in a
-            <strong>Blue Bin</strong>. When the downstream Work Station pulls the Piece out of that
-            Blue Bin, the upstream Work Station gets a Kanban, and only then makes the next one.
-          </p>
+          <figure class="rounded-box border border-base-300 bg-base-200 p-5 sm:p-8">
+            <ol class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
+              <template v-for="(node, index) in line" :key="index">
+                <li v-if="index > 0" aria-hidden="true" class="grid place-items-center">
+                  <svg
+                    class="size-5 rotate-90 text-base-content/50 sm:rotate-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M5 12h14M13 6l6 6l-6 6" />
+                  </svg>
+                </li>
+                <li
+                  v-if="node.kind === 'end'"
+                  class="rounded-box border border-dashed border-base-content/30 px-4 py-3 text-center text-sm text-base-content/80 sm:flex-1"
+                >
+                  {{ node.name }}
+                </li>
+                <li
+                  v-else-if="node.kind === 'station'"
+                  class="rounded-box border border-base-300 bg-base-100 px-4 py-3 text-center font-semibold shadow-sm sm:flex-[1.4]"
+                >
+                  {{ node.name }}
+                </li>
+                <li v-else class="grid justify-items-center gap-1.5">
+                  <span class="flex gap-1.5">
+                    <span
+                      v-for="(full, bin) in node.bins"
+                      :key="bin"
+                      :class="full ? fullBin : emptyBin"
+                    />
+                  </span>
+                  <span class="text-xs text-base-content/70">
+                    <span class="sr-only">Blue Bins:</span>{{ node.label }}
+                  </span>
+                </li>
+              </template>
+            </ol>
 
-          <figure class="card border border-base-300 bg-base-100">
-            <div class="card-body gap-4 overflow-x-auto">
-              <div class="flex min-w-max items-center gap-2 text-sm">
-                <div class="rounded-box border border-base-300 px-3 py-2">Backlog</div>
-                <span aria-hidden="true" class="opacity-60">→</span>
-                <div class="rounded-box bg-base-200 px-3 py-2 font-medium">Development</div>
-                <span aria-hidden="true" class="opacity-60">→</span>
-                <div class="flex gap-1" title="Two Blue Bins: one full, one empty">
-                  <span class="size-8 rounded-field bg-primary" />
-                  <span class="size-8 rounded-field border-2 border-dashed border-primary" />
-                </div>
-                <span aria-hidden="true" class="opacity-60">→</span>
-                <div class="rounded-box bg-base-200 px-3 py-2 font-medium">QA</div>
-                <span aria-hidden="true" class="opacity-60">→</span>
-                <div class="flex gap-1" title="One empty Blue Bin">
-                  <span class="size-8 rounded-field border-2 border-dashed border-primary" />
-                </div>
-                <span aria-hidden="true" class="opacity-60">→</span>
-                <div class="rounded-box border border-base-300 px-3 py-2">Production</div>
-              </div>
-              <div class="grid min-w-max gap-1 text-sm">
-                <p>
-                  <span class="font-medium">Pieces</span>
-                  <span class="opacity-70"
-                    >flow downstream, from left to right, one at a time.</span
+            <figcaption class="mt-8 grid gap-4 border-t border-base-300 pt-6 sm:grid-cols-2">
+              <p class="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-base-100 text-base-content/70"
+                >
+                  <svg
+                    class="size-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
                   >
-                </p>
-                <p>
-                  <span class="font-medium">Kanbans</span>
-                  <span class="opacity-70"
-                    >flow upstream, from right to left: each empty Blue Bin asks for one more.</span
+                    <path d="M5 12h14M13 6l6 6l-6 6" />
+                  </svg>
+                </span>
+                <span class="text-pretty">
+                  <strong class="font-semibold">Pieces</strong>
+                  <span class="text-base-content/80">
+                    flow downstream, toward Production, one at a time.</span
                   >
-                </p>
-              </div>
-            </div>
-            <figcaption class="sr-only">
-              A Line: the Backlog, then Development with two Blue Bins, one full and one empty, then
-              QA with one empty Blue Bin, then production.
+                </span>
+              </p>
+              <p class="flex items-start gap-3">
+                <span
+                  aria-hidden="true"
+                  class="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-content"
+                >
+                  <svg
+                    class="size-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M19 12H5M11 6l-6 6l6 6" />
+                  </svg>
+                </span>
+                <span class="text-pretty">
+                  <strong class="font-semibold">Kanbans</strong>
+                  <span class="text-base-content/80">
+                    flow upstream, toward the Backlog: each empty Blue Bin asks for one more.</span
+                  >
+                </span>
+              </p>
+              <span class="sr-only">
+                A Line: the Backlog, then Development with two Blue Bins, one full and one empty,
+                then QA with one empty Blue Bin, then Production.
+              </span>
             </figcaption>
           </figure>
+        </div>
+      </section>
 
-          <p class="text-pretty">
-            The number of Blue Bins of a Work Station is its limit of finished work that waits. With
-            one empty Blue Bin, Development holds one Kanban and can make one more Piece. When both
-            Blue Bins are full, Development stops: making more would only make the queue in front of
-            QA longer.
-          </p>
-        </section>
-
-        <section class="grid gap-4" aria-labelledby="rules">
-          <h3 id="rules" class="text-xl font-semibold">The pull rules</h3>
-          <ol class="grid gap-3 md:grid-cols-2">
-            <li
-              v-for="(rule, index) in rules"
-              :key="rule.title"
-              class="flex gap-3 rounded-box border border-base-300 bg-base-100 p-4"
+      <div
+        class="mx-auto grid max-w-6xl gap-12 px-6 py-12 sm:py-16 lg:grid-cols-[13rem_minmax(0,1fr)]"
+      >
+        <nav aria-label="On this page" class="hidden lg:block">
+          <div class="sticky top-8 grid gap-1">
+            <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-base-content/70">
+              On this page
+            </p>
+            <a
+              v-for="s in sections"
+              :key="s.id"
+              :href="`#${s.id}`"
+              class="flex gap-3 rounded-field px-3 py-2 text-sm text-base-content/80 transition-colors hover:bg-base-300 hover:text-base-content"
             >
-              <span
-                class="grid size-7 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-content"
-                >{{ index + 1 }}</span
-              >
-              <div class="grid gap-1">
-                <h4 class="font-semibold">{{ rule.title }}</h4>
-                <p class="text-sm text-pretty opacity-80">{{ rule.text }}</p>
-              </div>
-            </li>
-          </ol>
-        </section>
-
-        <section class="grid gap-4" aria-labelledby="pace">
-          <h3 id="pace" class="text-xl font-semibold">Pace, levelling and problems</h3>
-          <dl class="grid gap-3 md:grid-cols-2">
-            <div
-              v-for="tool in tools"
-              :key="tool.term"
-              class="rounded-box border border-base-300 bg-base-100 p-4"
-            >
-              <dt class="font-semibold">{{ tool.term }}</dt>
-              <dd class="mt-1 text-sm text-pretty opacity-80">{{ tool.text }}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <section class="grid gap-4" aria-labelledby="words">
-          <h3 id="words" class="text-xl font-semibold">Your words, Bluebin words</h3>
-          <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th scope="col">In a software team</th>
-                  <th scope="col">In Bluebin</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Feature</td>
-                  <td>Demand: a request for a quantity of Pieces by a due date</td>
-                </tr>
-                <tr>
-                  <td>User Story</td>
-                  <td>Piece: the work that flows, one at a time</td>
-                </tr>
-                <tr>
-                  <td>Team or step (design, development, QA)</td>
-                  <td>Work Station</td>
-                </tr>
-                <tr>
-                  <td>Board or workflow</td>
-                  <td>Line: the ordered chain of Work Stations</td>
-                </tr>
-                <tr>
-                  <td>"Done" column</td>
-                  <td>Blue Bin: holds one finished Piece until the next step pulls it</td>
-                </tr>
-                <tr>
-                  <td>Bug sent back to development</td>
-                  <td>Rework: repaired where the Piece is</td>
-                </tr>
-              </tbody>
-            </table>
+              <span class="font-semibold tabular-nums text-primary">{{
+                section[s.id].number
+              }}</span>
+              {{ s.title }}
+            </a>
           </div>
-        </section>
+        </nav>
 
-        <section class="grid gap-4" aria-labelledby="where">
-          <h3 id="where" class="text-xl font-semibold">Where to find it in Bluebin</h3>
-          <p class="text-pretty">Each link opens the last Line you used.</p>
-          <ul class="grid gap-2">
-            <li>
-              <a href="/demands" class="link font-medium">Demands</a>: add the work your Clients ask
-              for, and follow its Takt Time and Forecast.
-            </li>
-            <li>
-              <a href="/backlog" class="link font-medium">Backlog</a>: the Pieces that wait, in
-              Heijunka order.
-            </li>
-            <li>
-              <a href="/line" class="link font-medium">Line</a>: every Work Station with its
-              Kanbans, Blue Bins and Andons.
-            </li>
-            <li>
-              <a href="/next" class="link font-medium">My next thing</a>: what a Team Member does
-              now.
-            </li>
-            <li>
-              <a href="/measures" class="link font-medium">Measures</a>: where the work waits, and a
-              Before and After period to see if a change helped.
-            </li>
-          </ul>
-        </section>
-      </article>
+        <article class="grid max-w-3xl gap-16">
+          <section class="grid gap-6" :aria-labelledby="section['push-pull'].id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{
+                section["push-pull"].number
+              }}</span>
+              <h3
+                :id="section['push-pull'].id"
+                class="scroll-mt-8 text-2xl font-semibold tracking-tight"
+              >
+                {{ section["push-pull"].title }}
+              </h3>
+            </header>
+            <div class="grid gap-4 md:grid-cols-2">
+              <div
+                class="grid content-start gap-4 rounded-box border border-base-300 bg-base-100 p-5"
+              >
+                <div
+                  aria-hidden="true"
+                  class="flex h-16 items-center gap-1 rounded-field bg-base-200 px-2 text-xs"
+                >
+                  <span class="rounded-field bg-base-100 px-1.5 py-1">Design</span>
+                  <span class="grid grid-cols-3 gap-0.5">
+                    <span v-for="n in 6" :key="n" :class="piece" />
+                  </span>
+                  <span class="rounded-field bg-base-100 px-1.5 py-1 font-semibold"
+                    >Development</span
+                  >
+                  <span :class="piece" />
+                  <span class="rounded-field bg-base-100 px-1.5 py-1">QA</span>
+                </div>
+                <div class="grid gap-2">
+                  <h4 class="font-semibold">Push: each step starts when it is free</h4>
+                  <p class="text-pretty text-base-content/80">
+                    Each step takes new work as soon as it has finished its own. The work piles up
+                    in front of the slowest step, and many items are open at once while few reach
+                    production.
+                  </p>
+                </div>
+              </div>
+              <div
+                class="grid content-start gap-4 rounded-box border border-primary/50 bg-base-100 p-5"
+              >
+                <div
+                  aria-hidden="true"
+                  class="flex h-16 items-center gap-1 rounded-field bg-base-200 px-2 text-xs"
+                >
+                  <span class="rounded-field bg-base-100 px-1.5 py-1">Design</span>
+                  <span class="flex gap-0.5">
+                    <span class="size-4 rounded-sm bg-primary" />
+                    <span class="size-4 rounded-sm border border-dashed border-primary" />
+                  </span>
+                  <span class="rounded-field bg-base-100 px-1.5 py-1 font-semibold"
+                    >Development</span
+                  >
+                  <span class="size-4 rounded-sm border border-dashed border-primary" />
+                  <span class="rounded-field bg-base-100 px-1.5 py-1">QA</span>
+                </div>
+                <div class="grid gap-2">
+                  <h4 class="font-semibold">Pull: each step starts when the next one asks</h4>
+                  <p class="text-pretty text-base-content/80">
+                    A step makes one more item only when the step after it takes one. The queue in
+                    front of each step stays as small as its Blue Bins. When one step stops, the
+                    steps around it soon have nothing to pull or nowhere to put their work, so the
+                    whole team sees the problem.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.kanban.id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{
+                section.kanban.number
+              }}</span>
+              <h3 :id="section.kanban.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
+                {{ section.kanban.title }}
+              </h3>
+            </header>
+            <p class="text-lg text-pretty">
+              A <strong class="font-semibold">Kanban</strong> is a signal: it tells one Work Station
+              that it can make one more Piece. A <strong class="font-semibold">Blue Bin</strong>
+              holds one finished Piece until the downstream Work Station pulls it. In the Line at
+              the top of this page, one Piece goes through this cycle:
+            </p>
+            <ol class="grid gap-3">
+              <li
+                v-for="(step, index) in cycle"
+                :key="index"
+                class="flex items-start gap-4 rounded-box bg-base-100 p-4"
+              >
+                <span
+                  aria-hidden="true"
+                  class="grid size-8 shrink-0 place-items-center rounded-full border-2 border-primary font-semibold tabular-nums text-primary"
+                  >{{ index + 1 }}</span
+                >
+                <span class="pt-1 text-pretty">{{ step }}</span>
+              </li>
+            </ol>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.rules.id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{
+                section.rules.number
+              }}</span>
+              <h3 :id="section.rules.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
+                {{ section.rules.title }}
+              </h3>
+            </header>
+            <ol class="grid gap-x-10 md:grid-cols-2">
+              <li
+                v-for="(rule, index) in rules"
+                :key="rule.title"
+                class="grid grid-cols-[2.75rem_minmax(0,1fr)] gap-x-2 border-t-2 border-base-300 py-5"
+              >
+                <span
+                  aria-hidden="true"
+                  class="text-3xl font-semibold leading-none tabular-nums text-primary"
+                  >{{ index + 1 }}</span
+                >
+                <div class="grid gap-1.5">
+                  <h4 class="font-semibold leading-snug">{{ rule.title }}</h4>
+                  <p class="text-pretty text-base-content/80">{{ rule.text }}</p>
+                </div>
+              </li>
+            </ol>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.pace.id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{ section.pace.number }}</span>
+              <h3 :id="section.pace.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
+                {{ section.pace.title }}
+              </h3>
+            </header>
+            <dl class="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100">
+              <div
+                v-for="tool in tools"
+                :key="tool.term"
+                class="grid gap-1 p-5 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-6"
+              >
+                <dt class="font-semibold">{{ tool.term }}</dt>
+                <dd class="text-pretty text-base-content/80">{{ tool.text }}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.words.id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{
+                section.words.number
+              }}</span>
+              <h3 :id="section.words.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
+                {{ section.words.title }}
+              </h3>
+            </header>
+            <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th scope="col" class="w-2/5">In a software team</th>
+                    <th scope="col">In Bluebin</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="word in words" :key="word.term" class="align-top">
+                    <td class="text-base text-base-content/80">{{ word.yours }}</td>
+                    <td class="text-base">
+                      <span class="font-semibold">{{ word.term }}</span>
+                      <span v-if="word.text" class="text-base-content/80">: {{ word.text }}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.where.id">
+            <header class="grid gap-2">
+              <div class="flex items-baseline gap-3">
+                <span class="font-semibold tabular-nums text-primary">{{
+                  section.where.number
+                }}</span>
+                <h3
+                  :id="section.where.id"
+                  class="scroll-mt-8 text-2xl font-semibold tracking-tight"
+                >
+                  {{ section.where.title }}
+                </h3>
+              </div>
+              <p class="text-pretty text-base-content/80">
+                Each link opens the last Line you used.
+              </p>
+            </header>
+            <ul class="grid gap-3 sm:grid-cols-2">
+              <li v-for="place in places" :key="place.href">
+                <a
+                  :href="place.href"
+                  class="group flex h-full min-h-11 items-start gap-3 rounded-box border border-base-300 bg-base-100 p-4 transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  <span class="grid flex-1 gap-1">
+                    <span class="font-semibold text-primary">{{ place.name }}</span>
+                    <span class="text-pretty text-base-content/80">{{ place.text }}</span>
+                  </span>
+                  <svg
+                    aria-hidden="true"
+                    class="mt-0.5 size-5 shrink-0 text-base-content/50 transition-transform group-hover:text-primary motion-safe:group-hover:translate-x-0.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M5 12h14M13 6l6 6l-6 6" />
+                  </svg>
+                </a>
+              </li>
+            </ul>
+          </section>
+
+          <section class="grid gap-6" :aria-labelledby="section.more.id">
+            <header class="flex items-baseline gap-3">
+              <span class="font-semibold tabular-nums text-primary">{{ section.more.number }}</span>
+              <h3 :id="section.more.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
+                {{ section.more.title }}
+              </h3>
+            </header>
+            <ul class="grid gap-3 sm:grid-cols-2">
+              <li v-for="reading in readings" :key="reading.href">
+                <a
+                  :href="reading.href"
+                  target="_blank"
+                  rel="noopener"
+                  class="group flex h-full min-h-11 items-start gap-3 rounded-box border border-base-300 bg-base-100 p-4 transition-colors hover:border-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                >
+                  <span class="grid flex-1 gap-1">
+                    <span class="font-semibold text-primary"
+                      >{{ reading.name }}<span class="sr-only"> (opens in a new tab)</span></span
+                    >
+                    <span class="text-pretty text-base-content/80">{{ reading.text }}</span>
+                    <span class="text-sm text-base-content/70">thinking-people-system.house</span>
+                  </span>
+                  <svg
+                    aria-hidden="true"
+                    class="mt-0.5 size-5 shrink-0 text-base-content/50 transition-transform group-hover:text-primary motion-safe:group-hover:-translate-y-0.5 motion-safe:group-hover:translate-x-0.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M17 7l-10 10M8 7h9v9" />
+                  </svg>
+                </a>
+              </li>
+            </ul>
+          </section>
+        </article>
+      </div>
     </main>
   </div>
 </template>
