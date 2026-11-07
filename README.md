@@ -78,12 +78,25 @@ invitation only: import [`authentik/bluebin-invitation.yaml`](./authentik/bluebi
 once in authentik (Flows and Stages > Flows > Import). The new user joins
 `bluebin-users` and lands on bluebin.app.
 
+Bluebin has its own sign-in look: import
+[`authentik/bluebin-authentication.yaml`](./authentik/bluebin-authentication.yaml)
+the same way. It makes the flow `bluebin-authentication` from the stages of
+`default-authentication-flow` and sets it as the authentication flow of the
+provider `bluebin`; other apps keep the default sign-in. Both flows use the
+`sidebar_left` layout and
+[`authentik/bluebin-background.svg`](./authentik/bluebin-background.svg),
+which authentik loads from the public Gitea raw URL of `main`. The authentik
+brand (logo, favicon, custom CSS) is shared by every app on `auth.apoena.dev`,
+so Bluebin does not change it. A user who already has an authentik session
+skips the sign-in page.
+
 `akadmin` makes each link with **Invite…** in the header: `POST /api/invitations`
 asks authentik for a single-use invitation to `bluebin-invitation`, valid one
 week. The API trusts `X-authentik-username` only with `BLUEBIN_SSO=on`, and
-needs `AUTHENTIK_TOKEN`: an authentik API token, without expiry, of a service
-account whose role has only the global permissions "Can view Flow" and "Can
-add Invitation". Without it the API answers `503`, and links are still made in
+needs `AUTHENTIK_TOKEN`: a token with intent "API Token", without expiry, of a
+service account with only the global permissions "Can view Flow" and "Can add
+Invitation". The token made with the service account is an app password, which
+the API refuses as a Bearer token. Without it the API answers `503`, and links are still made in
 authentik under Directory > Invitations. In dev, the Vite proxy signs in as
 `akadmin`.
 
