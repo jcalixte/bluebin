@@ -2,6 +2,7 @@ import { onMounted, reactive, ref, watch } from "vue"
 import { api } from "../api"
 import type { Measures } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
+import { useLoad } from "./useLoad"
 import { useWorkingCalendar } from "./useWorkingCalendar"
 
 export type Period = { from: string; to: string }
@@ -31,29 +32,21 @@ export function useMeasures() {
   const before = reactive<Period>({ from: daysAgo(13), to: daysAgo(7) })
   const after = reactive<Period>({ from: daysAgo(6), to: daysAgo(0) })
   const measures = ref<{ before: Measures; after: Measures } | null>(null)
-  const error = ref<string | null>(null)
-  const loading = ref(true)
-  let latest = 0
+
+  const {
+    error,
+    loading,
+    load: read,
+  } = useLoad(
+    async () => {
+      const [a, b] = await Promise.all([fetchMeasures(before), fetchMeasures(after)])
+      return { before: a, after: b }
+    },
+    (value) => (measures.value = value),
+  )
 
   async function load() {
-    if (!isValidPeriod(before) || !isValidPeriod(after)) return
-    const request = ++latest
-    loading.value = true
-    error.value = null
-    try {
-      const [a, b] = await Promise.all([fetchMeasures(before), fetchMeasures(after)])
-      if (request === latest) {
-        measures.value = { before: a, after: b }
-      }
-    } catch (cause) {
-      if (request === latest) {
-        error.value = cause instanceof Error ? cause.message : String(cause)
-      }
-    } finally {
-      if (request === latest) {
-        loading.value = false
-      }
-    }
+    if (isValidPeriod(before) && isValidPeriod(after)) await read()
   }
 
   const { calendar, calendarError, saveCalendar } = useWorkingCalendar(load)

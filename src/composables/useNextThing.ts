@@ -2,12 +2,11 @@ import { onMounted, ref, watch, type Ref } from "vue"
 import { api, postAction } from "../api"
 import type { FlowConfirm, TeamMember, TeamMemberView } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
+import { useLoad } from "./useLoad"
 
 export function useNextThing(teamMemberId: Ref<string>) {
   const teamMembers = ref<TeamMember[]>([])
   const view = ref<TeamMemberView | null>(null)
-  const error = ref<string | null>(null)
-  const loading = ref(true)
 
   async function loadTeamMembers() {
     const response = await fetch(api("/api/team-members"))
@@ -17,16 +16,13 @@ export function useNextThing(teamMemberId: Ref<string>) {
     teamMembers.value = (await response.json()) as TeamMember[]
   }
 
-  async function load() {
-    loading.value = true
-    error.value = null
-    try {
+  const { error, loading, load } = useLoad(
+    async () => {
       if (teamMembers.value.length === 0) {
         await loadTeamMembers()
       }
       if (teamMemberId.value === "") {
-        view.value = null
-        return
+        return null
       }
       const response = await fetch(
         api(`/api/team-members/${encodeURIComponent(teamMemberId.value)}/next`),
@@ -34,13 +30,10 @@ export function useNextThing(teamMemberId: Ref<string>) {
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
-      view.value = (await response.json()) as TeamMemberView
-    } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause)
-    } finally {
-      loading.value = false
-    }
-  }
+      return (await response.json()) as TeamMemberView
+    },
+    (value) => (view.value = value),
+  )
 
   async function act(path: string, body: Record<string, unknown>): Promise<FlowConfirm | null> {
     const confirm = await postAction(path, body)

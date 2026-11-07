@@ -2,17 +2,14 @@ import { onMounted, ref } from "vue"
 import { api } from "../api"
 import type { Andon, Demand } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
+import { useLoad } from "./useLoad"
 
 export function useDemands() {
   const demands = ref<Demand[]>([])
   const andons = ref<Andon[]>([])
-  const error = ref<string | null>(null)
-  const loading = ref(true)
 
-  async function load() {
-    loading.value = true
-    error.value = null
-    try {
+  const { error, loading, load } = useLoad(
+    async () => {
       const [demandsResponse, andonsResponse] = await Promise.all([
         fetch(api("/api/demands")),
         fetch(api("/api/andons")),
@@ -22,14 +19,16 @@ export function useDemands() {
           throw new Error(`API answered ${response.status}`)
         }
       }
-      demands.value = (await demandsResponse.json()) as Demand[]
-      andons.value = (await andonsResponse.json()) as Andon[]
-    } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause)
-    } finally {
-      loading.value = false
-    }
-  }
+      return {
+        demands: (await demandsResponse.json()) as Demand[],
+        andons: (await andonsResponse.json()) as Andon[],
+      }
+    },
+    (value) => {
+      demands.value = value.demands
+      andons.value = value.andons
+    },
+  )
 
   onMounted(load)
   useLiveUpdates(load)

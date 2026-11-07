@@ -2,27 +2,21 @@ import { onMounted, ref } from "vue"
 import { api, postAction } from "../api"
 import type { FlowConfirm, Line } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
+import { useLoad } from "./useLoad"
 
 export function useLine() {
   const line = ref<Line | null>(null)
-  const error = ref<string | null>(null)
-  const loading = ref(true)
 
-  async function load() {
-    loading.value = true
-    error.value = null
-    try {
+  const { error, loading, load } = useLoad(
+    async () => {
       const response = await fetch(api("/api/line"))
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
-      line.value = (await response.json()) as Line
-    } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : String(cause)
-    } finally {
-      loading.value = false
-    }
-  }
+      return (await response.json()) as Line
+    },
+    (value) => (line.value = value),
+  )
 
   async function act(path: string, body: Record<string, unknown>): Promise<FlowConfirm | null> {
     const confirm = await postAction(path, body)
