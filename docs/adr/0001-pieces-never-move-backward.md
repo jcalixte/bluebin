@@ -1,5 +1,7 @@
 # A Piece never moves backward
 
+Status: accepted
+
 When a Work Station finds a defect, the Piece stays where it is. The Work Station raises Rework against the Work Station that made the defect, and a Team Member of that Work Station comes to repair the Piece in place. We chose this over "reopen", where the Piece goes back upstream, because a Piece that moves backward breaks the Blue Bin limits and the Kanban counts: the upstream Blue Bins may be full, and the upstream Work Station may hold no Kanban. Keeping the Piece in place also keeps the defect visible where it was found (Jidoka) and charges the repair to its source as Rework Time and First Pass Yield.
 
 ## Consequences

@@ -1,5 +1,7 @@
 # Account links live in one shared accounts.db
 
+Status: accepted
+
 Each Line keeps its data in its own SQLite file, but Accounts and the links between a Team Member and an Account live in one shared `data/accounts.db`. We chose this because links cross Lines and Workspaces: listing every Line an Account can open, and checking access on each request, is then one indexed query instead of a scan of every Line file. The two alternatives were the email on the Team Member in the Line file plus a rebuildable index, which keeps two copies to sync, and the email in the Line files only, scanned at sign-in, which slows down as Workspaces grow.
 
 ## Consequences

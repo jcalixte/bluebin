@@ -2,12 +2,12 @@
 import { computed, onBeforeUnmount, ref } from "vue"
 import { api, lineId, lookOnly, pageUrl, settleLineUrl, viewPath, workspaceOwner } from "./api"
 import AppModal from "./components/AppModal.vue"
+import BrandMark from "./components/BrandMark.vue"
 import ErrorToast from "./components/ErrorToast.vue"
 import FirstSignIn from "./components/FirstSignIn.vue"
 import InviteDialog from "./components/InviteDialog.vue"
 import LinePicker from "./components/LinePicker.vue"
 import ThemeToggle from "./components/ThemeToggle.vue"
-import AboutView from "./views/AboutView.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
 import DesignView from "./views/DesignView.vue"
@@ -25,7 +25,6 @@ const views = [
   { id: "next", label: "My next thing", path: "/next" },
   { id: "measures", label: "Measures", path: "/measures" },
   { id: "design", label: "Design", path: "/design" },
-  { id: "about", label: "About", path: "/about" },
 ] as const
 
 type View = (typeof views)[number]
@@ -35,9 +34,8 @@ const { account, checked } = useAccount()
 const { role, workspaces, ready } = useWorkspaces()
 
 const shownViews = computed(() =>
-  views.filter((view) => view.id !== "about" && (view.id !== "design" || role.value === "owner")),
+  role.value === "owner" ? views : views.filter((view) => view.id !== "design"),
 )
-const aboutView = views.find((view) => view.id === "about")!
 
 const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
@@ -128,25 +126,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             class="flex items-center gap-3 rounded-field"
             @click.exact.prevent="open(views[0])"
           >
-            <svg
-              class="size-8"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M4 4l6 0" />
-              <path d="M14 4l6 0" />
-              <path
-                d="M4 10a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2l0 -8"
-              />
-              <path
-                d="M14 10a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2l0 -2"
-              />
-            </svg>
+            <BrandMark />
             <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
           </a>
           <LinePicker :view="current.path" />
@@ -170,11 +150,9 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             </a>
           </nav>
           <a
-            :href="pageUrl(aboutView.path)"
+            href="/about"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
-            :aria-current="current.id === 'about' ? 'page' : undefined"
             title="What a pull system and a Kanban are"
-            @click.exact.prevent="open(aboutView)"
           >
             About
           </a>
@@ -220,7 +198,6 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
       <LineView v-else-if="current.id === 'line'" />
       <MeasuresView v-else-if="current.id === 'measures'" />
       <DesignView v-else-if="current.id === 'design'" />
-      <AboutView v-else-if="current.id === 'about'" @open="(path) => open(viewAt(path))" />
       <NextThingView v-else />
     </main>
 
