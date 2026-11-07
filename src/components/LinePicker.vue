@@ -84,7 +84,7 @@ async function saveName() {
     <div
       tabindex="0"
       role="button"
-      class="btn btn-sm btn-ghost max-w-72 font-normal"
+      class="btn btn-sm btn-ghost max-w-72 font-normal [--btn-rest-fg:var(--color-primary-content)]"
       title="Open another Line, or make a new one"
     >
       <span class="truncate">{{ current?.name ?? "Line" }}</span>

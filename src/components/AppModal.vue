@@ -10,7 +10,7 @@ onMounted(() => dialog.value?.showModal())
 
 <template>
   <dialog ref="dialog" class="modal" @cancel.prevent="emit('close')" @close="emit('close')">
-    <div class="modal-box">
+    <div class="modal-box text-base-content">
       <slot />
     </div>
   </dialog>

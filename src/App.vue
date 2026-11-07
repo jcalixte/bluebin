@@ -5,6 +5,7 @@ import AppModal from "./components/AppModal.vue"
 import ErrorToast from "./components/ErrorToast.vue"
 import FirstSignIn from "./components/FirstSignIn.vue"
 import LinePicker from "./components/LinePicker.vue"
+import ThemeToggle from "./components/ThemeToggle.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
 import DesignView from "./views/DesignView.vue"
@@ -137,13 +138,14 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
           </nav>
           <button
             type="button"
-            class="btn btn-sm btn-ghost"
+            class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             :disabled="resetting"
             title="Load the demo data, or start empty"
             @click="choosingReset = true"
           >
             Reset…
           </button>
+          <ThemeToggle class="[--btn-rest-fg:var(--color-primary-content)]" />
         </div>
       </div>
     </header>
