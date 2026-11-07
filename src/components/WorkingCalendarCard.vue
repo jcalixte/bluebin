@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue"
 import type { WorkingCalendar } from "../types"
+import { frenchHolidays } from "../frenchHolidays"
 
 const props = defineProps<{
   calendar: WorkingCalendar
@@ -39,6 +40,19 @@ watch(draft, () => (saved.value = false), { deep: true })
 
 function addHoliday() {
   draft.value.holidays.push({ day: "", label: "" })
+}
+
+const frenchYear = ref(new Date().getFullYear())
+
+/** Adds the French public holidays of the year the calendar does not hold yet. */
+function addFrenchHolidays() {
+  const days = new Set(draft.value.holidays.map((holiday) => holiday.day))
+  for (const holiday of frenchHolidays(frenchYear.value)) {
+    if (days.has(holiday.day)) continue
+    days.add(holiday.day)
+    draft.value.holidays.push(holiday)
+  }
+  draft.value.holidays.sort((a, b) => a.day.localeCompare(b.day))
 }
 
 function removeHoliday(index: number) {
@@ -132,9 +146,30 @@ async function submit() {
             </button>
           </li>
         </ul>
-        <button type="button" class="btn btn-ghost btn-sm" @click="addHoliday">
-          Add a holiday
-        </button>
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn btn-ghost btn-sm" @click="addHoliday">
+            Add a holiday
+          </button>
+          <div class="join">
+            <input
+              v-model.number="frenchYear"
+              type="number"
+              min="1900"
+              max="2100"
+              class="input input-sm join-item w-24"
+              aria-label="Year of the French holidays"
+            />
+            <button
+              type="button"
+              class="btn btn-ghost btn-sm join-item"
+              title="Add the 11 public holidays of metropolitan France for this year"
+              :disabled="!Number.isInteger(frenchYear)"
+              @click="addFrenchHolidays"
+            >
+              Add French holidays
+            </button>
+          </div>
+        </div>
       </fieldset>
 
       <div v-if="saveError" class="alert alert-error text-sm">

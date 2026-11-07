@@ -34,4 +34,4 @@ Dynamic colour (needs `currentColor` to flow through — paste the SVG inline as
 </template>
 ```
 
-The favicon at `public/favicon.svg` was generated from this same icon set with `currentColor` replaced by the app's primary hex at scaffold time.
+The favicon at `public/favicon.svg` was generated from this same icon set with `currentColor` replaced by the app's primary hex at scaffold time, on a white rounded square so it stays visible on dark browser tabs.

@@ -74,11 +74,32 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
         class="mx-auto flex max-w-[110rem] flex-wrap items-center justify-between gap-4 px-6 py-6"
       >
         <div class="flex items-center gap-3">
-          <span
-            class="size-8 bg-current"
-            style="mask: url(/favicon.svg) center / contain no-repeat"
-          />
-          <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
+          <a
+            :href="pageUrl(views[0].path)"
+            class="flex items-center gap-3 rounded-field"
+            @click.exact.prevent="open(views[0])"
+          >
+            <svg
+              class="size-8"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 4l6 0" />
+              <path d="M14 4l6 0" />
+              <path
+                d="M4 10a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v8a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2l0 -8"
+              />
+              <path
+                d="M14 10a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v2a2 2 0 0 1 -2 2h-2a2 2 0 0 1 -2 -2l0 -2"
+              />
+            </svg>
+            <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
+          </a>
           <LinePicker :view="current.path" />
         </div>
         <div class="flex flex-wrap items-center gap-3">
