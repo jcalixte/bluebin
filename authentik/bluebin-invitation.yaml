@@ -15,6 +15,8 @@ entries:
       title: Join Bluebin
       designation: enrollment
       authentication: require_unauthenticated
+      layout: sidebar_left
+      background: https://git.apoena.dev/julien/bluebin/raw/branch/main/authentik/bluebin-background.svg
 
   - model: authentik_stages_invitation.invitationstage
     id: invitation

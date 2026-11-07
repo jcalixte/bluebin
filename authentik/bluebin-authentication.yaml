@@ -1,0 +1,63 @@
+# Bluebin sign-in, for authentik 2025.10.
+# Import: authentik admin > Flows and Stages > Flows > Import.
+# It reuses the stages of default-authentication-flow and sets this flow as the
+# authentication flow of the proxy provider "bluebin". Other apps keep the
+# default sign-in.
+version: 1
+metadata:
+  name: Bluebin - Sign-in
+entries:
+  - model: authentik_flows.flow
+    id: flow
+    identifiers:
+      slug: bluebin-authentication
+    attrs:
+      name: Bluebin sign-in
+      title: Sign in to Bluebin
+      designation: authentication
+      authentication: none
+      layout: sidebar_left
+      background: https://git.apoena.dev/julien/bluebin/raw/branch/main/authentik/bluebin-background.svg
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !Find [authentik_stages_identification.identificationstage, [name, default-authentication-identification]]
+      order: 10
+  - model: authentik_flows.flowstagebinding
+    id: password-binding
+    identifiers:
+      target: !KeyOf flow
+      stage: !Find [authentik_stages_password.passwordstage, [name, default-authentication-password]]
+      order: 20
+    attrs:
+      re_evaluate_policies: true
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf password-binding
+      policy: !Find [authentik_policies_expression.expressionpolicy, [name, default-authentication-flow-password-stage]]
+      order: 10
+    attrs:
+      failure_result: true
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !Find [authentik_stages_authenticator_validate.authenticatorvalidatestage, [name, default-authentication-mfa-validation]]
+      order: 30
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !Find [authentik_stages_user_login.userloginstage, [name, default-authentication-login]]
+      order: 100
+
+  - model: authentik_providers_proxy.proxyprovider
+    identifiers:
+      name: bluebin
+    attrs:
+      authentication_flow: !KeyOf flow
+
+  - model: authentik_core.application
+    identifiers:
+      slug: bluebin
+    attrs:
+      icon: https://git.apoena.dev/julien/bluebin/raw/branch/main/public/favicon.svg
