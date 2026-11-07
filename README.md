@@ -82,13 +82,20 @@ Bluebin has its own sign-in look: import
 [`authentik/bluebin-authentication.yaml`](./authentik/bluebin-authentication.yaml)
 the same way. It makes the flow `bluebin-authentication` from the stages of
 `default-authentication-flow` and sets it as the authentication flow of the
-provider `bluebin`; other apps keep the default sign-in. Both flows use the
-`sidebar_left` layout and
-[`authentik/bluebin-background.svg`](./authentik/bluebin-background.svg),
-which authentik loads from the public Gitea raw URL of `main`. The authentik
-brand (logo, favicon, custom CSS) is shared by every app on `auth.apoena.dev`,
-so Bluebin does not change it. A user who already has an authentik session
-skips the sign-in page.
+provider `bluebin`; other apps keep the default sign-in. Both Bluebin flows use
+the `sidebar_left` layout and
+[`authentik/bluebin-background.svg`](./authentik/bluebin-background.svg).
+A user who already has an authentik session skips the sign-in page.
+
+The authentik brand is shared by every app on `auth.apoena.dev`.
+[`authentik/apoena-brand.yaml`](./authentik/apoena-brand.yaml) gives it the
+apoena.dev look: the toucan
+([`authentik/apoena-toucan.svg`](./authentik/apoena-toucan.svg)), a monospace
+font and the apoena.dev colours, light or dark from the OS. Its custom CSS gives
+every flow whose slug starts with `bluebin-` the Bluebin look instead: the
+Bluebin icon and colours. authentik loads the SVGs from the public Gitea raw
+URLs of `main`, so push them before you import. Custom CSS cannot load web
+fonts, so Cascadia Mono and Inter show only where the OS has them.
 
 `akadmin` makes each link with **Invite…** in the header: `POST /api/invitations`
 asks authentik for a single-use invitation to `bluebin-invitation`, valid one

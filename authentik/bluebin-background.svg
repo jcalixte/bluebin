@@ -12,12 +12,11 @@
     </g>
   </defs>
   <rect width="1600" height="1000" fill="url(#sky)" />
-  <g transform="translate(0 110)">
+  <g transform="translate(340 110)">
     <g stroke="#fff" stroke-opacity="0.28" stroke-width="4" stroke-linecap="round">
       <path d="M520 150h180" />
       <path d="M740 150h180" />
       <path d="M960 150h180" />
-      <path d="M1180 150h180" />
     </g>
     <use href="#card" x="520" y="190" />
     <use href="#card" x="520" y="306" />
@@ -28,6 +27,5 @@
     <use href="#card" x="960" y="306" />
     <use href="#card" x="960" y="422" />
     <use href="#card" x="960" y="538" />
-    <use href="#card" x="1180" y="190" />
   </g>
 </svg>
