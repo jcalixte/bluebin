@@ -656,11 +656,21 @@ fn list_workspaces(
     }
   }
   let found = {
+    // The owner can be a Team Member of their own Lines too (F45).
+    use held <- result.try(case identity {
+      SignedIn(email:, ..) -> access.live_links(context.accounts, email, caller)
+      SignedOut | NoEmail -> Ok([])
+    })
     use own <- result.try(lines.list(caller) |> result.replace_error(Nil))
     use own <- result.try(
       list.try_map(own, fn(line) {
         use shared <- result.map(shared(caller, line.id))
-        line_entry_json(line, shared, access.Owner)
+        line_entry_json(
+          line,
+          shared,
+          access.Owner,
+          list.key_find(held, line.id) |> option.from_result,
+        )
       }),
     )
     use name <- result.try(case identity {
@@ -717,9 +727,14 @@ fn other_workspaces(
               ))
               case list.key_find(held, line.id), shared {
                 Ok(team_member), _ ->
-                  Some(line_entry_json(line, shared, access.Member(team_member)))
+                  Some(line_entry_json(
+                    line,
+                    shared,
+                    access.Member(team_member),
+                    Some(team_member),
+                  ))
                 Error(Nil), True ->
-                  Some(line_entry_json(line, shared, access.Viewer))
+                  Some(line_entry_json(line, shared, access.Viewer, None))
                 Error(Nil), False -> None
               }
             }),
@@ -755,15 +770,17 @@ fn workspace_json(
   ])
 }
 
+/// `team_member` is the Account's own Team Member in `line`, if any.
 fn line_entry_json(
   line: lines.Line,
   shared: Bool,
   role: access.Role,
+  team_member: Option(String),
 ) -> json.Json {
-  let #(role, team_member) = case role {
-    access.Member(team_member) -> #("member", Some(team_member))
-    access.Viewer -> #("viewer", None)
-    access.Owner | access.NoRole -> #("owner", None)
+  let role = case role {
+    access.Member(_) -> "member"
+    access.Viewer -> "viewer"
+    access.Owner | access.NoRole -> "owner"
   }
   json.object([
     #("id", json.string(line.id)),

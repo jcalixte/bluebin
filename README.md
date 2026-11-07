@@ -68,7 +68,10 @@ With `BLUEBIN_SSO=on`, a signed-in Account also opens the Lines of other
 Workspaces at `/api/w/<owner-uid>/lines/<id>/…` (SPA `/w/<owner-uid>/lines/<id>/<view>`):
 the Lines where its email is on a Team Member, and the **Shared** Lines of
 those Workspaces, look only. `GET /api/workspaces` lists every Line it can
-open, by Workspace, with its `role` (`owner`, `member`, `viewer`). The guard
+open, by Workspace, with its `role` (`owner`, `member`, `viewer`) and its own
+`teamMember` there, if any. At `/`, the SPA opens **My next thing** for that
+Team Member: in the last Line used, else in the first Line where the Account
+is one (F45). The guard
 in `backend/src/bluebin/access.gleam` runs before each Line route and the live
 stream: a Line the Account may not open answers `404`, a route it may not use
 `403`, and a route missing from the role table is refused. The owner makes a

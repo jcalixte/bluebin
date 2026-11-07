@@ -36,6 +36,23 @@ const current = computed(() => workspace.value?.lines.find((one) => one.id === l
 /** Until the menu loads, the own Workspace is the owner's and any other is look-only. */
 const role = computed<LineRole>(() => current.value?.role ?? (workspaceOwner ? "viewer" : "owner"))
 
+type Home = { owner: string | null; id: string; teamMember: string }
+
+/**
+ * Where the Account's own work is (F45): this page's Line if it is a Team Member there, else the
+ * first Line where it is one, its own Workspace first. `null` when it is a Team Member nowhere.
+ */
+export function homeLine(all: Workspace[], owner: string | null, line: string): Home | null {
+  const held = all.flatMap((one) =>
+    one.lines.flatMap((entry) =>
+      entry.teamMember
+        ? [{ owner: one.own ? null : one.owner, id: entry.id, teamMember: entry.teamMember }]
+        : [],
+    ),
+  )
+  return held.find((one) => one.owner === owner && one.id === line) ?? held[0] ?? null
+}
+
 /** Not inside a Line: the Line menu and the role of this page's Line. */
 export function useWorkspaces() {
   loading ??= fetchWorkspaces()

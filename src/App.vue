@@ -15,7 +15,7 @@ import NextThingView from "./views/NextThingView.vue"
 import LineView from "./views/LineView.vue"
 import { useAccount } from "./composables/useAccount"
 import { useLabels } from "./composables/useLabels"
-import { useWorkspaces } from "./composables/useWorkspaces"
+import { homeLine, useWorkspaces } from "./composables/useWorkspaces"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
@@ -30,7 +30,7 @@ type View = (typeof views)[number]
 
 const { labels } = useLabels()
 const { account, checked } = useAccount()
-const { role } = useWorkspaces()
+const { role, workspaces, ready } = useWorkspaces()
 
 /** Only the owner redesigns or resets a Line (F49). */
 const shownViews = computed(() =>
@@ -48,8 +48,29 @@ function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
 }
 
+/** Opened at `/`, as after sign-in: the Account's own work comes first (F45). */
+const landing = ref(location.pathname === "/" && !lookOnly)
 settleLineUrl()
 const current = ref<View>(viewAt(viewPath()))
+
+async function land() {
+  await ready
+  const home = homeLine(workspaces.value, workspaceOwner, lineId)
+  if (!home) {
+    landing.value = false
+    return
+  }
+  const url = `${pageUrl("/next", home.id, home.owner, false)}?teamMember=${encodeURIComponent(home.teamMember)}`
+  if (home.id !== lineId || home.owner !== workspaceOwner) {
+    // The Line is read once per page, so another Line needs a new page.
+    location.replace(url)
+    return
+  }
+  history.replaceState(null, "", url)
+  current.value = viewAt("/next")
+  landing.value = false
+}
+if (landing.value) void land()
 
 function open(view: View) {
   if (view.path !== viewPath()) {
@@ -93,7 +114,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
     :first-name="unnamed.firstName"
     :last-name="unnamed.lastName"
   />
-  <div v-else-if="!checked" class="min-h-screen bg-base-200" />
+  <div v-else-if="!checked || landing" class="min-h-screen bg-base-200" />
   <div v-else class="min-h-screen bg-base-200">
     <header class="bg-primary text-primary-content">
       <div

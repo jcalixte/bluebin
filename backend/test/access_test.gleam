@@ -407,6 +407,33 @@ pub fn the_menu_lists_the_lines_of_each_workspace_test() {
   assert !string.contains(menu, world.other_line)
 }
 
+/// The owner can also be a Team Member of their own Line: the menu names it,
+/// so the first screen after sign-in shows their own work (F45).
+pub fn the_menu_names_the_owners_own_team_member_test() {
+  let world = world(True)
+  let #(_, design) =
+    call(world.context, http.Get, "/api/design", world.owner, "")
+  let assert #(200, _) =
+    call(
+      world.context,
+      http.Put,
+      "/api/design",
+      world.owner,
+      with_email(design, "pe-alice", world.owner.1),
+    )
+  let #(status, menu) =
+    call(world.context, http.Get, "/api/workspaces", world.owner, "")
+  clean(world)
+
+  assert status == 200
+  assert string.contains(
+    menu,
+    "\"id\":\"main\",\"name\":\"Line\",\"shared\":false,\"role\":\"owner\",\"teamMember\":\"pe-alice\"",
+  )
+  // The owner is no Team Member of the other Line.
+  assert string.contains(menu, "\"role\":\"owner\",\"teamMember\":null")
+}
+
 pub fn with_sso_off_no_other_workspace_opens_test() {
   let world = world(False)
   let #(ada, _) =
