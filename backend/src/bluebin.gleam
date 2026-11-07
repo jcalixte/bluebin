@@ -8,6 +8,7 @@ import bluebin/design
 import bluebin/flow
 import bluebin/heijunka
 import bluebin/holidays
+import bluebin/invitations
 import bluebin/line
 import bluebin/lines
 import bluebin/live
@@ -44,7 +45,11 @@ pub fn main() {
     True -> wisp.log_info("SSO on: an Account is made at its first sign-in")
     False -> wisp.log_info("SSO off: no Account is made")
   }
-  let context = Context(hub:, sso:, accounts: accounts.database)
+  let invite =
+    envoy.get("AUTHENTIK_TOKEN")
+    |> option.from_result
+    |> invitations.invite(invitations.http_send)
+  let context = Context(hub:, sso:, accounts: accounts.database, invite:)
 
   let api =
     fn(request) { handle_request(request, context) }
@@ -88,7 +93,12 @@ fn events(
 const static_directory = "static"
 
 pub type Context {
-  Context(hub: live.Hub, sso: Bool, accounts: String)
+  Context(
+    hub: live.Hub,
+    sso: Bool,
+    accounts: String,
+    invite: invitations.Invite,
+  )
 }
 
 pub fn handle_request(
@@ -137,6 +147,10 @@ pub fn handle_request(
               account_of(request, context, workspace)
             }
           }
+        ["api", "invitations"] -> {
+          use <- wisp.require_method(request, http.Post)
+          create_invitation(request, context, workspace)
+        }
         ["api", "lines"] ->
           case request.method {
             http.Post -> create_line(request, workspace)
@@ -221,11 +235,11 @@ fn account_of(
     NoEmail -> wisp.response(401)
     SignedIn(uid:, email:) ->
       case accounts.sign_in(context.accounts, uid, email) {
-        Ok(Some(account)) -> account_response(account, named: True)
+        Ok(Some(account)) -> account_response(request, account, named: True)
         Ok(None) -> {
           let #(first_name, last_name) = accounts.suggested_name(request)
           accounts.Account(email:, first_name:, last_name:)
-          |> account_response(named: False)
+          |> account_response(request, _, named: False)
         }
         Error(Nil) -> wisp.internal_server_error()
       }
@@ -256,7 +270,7 @@ fn save_account(
           case
             accounts.save(context.accounts, uid, email, first_name, last_name)
           {
-            Ok(account) -> account_response(account, named: True)
+            Ok(account) -> account_response(request, account, named: True)
             Error(accounts.EmptyName) ->
               wisp.bad_request("a first and a last name are needed")
             Error(accounts.NameTooLong) ->
@@ -272,19 +286,62 @@ fn save_account(
   }
 }
 
+/// Called only for a signed-in Account, so SSO is on and the username
+/// header is trusted.
 fn account_response(
+  request: wisp.Request,
   account: accounts.Account,
   named named: Bool,
 ) -> wisp.Response {
   json.object([
     #("signedIn", json.bool(True)),
     #("named", json.bool(named)),
+    #("admin", json.bool(invitations.is_admin(request))),
     #("email", json.string(account.email)),
     #("firstName", json.string(account.first_name)),
     #("lastName", json.string(account.last_name)),
   ])
   |> json.to_string
   |> wisp.json_response(200)
+}
+
+/// A sign-up link for one more person; only authentik's admin makes one.
+fn create_invitation(
+  request: wisp.Request,
+  context: Context,
+  workspace: String,
+) -> wisp.Response {
+  case identity_of(request, context, workspace) {
+    SignedOut | NoEmail -> wisp.response(403)
+    SignedIn(..) ->
+      case invitations.is_admin(request) {
+        False -> wisp.response(403)
+        True ->
+          case context.invite() {
+            Ok(invitation) ->
+              json.object([
+                #("link", json.string(invitation.link)),
+                #("expires", json.string(invitation.expires)),
+              ])
+              |> json.to_string
+              |> wisp.json_response(201)
+            Error(invitations.NoToken) ->
+              wisp.response(503)
+              |> wisp.string_body(
+                "AUTHENTIK_TOKEN is not set, so Bluebin cannot call authentik",
+              )
+            Error(invitations.Refused(status)) ->
+              wisp.response(502)
+              |> wisp.string_body(
+                "authentik refused the invitation ("
+                <> int.to_string(status)
+                <> ")",
+              )
+            Error(_) ->
+              wisp.response(502) |> wisp.string_body("authentik did not answer")
+          }
+      }
+  }
 }
 
 fn list_lines(workspace: String) -> wisp.Response {

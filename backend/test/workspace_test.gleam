@@ -1,6 +1,7 @@
 import bluebin
 import bluebin/db
 import bluebin/demand
+import bluebin/invitations
 import bluebin/lines
 import bluebin/live
 import bluebin/workspace
@@ -110,7 +111,10 @@ pub fn the_api_refuses_an_unsafe_identity_test() {
 pub fn the_healthcheck_needs_no_identity_test() {
   let assert Ok(hub) = live.start()
   let response =
-    bluebin.handle_request(simulate.request(http.Get, "/api/health"), sso_off(hub))
+    bluebin.handle_request(
+      simulate.request(http.Get, "/api/health"),
+      sso_off(hub),
+    )
   assert response.status == 200
 }
 
@@ -250,5 +254,10 @@ pub fn a_removed_directory_is_made_again_test() {
 
 /// No test with SSO off touches the accounts file.
 fn sso_off(hub: live.Hub) -> bluebin.Context {
-  bluebin.Context(hub:, sso: False, accounts: "data/no-accounts.db")
+  bluebin.Context(
+    hub:,
+    sso: False,
+    accounts: "data/no-accounts.db",
+    invite: fn() { Error(invitations.NoToken) },
+  )
 }

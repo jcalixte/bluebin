@@ -1,5 +1,6 @@
 import bluebin
 import bluebin/accounts
+import bluebin/invitations
 import bluebin/live
 import gleam/http
 import gleam/http/request
@@ -59,7 +60,8 @@ const ada_named = "{\"firstName\": \"Augusta Ada\", \"lastName\": \"King\"}"
 pub fn with_sso_off_no_account_is_made_test() {
   let assert Ok(hub) = live.start()
   let path = scratch_accounts()
-  let context = bluebin.Context(hub:, sso: False, accounts: path)
+  let context =
+    bluebin.Context(hub:, sso: False, accounts: path, invite: no_invite)
 
   let looked = call(context, http.Get, ada, "")
   let saved = call(context, http.Put, ada, ada_named)
@@ -74,7 +76,8 @@ pub fn with_sso_off_no_account_is_made_test() {
 pub fn an_account_gives_its_name_once_test() {
   let assert Ok(hub) = live.start()
   let path = scratch_accounts()
-  let context = bluebin.Context(hub:, sso: True, accounts: path)
+  let context =
+    bluebin.Context(hub:, sso: True, accounts: path, invite: no_invite)
 
   let first = call(context, http.Get, ada, "") |> simulate.read_body
   let saved = call(context, http.Put, ada, ada_named)
@@ -82,16 +85,17 @@ pub fn an_account_gives_its_name_once_test() {
   remove(path)
 
   assert first
-    == "{\"signedIn\":true,\"named\":false,\"email\":\"ada@example.com\",\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"}"
+    == "{\"signedIn\":true,\"named\":false,\"admin\":false,\"email\":\"ada@example.com\",\"firstName\":\"Ada\",\"lastName\":\"Lovelace\"}"
   assert saved.status == 200
   assert next
-    == "{\"signedIn\":true,\"named\":true,\"email\":\"ada@example.com\",\"firstName\":\"Augusta Ada\",\"lastName\":\"King\"}"
+    == "{\"signedIn\":true,\"named\":true,\"admin\":false,\"email\":\"ada@example.com\",\"firstName\":\"Augusta Ada\",\"lastName\":\"King\"}"
 }
 
 pub fn an_email_changed_in_authentik_replaces_the_stored_one_test() {
   let assert Ok(hub) = live.start()
   let path = scratch_accounts()
-  let context = bluebin.Context(hub:, sso: True, accounts: path)
+  let context =
+    bluebin.Context(hub:, sso: True, accounts: path, invite: no_invite)
 
   let _ = call(context, http.Put, ada, ada_named)
   let moved = [
@@ -115,7 +119,8 @@ pub fn an_email_changed_in_authentik_replaces_the_stored_one_test() {
 pub fn an_empty_name_makes_no_account_test() {
   let assert Ok(hub) = live.start()
   let path = scratch_accounts()
-  let context = bluebin.Context(hub:, sso: True, accounts: path)
+  let context =
+    bluebin.Context(hub:, sso: True, accounts: path, invite: no_invite)
 
   let saved =
     call(
@@ -134,7 +139,8 @@ pub fn an_empty_name_makes_no_account_test() {
 pub fn with_sso_on_an_account_needs_an_email_test() {
   let assert Ok(hub) = live.start()
   let path = scratch_accounts()
-  let context = bluebin.Context(hub:, sso: True, accounts: path)
+  let context =
+    bluebin.Context(hub:, sso: True, accounts: path, invite: no_invite)
 
   let no_email = [#("x-authentik-uid", "a1b2c3")]
   let looked = call(context, http.Get, no_email, "")
@@ -145,4 +151,8 @@ pub fn with_sso_on_an_account_needs_an_email_test() {
   assert looked.status == 401
   assert saved.status == 401
   assert visitor == "{\"signedIn\":false}"
+}
+
+fn no_invite() {
+  Error(invitations.NoToken)
 }

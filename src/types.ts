@@ -382,4 +382,12 @@ export type DesignInput = {
 /** `GET /api/account`. Nobody is signed in while SSO is off. */
 export type Account =
   | { signedIn: false }
-  | { signedIn: true; named: boolean; email: string; firstName: string; lastName: string }
+  | {
+      signedIn: true
+      named: boolean
+      /** authentik's own admin, who invites people. */
+      admin: boolean
+      email: string
+      firstName: string
+      lastName: string
+    }

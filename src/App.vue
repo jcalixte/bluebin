@@ -4,6 +4,7 @@ import { api, pageUrl, settleLineUrl, viewPath } from "./api"
 import AppModal from "./components/AppModal.vue"
 import ErrorToast from "./components/ErrorToast.vue"
 import FirstSignIn from "./components/FirstSignIn.vue"
+import InviteDialog from "./components/InviteDialog.vue"
 import LinePicker from "./components/LinePicker.vue"
 import ThemeToggle from "./components/ThemeToggle.vue"
 import BacklogView from "./views/BacklogView.vue"
@@ -33,6 +34,9 @@ const { account, checked } = useAccount()
 const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
 )
+
+const isAdmin = computed(() => account.value?.signedIn === true && account.value.admin)
+const inviting = ref(false)
 
 function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
@@ -137,6 +141,15 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             </a>
           </nav>
           <button
+            v-if="isAdmin"
+            type="button"
+            class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
+            title="Make a sign-up link for one person"
+            @click="inviting = true"
+          >
+            Invite…
+          </button>
+          <button
             type="button"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             :disabled="resetting"
@@ -194,6 +207,8 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
         <button type="button" class="btn btn-ghost" @click="choosingReset = false">Cancel</button>
       </div>
     </AppModal>
+
+    <InviteDialog v-if="inviting" @close="inviting = false" />
 
     <ErrorToast v-model="resetError" tone="error" />
   </div>

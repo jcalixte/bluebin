@@ -15,6 +15,7 @@ export default defineConfig({
           "X-authentik-uid": "dev",
           "X-authentik-email": "dev@bluebin.app",
           "X-authentik-name": "Dev Team Member",
+          "X-authentik-username": "akadmin",
         },
       },
     },

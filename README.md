@@ -75,9 +75,19 @@ API with `BLUEBIN_SSO=on gleam run` to see the first sign-in screen.
 
 Only members of the authentik group `bluebin-users` get in. Sign-up is by
 invitation only: import [`authentik/bluebin-invitation.yaml`](./authentik/bluebin-invitation.yaml)
-once in authentik (Flows and Stages > Flows > Import), then make each link in
-Directory > Invitations with the flow `bluebin-invitation`. The new user joins
-`bluebin-users` and lands on bluebin.app. **Reset…** acts on
+once in authentik (Flows and Stages > Flows > Import). The new user joins
+`bluebin-users` and lands on bluebin.app.
+
+`akadmin` makes each link with **Invite…** in the header: `POST /api/invitations`
+asks authentik for a single-use invitation to `bluebin-invitation`, valid one
+week. The API trusts `X-authentik-username` only with `BLUEBIN_SSO=on`, and
+needs `AUTHENTIK_TOKEN`: an authentik API token, without expiry, of a service
+account whose role has only the global permissions "Can view Flow" and "Can
+add Invitation". Without it the API answers `503`, and links are still made in
+authentik under Directory > Invitations. In dev, the Vite proxy signs in as
+`akadmin`.
+
+**Reset…** acts on
 the open Line only: demo data, or one Work Station and one Team Member
 to rename in Design.
 
