@@ -33,8 +33,13 @@ const { labels } = useLabels()
 const { account, checked } = useAccount()
 const { role, workspaces, ready } = useWorkspaces()
 
+/** Design is for the owner; Measures is not for who only looks at a Shared Line. */
 const shownViews = computed(() =>
-  role.value === "owner" ? views : views.filter((view) => view.id !== "design"),
+  views.filter(
+    (view) =>
+      (view.id !== "design" || role.value === "owner") &&
+      (view.id !== "measures" || role.value !== "viewer"),
+  ),
 )
 
 const unnamed = computed(() =>
@@ -52,7 +57,12 @@ function viewAt(path: string): View {
 /** Opened at `/`, as after sign-in: the Account's own work comes first (F45). */
 const landing = ref(location.pathname === "/" && !lookOnly)
 settleLineUrl()
-const current = ref<View>(viewAt(viewPath()))
+const opened = ref<View>(viewAt(viewPath()))
+/** A link to a hidden tab, as Measures in a Shared Line, opens the first tab. */
+const current = computed<View>({
+  get: () => (shownViews.value.includes(opened.value) ? opened.value : views[0]),
+  set: (view) => (opened.value = view),
+})
 
 async function land() {
   await ready
@@ -151,6 +161,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             </a>
           </nav>
           <a
+            v-if="!lookOnly"
             href="/about"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             title="What a pull system and a Kanban are"

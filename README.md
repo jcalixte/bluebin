@@ -77,6 +77,7 @@ stream: a Line the Account may not open answers `404`, a route it may not use
 `403`, and a route missing from the role table is refused. The owner makes a
 Line Shared or Private with `PUT …/sharing {"shared"}`, kept as a dated log in
 `data/accounts.db`. Any signed-in Account opens a Shared Line, look only.
+Who only looks sees no Measures tab.
 
 A Shared Line also opens with no sign-in, look only, at its look-only link
 `/s/<owner-uid>/lines/<id>/<view>` (API `/api/s/<owner-uid>/lines/<id>/…`, the
