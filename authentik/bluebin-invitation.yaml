@@ -1,0 +1,139 @@
+# Invite-only sign-up for Bluebin, for authentik 2025.10.
+# Import: authentik admin > Flows and Stages > Flows > Import.
+# Invite: Directory > Invitations > Create, flow "bluebin-invitation".
+# The link is https://auth.apoena.dev/if/flow/bluebin-invitation/?itoken=<uuid>
+version: 1
+metadata:
+  name: Bluebin - Invitation sign-up
+entries:
+  - model: authentik_flows.flow
+    id: flow
+    identifiers:
+      slug: bluebin-invitation
+    attrs:
+      name: Bluebin invitation sign-up
+      title: Join Bluebin
+      designation: enrollment
+      authentication: require_unauthenticated
+
+  - model: authentik_stages_invitation.invitationstage
+    id: invitation
+    identifiers:
+      name: bluebin-invitation
+    attrs:
+      continue_flow_without_invitation: false
+
+  - model: authentik_stages_prompt.prompt
+    id: field-username
+    identifiers:
+      name: bluebin-invitation-field-username
+    attrs:
+      field_key: username
+      label: Username
+      type: username
+      required: true
+      placeholder: Username
+      order: 0
+  - model: authentik_stages_prompt.prompt
+    id: field-name
+    identifiers:
+      name: bluebin-invitation-field-name
+    attrs:
+      field_key: name
+      label: Full name
+      type: text
+      required: true
+      placeholder: First and last name
+      order: 1
+  - model: authentik_stages_prompt.prompt
+    id: field-email
+    identifiers:
+      name: bluebin-invitation-field-email
+    attrs:
+      field_key: email
+      label: Email
+      type: email
+      required: true
+      placeholder: Email
+      order: 2
+  - model: authentik_stages_prompt.prompt
+    id: field-password
+    identifiers:
+      name: bluebin-invitation-field-password
+    attrs:
+      field_key: password
+      label: Password
+      type: password
+      required: true
+      placeholder: Password
+      order: 3
+  - model: authentik_stages_prompt.prompt
+    id: field-password-repeat
+    identifiers:
+      name: bluebin-invitation-field-password-repeat
+    attrs:
+      field_key: password_repeat
+      label: Password (repeat)
+      type: password
+      required: true
+      placeholder: Password (repeat)
+      order: 4
+  - model: authentik_stages_prompt.promptstage
+    id: prompt
+    identifiers:
+      name: bluebin-invitation-prompt
+    attrs:
+      fields:
+        - !KeyOf field-username
+        - !KeyOf field-name
+        - !KeyOf field-email
+        - !KeyOf field-password
+        - !KeyOf field-password-repeat
+
+  - model: authentik_stages_user_write.userwritestage
+    id: user-write
+    identifiers:
+      name: bluebin-invitation-user-write
+    attrs:
+      user_creation_mode: always_create
+      user_type: internal
+      create_users_group: !Find [authentik_core.group, [name, bluebin-users]]
+
+  - model: authentik_stages_user_login.userloginstage
+    id: user-login
+    identifiers:
+      name: bluebin-invitation-user-login
+
+  - model: authentik_stages_redirect.redirectstage
+    id: redirect
+    identifiers:
+      name: bluebin-invitation-redirect
+    attrs:
+      mode: static
+      target_static: https://bluebin.app/
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !KeyOf invitation
+      order: 10
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !KeyOf prompt
+      order: 20
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !KeyOf user-write
+      order: 30
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !KeyOf user-login
+      order: 40
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf flow
+      stage: !KeyOf redirect
+      order: 50

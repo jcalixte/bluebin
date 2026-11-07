@@ -73,7 +73,11 @@ client can send these headers, so the API makes no Account and answers
 `{"signedIn": false}`. In dev, the Vite proxy sends all three headers: run the
 API with `BLUEBIN_SSO=on gleam run` to see the first sign-in screen.
 
-Only members of the authentik group `bluebin-users` get in. **Reset…** acts on
+Only members of the authentik group `bluebin-users` get in. Sign-up is by
+invitation only: import [`authentik/bluebin-invitation.yaml`](./authentik/bluebin-invitation.yaml)
+once in authentik (Flows and Stages > Flows > Import), then make each link in
+Directory > Invitations with the flow `bluebin-invitation`. The new user joins
+`bluebin-users` and lands on bluebin.app. **Reset…** acts on
 the open Line only: demo data, or one Work Station and one Team Member
 to rename in Design.
 
