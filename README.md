@@ -63,6 +63,16 @@ file each, so no query can read across two of them:
 never creates a file. The SPA keeps the Line in its URL,
 `/lines/<id>/<view>`, and opens the last one used at `/`.
 
+With `BLUEBIN_SSO=on`, Traefik also copies `X-authentik-email` and
+`X-authentik-name`, and each uid is an **Account** in `data/accounts.db`,
+shared by every Workspace. `GET /api/account` answers `signedIn`, `named`,
+`email`, `firstName` and `lastName`; until `PUT /api/account
+{"firstName", "lastName"}` saves them, the SPA shows the first sign-in screen,
+with the names suggested from `X-authentik-name`. Without the setting, any
+client can send these headers, so the API makes no Account and answers
+`{"signedIn": false}`. In dev, the Vite proxy sends all three headers: run the
+API with `BLUEBIN_SSO=on gleam run` to see the first sign-in screen.
+
 Only members of the authentik group `bluebin-users` get in. **Reset…** acts on
 the open Line only: demo data, or one Work Station and one Team Member
 to rename in Design.

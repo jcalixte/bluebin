@@ -411,7 +411,7 @@ pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
   }
 }
 
-fn directory_of(path: String) -> String {
+pub fn directory_of(path: String) -> String {
   case string.split(path, "/") |> list.reverse {
     [_, _, ..] as parts ->
       parts |> list.drop(1) |> list.reverse |> string.join("/")

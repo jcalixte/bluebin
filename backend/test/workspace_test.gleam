@@ -103,14 +103,14 @@ pub fn the_api_refuses_an_unsafe_identity_test() {
   let response =
     simulate.request(http.Get, "/api/demands")
     |> simulate.header("x-authentik-uid", "../app")
-    |> bluebin.handle_request(hub)
+    |> bluebin.handle_request(sso_off(hub))
   assert response.status == 401
 }
 
 pub fn the_healthcheck_needs_no_identity_test() {
   let assert Ok(hub) = live.start()
   let response =
-    bluebin.handle_request(simulate.request(http.Get, "/api/health"), hub)
+    bluebin.handle_request(simulate.request(http.Get, "/api/health"), sso_off(hub))
   assert response.status == 200
 }
 
@@ -121,7 +121,7 @@ pub fn a_signed_in_user_gets_a_seeded_workspace_test() {
   let response =
     simulate.request(http.Get, "/api/demands")
     |> simulate.header("x-authentik-uid", uid)
-    |> bluebin.handle_request(hub)
+    |> bluebin.handle_request(sso_off(hub))
   remove_workspace(uid)
   assert response.status == 200
 }
@@ -137,7 +137,7 @@ fn as_user(
   |> simulate.header("x-authentik-uid", uid)
   |> simulate.string_body(body)
   |> simulate.header("content-type", "application/json")
-  |> bluebin.handle_request(hub)
+  |> bluebin.handle_request(sso_off(hub))
 }
 
 fn remove_lines(uid: String) {
@@ -246,4 +246,9 @@ pub fn a_removed_directory_is_made_again_test() {
   let assert Ok(Nil) = db.ready(path)
   let assert Ok(True) = simplifile.is_file(path)
   let _ = simplifile.delete_all([directory])
+}
+
+/// No test with SSO off touches the accounts file.
+fn sso_off(hub: live.Hub) -> bluebin.Context {
+  bluebin.Context(hub:, sso: False, accounts: "data/no-accounts.db")
 }

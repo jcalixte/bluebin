@@ -378,3 +378,8 @@ export type DesignInput = {
   teamMembers: DesignTeamMember[]
   steps: { name: string; stations: DesignStationInput[] }[]
 }
+
+/** `GET /api/account`. Nobody is signed in while SSO is off. */
+export type Account =
+  | { signedIn: false }
+  | { signedIn: true; named: boolean; email: string; firstName: string; lastName: string }

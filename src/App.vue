@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref } from "vue"
+import { computed, onBeforeUnmount, ref } from "vue"
 import { api, pageUrl, settleLineUrl, viewPath } from "./api"
 import AppModal from "./components/AppModal.vue"
 import ErrorToast from "./components/ErrorToast.vue"
+import FirstSignIn from "./components/FirstSignIn.vue"
 import LinePicker from "./components/LinePicker.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
@@ -10,6 +11,7 @@ import DesignView from "./views/DesignView.vue"
 import MeasuresView from "./views/MeasuresView.vue"
 import NextThingView from "./views/NextThingView.vue"
 import LineView from "./views/LineView.vue"
+import { useAccount } from "./composables/useAccount"
 import { useLabels } from "./composables/useLabels"
 
 const views = [
@@ -24,6 +26,12 @@ const views = [
 type View = (typeof views)[number]
 
 const { labels } = useLabels()
+const { account, checked } = useAccount()
+
+/** The Account that signs in for the first time gives its name before anything else. */
+const unnamed = computed(() =>
+  account.value?.signedIn && !account.value.named ? account.value : null,
+)
 
 function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
@@ -68,7 +76,14 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
 </script>
 
 <template>
-  <div class="min-h-screen bg-base-200">
+  <FirstSignIn
+    v-if="unnamed"
+    :email="unnamed.email"
+    :first-name="unnamed.firstName"
+    :last-name="unnamed.lastName"
+  />
+  <div v-else-if="!checked" class="min-h-screen bg-base-200" />
+  <div v-else class="min-h-screen bg-base-200">
     <header class="bg-primary text-primary-content">
       <div
         class="mx-auto flex max-w-[110rem] flex-wrap items-center justify-between gap-4 px-6 py-6"

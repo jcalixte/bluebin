@@ -1,3 +1,4 @@
+import bluebin/accounts
 import bluebin/andon
 import bluebin/assignment
 import bluebin/calendar
@@ -13,6 +14,7 @@ import bluebin/live
 import bluebin/measures
 import bluebin/spa
 import bluebin/workspace
+import envoy
 import gleam/bytes_tree
 import gleam/dynamic/decode
 import gleam/erlang/process
@@ -22,7 +24,7 @@ import gleam/http/response
 import gleam/int
 import gleam/json
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 import mist
@@ -36,9 +38,16 @@ pub fn main() {
 
   let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
   let assert Ok(hub) = live.start()
+  // Only behind authentik can the identity headers be trusted (ADR-0003).
+  let sso = envoy.get("BLUEBIN_SSO") == Ok("on")
+  case sso {
+    True -> wisp.log_info("SSO on: an Account is made at its first sign-in")
+    False -> wisp.log_info("SSO off: no Account is made")
+  }
+  let context = Context(hub:, sso:, accounts: accounts.database)
 
   let api =
-    fn(request) { handle_request(request, hub) }
+    fn(request) { handle_request(request, context) }
     |> wisp_mist.handler(wisp.random_string(64))
 
   // The event stream holds its socket open, so it goes to mist directly and
@@ -78,7 +87,14 @@ fn events(
 /// Holds the built SPA in the image; absent in dev, where Vite serves it.
 const static_directory = "static"
 
-pub fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
+pub type Context {
+  Context(hub: live.Hub, sso: Bool, accounts: String)
+}
+
+pub fn handle_request(
+  request: wisp.Request,
+  context: Context,
+) -> wisp.Response {
   // Before the log, so each page load writes one line per API call, not per asset.
   use <- spa.serve(request, from: static_directory)
   use <- wisp.log_request(request)
@@ -113,6 +129,14 @@ pub fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
             Error(Nil) -> wisp.bad_request("expected /api/holidays/2026/FR")
           }
         }
+        ["api", "account"] ->
+          case request.method {
+            http.Put -> save_account(request, context, workspace)
+            _ -> {
+              use <- wisp.require_method(request, http.Get)
+              account_of(request, context, workspace)
+            }
+          }
         ["api", "lines"] ->
           case request.method {
             http.Post -> create_line(request, workspace)
@@ -126,10 +150,11 @@ pub fn handle_request(request: wisp.Request, hub: live.Hub) -> wisp.Response {
           rename_line(request, workspace, line)
         }
         ["api", "lines", line, ..rest] ->
-          in_line(request, hub, workspace, line, ["api", ..rest])
+          in_line(request, context.hub, workspace, line, ["api", ..rest])
         // The routes of the first Line, as before an account could
         // own several: scripts and an SPA still open during a deploy use them.
-        ["api", ..] -> in_line(request, hub, workspace, lines.first, segments)
+        ["api", ..] ->
+          in_line(request, context.hub, workspace, lines.first, segments)
         _ -> wisp.not_found()
       }
     }
@@ -158,6 +183,108 @@ fn in_line(
       route(request, segments, database)
     }
   }
+}
+
+type Identity {
+  SignedOut
+  NoEmail
+  SignedIn(uid: String, email: String)
+}
+
+/// With SSO off any client sends any header, so nobody is signed in and no
+/// Account is made (F52).
+fn identity_of(
+  request: wisp.Request,
+  context: Context,
+  workspace: String,
+) -> Identity {
+  case context.sso, workspace == workspace.public {
+    False, _ | True, True -> SignedOut
+    True, False ->
+      case accounts.email_of(request) {
+        Ok(email) -> SignedIn(uid: workspace, email:)
+        Error(Nil) -> NoEmail
+      }
+  }
+}
+
+fn account_of(
+  request: wisp.Request,
+  context: Context,
+  workspace: String,
+) -> wisp.Response {
+  case identity_of(request, context, workspace) {
+    SignedOut ->
+      json.object([#("signedIn", json.bool(False))])
+      |> json.to_string
+      |> wisp.json_response(200)
+    NoEmail -> wisp.response(401)
+    SignedIn(uid:, email:) ->
+      case accounts.sign_in(context.accounts, uid, email) {
+        Ok(Some(account)) -> account_response(account, named: True)
+        Ok(None) -> {
+          let #(first_name, last_name) = accounts.suggested_name(request)
+          accounts.Account(email:, first_name:, last_name:)
+          |> account_response(named: False)
+        }
+        Error(Nil) -> wisp.internal_server_error()
+      }
+  }
+}
+
+fn save_account(
+  request: wisp.Request,
+  context: Context,
+  workspace: String,
+) -> wisp.Response {
+  case identity_of(request, context, workspace) {
+    SignedOut -> wisp.response(403)
+    NoEmail -> wisp.response(401)
+    SignedIn(uid:, email:) -> {
+      use body <- wisp.require_json(request)
+      let decoder = {
+        use first_name <- decode.field("firstName", decode.string)
+        use last_name <- decode.field("lastName", decode.string)
+        decode.success(#(first_name, last_name))
+      }
+      case decode.run(body, decoder) {
+        Error(_) ->
+          wisp.bad_request(
+            "expected a body like {\"firstName\": \"Ada\", \"lastName\": \"Lovelace\"}",
+          )
+        Ok(#(first_name, last_name)) ->
+          case
+            accounts.save(context.accounts, uid, email, first_name, last_name)
+          {
+            Ok(account) -> account_response(account, named: True)
+            Error(accounts.EmptyName) ->
+              wisp.bad_request("a first and a last name are needed")
+            Error(accounts.NameTooLong) ->
+              wisp.bad_request(
+                "a name stays under "
+                <> int.to_string(accounts.max_name_length)
+                <> " characters",
+              )
+            Error(accounts.StoreFailed) -> wisp.internal_server_error()
+          }
+      }
+    }
+  }
+}
+
+fn account_response(
+  account: accounts.Account,
+  named named: Bool,
+) -> wisp.Response {
+  json.object([
+    #("signedIn", json.bool(True)),
+    #("named", json.bool(named)),
+    #("email", json.string(account.email)),
+    #("firstName", json.string(account.first_name)),
+    #("lastName", json.string(account.last_name)),
+  ])
+  |> json.to_string
+  |> wisp.json_response(200)
 }
 
 fn list_lines(workspace: String) -> wisp.Response {
