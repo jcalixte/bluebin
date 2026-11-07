@@ -7,6 +7,7 @@ import FirstSignIn from "./components/FirstSignIn.vue"
 import InviteDialog from "./components/InviteDialog.vue"
 import LinePicker from "./components/LinePicker.vue"
 import ThemeToggle from "./components/ThemeToggle.vue"
+import AboutView from "./views/AboutView.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
 import DesignView from "./views/DesignView.vue"
@@ -24,6 +25,7 @@ const views = [
   { id: "next", label: "My next thing", path: "/next" },
   { id: "measures", label: "Measures", path: "/measures" },
   { id: "design", label: "Design", path: "/design" },
+  { id: "about", label: "About", path: "/about" },
 ] as const
 
 type View = (typeof views)[number]
@@ -33,8 +35,9 @@ const { account, checked } = useAccount()
 const { role, workspaces, ready } = useWorkspaces()
 
 const shownViews = computed(() =>
-  role.value === "owner" ? views : views.filter((view) => view.id !== "design"),
+  views.filter((view) => view.id !== "about" && (view.id !== "design" || role.value === "owner")),
 )
+const aboutView = views.find((view) => view.id === "about")!
 
 const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
@@ -166,6 +169,15 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
               {{ view.id === "demands" ? labels.demands : view.label }}
             </a>
           </nav>
+          <a
+            :href="pageUrl(aboutView.path)"
+            class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
+            :aria-current="current.id === 'about' ? 'page' : undefined"
+            title="What a pull system and a Kanban are"
+            @click.exact.prevent="open(aboutView)"
+          >
+            About
+          </a>
           <button
             v-if="isAdmin"
             type="button"
@@ -208,6 +220,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
       <LineView v-else-if="current.id === 'line'" />
       <MeasuresView v-else-if="current.id === 'measures'" />
       <DesignView v-else-if="current.id === 'design'" />
+      <AboutView v-else-if="current.id === 'about'" @open="(path) => open(viewAt(path))" />
       <NextThingView v-else />
     </main>
 
