@@ -161,7 +161,6 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             </a>
           </nav>
           <a
-            v-if="!lookOnly"
             href="/about"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             title="What a pull system and a Kanban are"

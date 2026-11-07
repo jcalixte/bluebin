@@ -92,6 +92,7 @@ written to match the path alone and the full URL):
 ^(https?://[^/]+)?/api/s/
 ^(https?://[^/]+)?/assets/
 ^(https?://[^/]+)?/favicon\.svg$
+^(https?://[^/]+)?/about/?(\?.*)?$
 ```
 
 Traefik removes the `authResponseHeaders` a client sends, so a request on
