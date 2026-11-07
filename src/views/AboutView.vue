@@ -8,7 +8,6 @@ const sections = [
   { id: "kanban", title: "The Kanban and the Blue Bin" },
   { id: "rules", title: "The pull rules" },
   { id: "pace", title: "Pace, levelling and problems" },
-  { id: "words", title: "Your words, Bluebin words" },
   { id: "where", title: "Where to find it" },
   { id: "more", title: "Learn more" },
 ] as const
@@ -122,23 +121,6 @@ const tools = [
     term: "Measures",
     text: "Lead Time, Touch Time, Stagnation Time and First Pass Yield show where each Piece waits and which Work Station makes the defects, so the team knows what to improve first.",
   },
-]
-
-const words = [
-  {
-    yours: "Feature",
-    term: "Demand",
-    text: "a request for a quantity of Pieces by a due date",
-  },
-  { yours: "User Story", term: "Piece", text: "the work that flows, one at a time" },
-  { yours: "Team or step (design, development, QA)", term: "Work Station", text: "" },
-  { yours: "Board or workflow", term: "Line", text: "the ordered chain of Work Stations" },
-  {
-    yours: '"Done" column',
-    term: "Blue Bin",
-    text: "holds one finished Piece until the next step pulls it",
-  },
-  { yours: "Bug sent back to development", term: "Rework", text: "repaired where the Piece is" },
 ]
 
 const places = [
@@ -485,36 +467,6 @@ const readings = [
                 <dd class="text-pretty text-base-content/80">{{ tool.text }}</dd>
               </div>
             </dl>
-          </section>
-
-          <section class="grid gap-6" :aria-labelledby="section.words.id">
-            <header class="flex items-baseline gap-3">
-              <span class="font-semibold tabular-nums text-primary">{{
-                section.words.number
-              }}</span>
-              <h3 :id="section.words.id" class="scroll-mt-8 text-2xl font-semibold tracking-tight">
-                {{ section.words.title }}
-              </h3>
-            </header>
-            <div class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-              <table class="table">
-                <thead>
-                  <tr>
-                    <th scope="col" class="w-2/5">In a software team</th>
-                    <th scope="col">In Bluebin</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="word in words" :key="word.term" class="align-top">
-                    <td class="text-base text-base-content/80">{{ word.yours }}</td>
-                    <td class="text-base">
-                      <span class="font-semibold">{{ word.term }}</span>
-                      <span v-if="word.text" class="text-base-content/80">: {{ word.text }}</span>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
           </section>
 
           <section class="grid gap-6" :aria-labelledby="section.where.id">
