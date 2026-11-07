@@ -69,7 +69,7 @@ Decided in conversation. These are the rules the builder implements.
 
 ### The Split happens at the pull
 
-Tech Conception finishes one Piece — US-9 — and puts it in one of its **Blue
+Tech Conception finishes one Piece, US-9, and puts it in one of its **Blue
 Bins**. It does not divide the Piece and does not know about Branches. US-9 sits
 in that bin as one Piece.
 
@@ -82,8 +82,8 @@ Web does the same later, producing the Web Sub-Piece of US-9.
 ### Branches pull independently
 
 Android does not wait for Web. If Android holds a Kanban and Web does not,
-Android pulls and starts; Web pulls when it frees up. No warning, no Deviation —
-this is normal operation, not an exception.
+Android pulls and starts; Web pulls when it frees up. This raises no warning and no
+Deviation: it is normal operation.
 
 ### The Blue Bin frees on the last pull
 
@@ -98,7 +98,7 @@ Split that sentence needs its qualifier: the Kanban goes upstream when the bin
 frees, which is the last Branch's pull. Android's pull sends nothing. Web's pull
 sends one Kanban to Tech Conception.
 
-This keeps F7's invariant — Kanbans ≤ empty Blue Bins — true at Tech Conception,
+This keeps F7's invariant (Kanbans ≤ empty Blue Bins) true at Tech Conception,
 and it is what makes goal 1 hold.
 
 ### The stall is the signal
@@ -106,8 +106,8 @@ and it is what makes goal 1 hold.
 While Web lags, US-9 occupies one of Tech Conception's two Blue Bins, so Sofia's
 Kanban count is capped at one and eventually reaches zero. Sofia stops.
 
-This is wanted. The lag surfaces as the station before the Split running out of
-work, rather than as a queue piling up in front of Web. A Person with no Kanban
+This is intended: the lag shows as the station before the Split running out
+of work, rather than as a queue in front of Web. A Person with no Kanban
 Helps Downstream (F22), and the Branch that has not yet pulled is exactly where
 the help belongs.
 
@@ -127,7 +127,7 @@ not from Tech Conception.
 column's own count, and the comment at line 24 justifies it by treating
 "Kanbans this station holds" and "Kanbans this station sent upstream" as one
 quantity. They are two quantities. The arrow between Step 2 and Step 3 carries
-the Kanbans Tech Conception holds — one — not the three held by Android and Web.
+the Kanbans Tech Conception holds (one), not the three held by Android and Web.
 
 Fix the attribution: each link is labelled with the held Kanban count of the
 column it points back into. The sum at line 26 then disappears, because the
@@ -157,7 +157,7 @@ The shape of the data is the builder's call, within these rules:
   Sub-Pieces of one Piece, so that lookup should be cheap.
 - A Blue Bin needs to record which Branches have pulled its Piece. Open whether
   that lives on the bin, on the pull events, or is derived from the Sub-Pieces
-  that exist for that Piece — deriving it is attractive, since a Sub-Piece
+  that exist for that Piece. Deriving it is attractive, since a Sub-Piece
   existing _is_ the record that its Branch pulled.
 - How a Split is recognised. `work_station.branch` and a shared `position`
   already exist; whether a Split needs its own row is open.

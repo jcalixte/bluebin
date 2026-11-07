@@ -4,8 +4,8 @@ Every action in a Line (pull, put in Blue Bin, pause, Assembly, Rework, Deviatio
 
 ## Considered Options
 
-- **Current state only** — simplest, but measures cannot be recomputed and the history of Line changes is lost.
-- **Full event sourcing** — every state rebuilt from events; rejected for the extra projection, replay and event-versioning code that one team's Line does not need.
+- **Current state only**: simplest, but measures cannot be recomputed and the history of Line changes is lost.
+- **Full event sourcing**: every state rebuilt from events. Rejected for the extra projection, replay and event-versioning code that one team's Line does not need.
 
 ## Consequences
 
