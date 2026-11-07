@@ -232,7 +232,7 @@ function confirmDiscard() {
         </ol>
       </div>
 
-      <div class="grid gap-6 xl:grid-cols-3">
+      <div class="grid items-start gap-6 xl:grid-cols-3">
         <DesignTeamMembersCard
           v-model="draft.teamMembers"
           :add="addTeamMember"
