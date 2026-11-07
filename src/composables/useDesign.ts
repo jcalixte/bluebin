@@ -21,13 +21,13 @@ export type DraftStep = {
 
 export type DesignDraft = {
   labels: Labels
-  people: DesignTeamMember[]
+  teamMembers: DesignTeamMember[]
   steps: DraftStep[]
 }
 
 type DesignShape = {
   labels: Labels
-  people: DesignTeamMember[]
+  teamMembers: DesignTeamMember[]
   steps: { name: string; stations: DesignStationInput[] }[]
 }
 
@@ -37,14 +37,14 @@ const newKey = () => `new-${nextKey++}`
 function toDraft(design: Design): DesignDraft {
   return {
     labels: { ...design.labels },
-    people: design.people.map((teamMember) => ({ ...teamMember })),
+    teamMembers: design.teamMembers.map((teamMember) => ({ ...teamMember })),
     steps: design.steps.map((step) => ({
       key: newKey(),
       name: step.name,
       stations: step.stations.map((station) => ({
         ...station,
         key: station.id,
-        people: [...station.people],
+        teamMembers: [...station.teamMembers],
       })),
     })),
   }
@@ -58,7 +58,7 @@ function toPayload(design: DesignShape): DesignInput {
       piece: design.labels.piece.trim(),
       pieces: design.labels.pieces.trim(),
     },
-    people: design.people.map((teamMember) => ({
+    teamMembers: design.teamMembers.map((teamMember) => ({
       id: teamMember.id,
       name: teamMember.name.trim(),
     })),
@@ -70,7 +70,7 @@ function toPayload(design: DesignShape): DesignInput {
         branch: station.branch === null ? null : station.branch.trim(),
         blueBins: Number(station.blueBins),
         teamLeader: station.teamLeader,
-        people: [...station.people].sort(),
+        teamMembers: [...station.teamMembers].sort(),
       })),
     })),
   }
@@ -84,7 +84,7 @@ export function newStation(branch: string | null): DraftStation {
     branch,
     blueBins: 1,
     teamLeader: "",
-    people: [],
+    teamMembers: [],
     locked: false,
     minBlueBins: 1,
   }
@@ -112,7 +112,7 @@ export function designProblems(draft: DesignDraft): string[] {
   if (labels.some((label) => label.trim() === "")) {
     problems.push("Give a name to each label.")
   }
-  if (draft.people.some((teamMember) => teamMember.name.trim() === "")) {
+  if (draft.teamMembers.some((teamMember) => teamMember.name.trim() === "")) {
     problems.push("Give a name to each Team Member.")
   }
   if (steps.length === 0) {
@@ -158,9 +158,9 @@ export function designProblems(draft: DesignDraft): string[] {
       if (!(Number(station.blueBins) >= station.minBlueBins)) {
         problems.push(`${label} needs ${station.minBlueBins} Blue Bins or more.`)
       }
-      if (station.people.length === 0) {
+      if (station.teamMembers.length === 0) {
         problems.push(`${label} needs one Team Member or more.`)
-      } else if (!station.people.includes(station.teamLeader)) {
+      } else if (!station.teamMembers.includes(station.teamLeader)) {
         problems.push(`Pick a Team Leader for ${label} from its Team Members.`)
       }
     }
@@ -242,7 +242,7 @@ export function useDesign() {
 
   async function addTeamMember(name: string) {
     try {
-      const response = await fetch(api("/api/people"), {
+      const response = await fetch(api("/api/team-members"), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name }),
@@ -251,8 +251,8 @@ export function useDesign() {
         throw new Error((await response.text()) || `API answered ${response.status}`)
       }
       const teamMember = (await response.json()) as DesignTeamMember
-      saved.value?.people.push({ ...teamMember })
-      draft.value?.people.push({ ...teamMember })
+      saved.value?.teamMembers.push({ ...teamMember })
+      draft.value?.teamMembers.push({ ...teamMember })
       return true
     } catch (cause) {
       error.value = `The Team Member was not added: ${message(cause)}`
@@ -263,11 +263,11 @@ export function useDesign() {
   /** Saved with the other changes. Each Work Station lets the Team Member go too. */
   function removeTeamMember(id: string) {
     if (!draft.value) return
-    draft.value.people = draft.value.people.filter((teamMember) => teamMember.id !== id)
+    draft.value.teamMembers = draft.value.teamMembers.filter((teamMember) => teamMember.id !== id)
     for (const station of steps().flatMap((step) => step.stations)) {
-      station.people = station.people.filter((one) => one !== id)
+      station.teamMembers = station.teamMembers.filter((one) => one !== id)
       if (station.teamLeader === id) {
-        station.teamLeader = station.people[0] ?? ""
+        station.teamLeader = station.teamMembers[0] ?? ""
       }
     }
   }

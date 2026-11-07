@@ -1,6 +1,5 @@
 import gleam/dynamic/decode
 import gleam/int
-import gleam/list
 import gleam/result
 import sqlight
 
@@ -9,18 +8,15 @@ import sqlight
 /// volume, or the data is lost on redeploy.
 pub const workspaces_directory = "data/workspaces"
 
-/// The highest migration step; raise it when you append a step to `migrate`.
-const latest_version = 14
+/// The schema of a new database. Raise `schema_version` when it changes, and
+/// add the step that brings a database from the previous version.
+const schema_version = 1
 
-/// From this version a Workspace can be empty on purpose (`reset_empty`), so
-/// only an older database gets the demo data.
-const empty_on_purpose_since = 11
-
-const schema_v1 = "
-pragma journal_mode = wal;
+/// Parents before children. `foreign_keys` holds for this connection only.
+const schema = "
 pragma foreign_keys = on;
 
-create table if not exists demand (
+create table demand (
   id           text primary key,
   label        text not null,
   client       text not null,
@@ -30,82 +26,70 @@ create table if not exists demand (
   state        text not null default 'active'
 );
 
-create table if not exists piece (
-  id          text primary key,
-  demand_id   text not null references demand(id),
-  reference   text not null,
-  state       text not null,
-  produced_at text
+create table team_member (
+  id         text primary key,
+  name       text not null,
+  removed_at text
 );
 
-create table if not exists flow_event (
-  id        integer primary key autoincrement,
-  at        text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  kind      text not null,
-  piece_id  text references piece(id),
-  payload   text
-);
-"
-
-const schema_v2 = "
-create table if not exists person (
-  id   text primary key,
-  name text not null
-);
-
-create table if not exists work_station (
+create table work_station (
   id          text primary key,
   name        text not null,
   position    integer not null,
   branch      text,
   blue_bins   integer not null,
-  team_leader text references person(id)
+  team_leader text references team_member(id)
 );
 
-create table if not exists station_person (
-  station_id text not null references work_station(id),
-  person_id  text not null references person(id),
-  primary key (station_id, person_id)
+create table station_team_member (
+  station_id     text not null references work_station(id),
+  team_member_id text not null references team_member(id),
+  primary key (station_id, team_member_id)
 );
 
-create table if not exists blue_bin (
-  id         text primary key,
-  station_id text not null references work_station(id),
-  slot       integer not null,
-  piece_id   text references piece(id)
+create table piece (
+  id          text primary key,
+  demand_id   text not null references demand(id),
+  reference   text not null,
+  state       text not null,
+  produced_at text,
+  station_id  text references work_station(id),
+  assignee    text references team_member(id),
+  since       text,
+  parent_id   text references piece(id),
+  branch      text,
+  urgent      integer,
+  entered_at  text
 );
 
-create table if not exists kanban (
+create table flow_event (
+  id       integer primary key autoincrement,
+  at       text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  kind     text not null,
+  piece_id text references piece(id),
+  payload  text
+);
+
+create table kanban (
   id         text primary key,
   station_id text not null references work_station(id),
   created_at text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
-create table if not exists rework (
-  id          text primary key,
-  piece_id    text not null references piece(id),
-  station_id  text not null references work_station(id),
-  description text not null,
-  opened_at   text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  closed_at   text
+create table rework (
+  id           text primary key,
+  piece_id     text not null references piece(id),
+  station_id   text not null references work_station(id),
+  description  text not null,
+  opened_at    text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  closed_at    text,
+  raised_by    text references work_station(id),
+  assignee     text references team_member(id),
+  started_at   text,
+  paused_piece text references piece(id)
 );
 
-alter table piece add column station_id text references work_station(id);
-alter table piece add column assignee text references person(id);
-"
-
-const schema_v4 = "
-alter table piece add column since text;
-
-update piece
-   set state = 'in_bin',
-       station_id = (select b.station_id from blue_bin b where b.piece_id = piece.id),
-       since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
- where id in (select piece_id from blue_bin where piece_id is not null);
-
-drop table blue_bin;
-
-create table if not exists deviation (
+create table deviation (
   id         integer primary key autoincrement,
   at         text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   rule       text not null,
@@ -113,55 +97,72 @@ create table if not exists deviation (
   piece_id   text references piece(id),
   reason     text not null
 );
-"
 
-/// Pieces already in a Branch were whole, which the pull rules no longer
-/// allow, so the demo data is emptied for `seed` to refill. the step names are
-/// kept so renamed steps survive.
-const schema_v5 = "
-alter table piece add column parent_id text references piece(id);
-alter table piece add column branch text;
-
-delete from deviation;
-delete from rework;
-delete from kanban;
-delete from flow_event;
-delete from station_person;
-delete from piece;
-delete from demand;
-delete from work_station;
-delete from person;
-"
-
-const schema_v6 = "
-alter table rework add column raised_by text references work_station(id);
-alter table rework add column assignee text references person(id);
-alter table rework add column started_at text;
-alter table rework add column paused_piece text references piece(id);
-
-create table if not exists piece_pass (
-  piece_id   text not null references piece(id),
-  station_id text not null references work_station(id),
-  person_id  text references person(id),
-  at         text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+create table piece_pass (
+  piece_id       text not null references piece(id),
+  station_id     text not null references work_station(id),
+  team_member_id text references team_member(id),
+  at             text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
   primary key (piece_id, station_id)
 );
+
+create table andon (
+  id         integer primary key autoincrement,
+  station_id text not null references work_station(id),
+  raised_by  text references team_member(id),
+  raised_at  text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  closed_by  text references team_member(id),
+  closed_at  text
+);
+-- One open Andon per Work Station.
+create unique index andon_open on andon(station_id) where closed_at is null;
+
+create table working_calendar (
+  id        integer primary key check (id = 1),
+  days      text not null,
+  day_start text not null,
+  day_end   text not null
+);
+insert into working_calendar (id, days, day_start, day_end)
+values (1, '12345', '09:00', '16:00');
+
+create table holiday (
+  day   text primary key,
+  label text not null
+);
+
+create table line_step (
+  position   integer primary key,
+  name       text not null,
+  renamed_at text
+);
+
+-- The Line's name and the names it gives its Demands and Pieces (F41).
+create table line_label (
+  id      integer primary key check (id = 1),
+  name    text not null default 'Line',
+  demand  text not null,
+  demands text not null,
+  piece   text not null,
+  pieces  text not null
+);
+insert into line_label (id, demand, demands, piece, pieces)
+values (1, 'Feature', 'Features', 'User Story', 'User Stories');
 "
 
-/// Runs both as migration 6 and after the seed, so it must stay idempotent
-/// (`insert or ignore`, `coalesce`).
+/// The Pieces already past a Work Station get a pass, after the seed.
 const seed_passes_sql = "
-insert or ignore into piece_pass (piece_id, station_id, person_id, at)
+insert or ignore into piece_pass (piece_id, station_id, team_member_id, at)
 select p.id, w.id,
-       (select sp.person_id from station_person sp
+       (select sp.team_member_id from station_team_member sp
          where sp.station_id = w.id order by sp.rowid limit 1),
        p.produced_at
   from piece p, work_station w
  where p.state = 'produced' and p.produced_at is not null;
 
-insert or ignore into piece_pass (piece_id, station_id, person_id, at)
+insert or ignore into piece_pass (piece_id, station_id, team_member_id, at)
 select p.id, w.id,
-       (select sp.person_id from station_person sp
+       (select sp.team_member_id from station_team_member sp
          where sp.station_id = w.id order by sp.rowid limit 1),
        p.since
   from piece p
@@ -173,122 +174,11 @@ update rework
    set raised_by = coalesce(raised_by,
          (select p.station_id from piece p where p.id = rework.piece_id)),
        assignee = coalesce(assignee,
-         (select pp.person_id from piece_pass pp
+         (select pp.team_member_id from piece_pass pp
            where pp.station_id = rework.station_id
              and pp.piece_id = rework.piece_id)),
        started_at = coalesce(started_at, opened_at)
  where closed_at is null;
-"
-
-/// `urgent` ranks the Pieces made urgent by hand; null for the others.
-const schema_v7 = "
-alter table piece add column urgent integer;
-"
-
-/// The Working Calendar replaces the Monday to Friday, 7 hour stand-in, and the
-/// log gains what the measures need: when a Piece entered the Backlog, and
-/// one `kanban_sent` for each Kanban already held, for the Starvation Time.
-const schema_v8 = "
-create table if not exists working_calendar (
-  id        integer primary key check (id = 1),
-  days      text not null,
-  day_start text not null,
-  day_end   text not null
-);
-insert or ignore into working_calendar (id, days, day_start, day_end)
-values (1, '12345', '09:00', '16:00');
-
-create table if not exists holiday (
-  day   text primary key,
-  label text not null
-);
-
-alter table piece add column entered_at text;
-update piece
-   set entered_at = (select d.started_on || 'T00:00:00Z' from demand d
-                      where d.id = piece.demand_id);
-
-insert into flow_event (at, kind, payload)
-select created_at, 'kanban_sent', json_object('station', station_id)
-  from kanban order by created_at;
-"
-
-/// An Andon stops one Work Station until its Team Leader closes it; at most
-/// one is open per Work Station.
-const schema_v9 = "
-create table if not exists andon (
-  id         integer primary key autoincrement,
-  station_id text not null references work_station(id),
-  raised_by  text references person(id),
-  raised_at  text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-  closed_by  text references person(id),
-  closed_at  text
-);
-create unique index if not exists andon_open on andon(station_id)
-  where closed_at is null;
-"
-
-/// The names each Line gives its Demands and Pieces (F41).
-const schema_v10 = "
-create table if not exists stream_label (
-  id      integer primary key check (id = 1),
-  demand  text not null,
-  demands text not null,
-  piece   text not null,
-  pieces  text not null
-);
-insert or ignore into stream_label (id, demand, demands, piece, pieces)
-values (1, 'Feature', 'Features', 'User Story', 'User Stories');
-"
-
-/// A Demand whose Pieces are all in production is delivered (F5), on the day
-/// of its last Piece. Data only, so the old code still runs during the deploy.
-const schema_v11 = "
-insert into flow_event (at, kind, payload)
-select coalesce((select max(p.produced_at) from piece p
-                  where p.demand_id = d.id and p.parent_id is null),
-                strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-       'demand_delivered', json_object('demand', d.id)
-  from demand d
- where d.state = 'active'
-   and (select count(*) from piece p
-         where p.demand_id = d.id and p.parent_id is null
-           and p.state = 'produced') >= d.pieces_asked;
-
-update demand set state = 'delivered'
- where state = 'active'
-   and (select count(*) from piece p
-         where p.demand_id = demand.id and p.parent_id is null
-           and p.state = 'produced') >= pieces_asked;
-"
-
-/// An account can own several Lines, so each one carries the name its
-/// owner gives it. A new column with a default, so the old code still runs.
-const schema_v12 = "
-alter table stream_label add column name text not null default 'Line';
-"
-
-/// "Value Stream" became "Line" (see CONTEXT.md). Existing rows keep their
-/// data; only the table names, the event kind and the default name change.
-const schema_v13 = "
-alter table stream_label rename to line_label;
-alter table stream_step rename to line_step;
-update line_label set name = 'Line' where name = 'Value Stream';
-update flow_event set kind = 'line_changed' where kind = 'stream_changed';
-"
-
-/// A Team Member removed in Design keeps their row, so the history still shows
-/// their name. A new nullable column, so the old code still runs.
-const schema_v14 = "
-alter table person add column removed_at text;
-"
-
-const schema_v3 = "
-create table if not exists stream_step (
-  position   integer primary key,
-  name       text not null,
-  renamed_at text
-);
 "
 
 const seed_steps_sql = "
@@ -334,7 +224,7 @@ from piece where state = 'produced' order by produced_at;
 "
 
 const seed_line_sql = "
-insert into person (id, name) values
+insert into team_member (id, name) values
   ('pe-ines', 'Inès'), ('pe-marc', 'Marc'), ('pe-sofia', 'Sofia'),
   ('pe-bob', 'Bob'), ('pe-lila', 'Lila'), ('pe-alice', 'Alice'),
   ('pe-karim', 'Karim'), ('pe-nina', 'Nina'), ('pe-tom', 'Tom'),
@@ -351,7 +241,7 @@ insert into work_station (id, name, position, branch, blue_bins, team_leader) va
   ('ws-qa-android',  'QA Android',       4, 'Android', 2, 'pe-tom'),
   ('ws-uat',         'UAT',              5, null,      1, 'pe-ines');
 
-insert into station_person (station_id, person_id) values
+insert into station_team_member (station_id, team_member_id) values
   ('ws-analysis', 'pe-ines'), ('ws-analysis', 'pe-marc'),
   ('ws-conception', 'pe-sofia'), ('ws-conception', 'pe-marc'),
   ('ws-web', 'pe-bob'), ('ws-web', 'pe-lila'),
@@ -494,13 +384,13 @@ pub fn workspace_path(workspace: String) -> String {
   workspaces_directory <> "/" <> workspace <> ".db"
 }
 
-/// Migrates and seeds the database when it is new or behind. The SPA sends
-/// several requests at once on its first load, so the slow path holds the
-/// write lock: the other requests wait, then see the current version.
+/// Makes and seeds the database when it is new. The SPA sends several
+/// requests at once on its first load, so the slow path holds the write lock:
+/// the other requests wait, then see the current version.
 pub fn ready(database: String) -> Result(Nil, sqlight.Error) {
   use connection <- with_connection_at(database)
   use version <- result.try(user_version(connection))
-  case version >= latest_version {
+  case version == schema_version {
     True -> Ok(Nil)
     False -> {
       use _ <- result.try(sqlight.exec("begin immediate;", connection))
@@ -530,56 +420,32 @@ pub fn with_connection_at(
   run(connection)
 }
 
+/// Makes the schema and the demo data on a new database, and does nothing on
+/// a current one. A database of another schema version is refused, not read.
 pub fn prepare(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   use version <- result.try(user_version(connection))
-  use _ <- result.try(migrate(connection))
-  case version < empty_on_purpose_since {
-    True -> seed(connection)
-    False -> Ok(Nil)
-  }
-}
-
-/// Each step runs at most once per database, tracked in `pragma user_version`:
-/// never edit an applied step, append a new one and raise this target.
-pub fn migrate(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  migrate_to(connection, latest_version)
-}
-
-pub fn migrate_to(
-  connection: sqlight.Connection,
-  target: Int,
-) -> Result(Nil, sqlight.Error) {
-  use version <- result.try(user_version(connection))
-  [
-    #(1, schema_v1),
-    #(2, schema_v2),
-    #(3, schema_v3),
-    #(4, schema_v4),
-    #(5, schema_v5),
-    #(6, schema_v6 <> seed_passes_sql),
-    #(7, schema_v7),
-    #(8, schema_v8),
-    #(9, schema_v9),
-    #(10, schema_v10),
-    #(11, schema_v11),
-    #(12, schema_v12),
-    #(13, schema_v13),
-    #(14, schema_v14),
-  ]
-  |> list.try_fold(Nil, fn(_, step) {
-    let #(step_version, sql) = step
-    case version < step_version && step_version <= target {
-      False -> Ok(Nil)
-      True ->
-        sqlight.exec(
-          sql
-            <> "\npragma user_version = "
-            <> int.to_string(step_version)
-            <> ";",
-          connection,
-        )
+  case version {
+    0 -> {
+      use _ <- result.try(sqlight.exec(
+        schema
+          <> "\npragma user_version = "
+          <> int.to_string(schema_version)
+          <> ";",
+        connection,
+      ))
+      seed(connection)
     }
-  })
+    _ if version == schema_version -> Ok(Nil)
+    _ ->
+      Error(sqlight.SqlightError(
+        code: sqlight.GenericError,
+        message: "schema version "
+          <> int.to_string(version)
+          <> ", expected "
+          <> int.to_string(schema_version),
+        offset: -1,
+      ))
+  }
 }
 
 fn user_version(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
@@ -650,11 +516,11 @@ delete from rework;
 delete from kanban;
 delete from piece_pass;
 delete from flow_event;
-delete from station_person;
+delete from station_team_member;
 delete from piece;
 delete from demand;
 delete from work_station;
-delete from person;
+delete from team_member;
 delete from line_step;
 delete from sqlite_sequence;
 "
@@ -669,15 +535,15 @@ update line_label
 
 /// The one Blue Bin is empty, so the Work Station holds its one Kanban.
 const start_empty_sql = "
-insert into person (id, name)
+insert into team_member (id, name)
 values ('pe-' || lower(hex(randomblob(6))), 'Team Member 1');
 
 insert into work_station (id, name, position, branch, blue_bins, team_leader)
 select 'ws-' || lower(hex(randomblob(6))), 'Work Station 1', 1, null, 1, id
-  from person;
+  from team_member;
 
-insert into station_person (station_id, person_id)
-select w.id, p.id from work_station w, person p;
+insert into station_team_member (station_id, team_member_id)
+select w.id, p.id from work_station w, team_member p;
 
 insert into kanban (id, station_id)
 select 'kb-' || lower(hex(randomblob(6))), id from work_station;

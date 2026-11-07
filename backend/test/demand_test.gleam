@@ -153,40 +153,6 @@ pub fn a_piece_of_an_unfinished_demand_does_not_deliver_it_test() {
     == "active"
 }
 
-pub fn migration_11_delivers_the_demands_already_complete_test() {
-  use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.migrate_to(connection, 10)
-  exec(
-    connection,
-    "insert into demand values
-       ('d-done', 'Done', 'Retail', '2026-10-01', '2026-10-20', 2, 'active'),
-       ('d-open', 'Open', 'Retail', '2026-10-01', '2026-12-20', 2, 'active');
-     insert into person (id, name) values ('pe-a', 'A');
-     insert into work_station (id, name, position, branch, blue_bins, team_leader)
-       values ('ws-a', 'A', 1, null, 1, 'pe-a');
-     insert into piece (id, demand_id, reference, state, produced_at) values
-       ('p-done-1', 'd-done', 'US-1', 'produced', '2026-10-05T10:00:00Z'),
-       ('p-done-2', 'd-done', 'US-2', 'produced', '2026-10-09T15:00:00Z');",
-  )
-  let assert Ok(Nil) = db.prepare(connection)
-  assert count(connection, "pragma user_version") >= 11
-  assert text(
-      connection,
-      "select group_concat(id) from demand
-      where state = 'delivered'",
-    )
-    == "d-done"
-  assert text(
-      connection,
-      "select at from flow_event
-      where kind = 'demand_delivered'",
-    )
-    == "2026-10-09T15:00:00Z"
-  // A Demand with Pieces still to make keeps running.
-  assert text(connection, "select state from demand where id = 'd-open'")
-    == "active"
-}
-
 // --- Forecast ------------------------------------------------------------------
 
 /// Friday 2026-11-06, day 20_763 since 1970-01-01.
@@ -343,5 +309,5 @@ pub fn the_demo_reset_follows_an_empty_start_test() {
   let assert Ok(Nil) = db.reset(connection)
   assert count(connection, "select count(*) from demand") == 3
   assert count(connection, "select count(*) from work_station") == 9
-  assert count(connection, "select count(*) from person") == 10
+  assert count(connection, "select count(*) from team_member") == 10
 }

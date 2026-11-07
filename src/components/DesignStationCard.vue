@@ -10,15 +10,15 @@ const props = defineProps<{ teamMembers: DesignTeamMember[] }>()
 defineEmits<{ remove: [] }>()
 
 const members = computed(() =>
-  props.teamMembers.filter((teamMember) => station.value.people.includes(teamMember.id)),
+  props.teamMembers.filter((teamMember) => station.value.teamMembers.includes(teamMember.id)),
 )
 
 function toggle(teamMember: string, event: Event) {
   const on = (event.target as HTMLInputElement).checked
-  const others = station.value.people.filter((one) => one !== teamMember)
-  station.value.people = on ? [...others, teamMember] : others
-  if (!station.value.people.includes(station.value.teamLeader)) {
-    station.value.teamLeader = station.value.people[0] ?? ""
+  const others = station.value.teamMembers.filter((one) => one !== teamMember)
+  station.value.teamMembers = on ? [...others, teamMember] : others
+  if (!station.value.teamMembers.includes(station.value.teamLeader)) {
+    station.value.teamLeader = station.value.teamMembers[0] ?? ""
   }
 }
 
@@ -115,7 +115,7 @@ const tooFewBins = computed(() => !(Number(station.value.blueBins) >= station.va
               <input
                 type="checkbox"
                 class="checkbox checkbox-sm"
-                :checked="station.people.includes(teamMember.id)"
+                :checked="station.teamMembers.includes(teamMember.id)"
                 @change="toggle(teamMember.id, $event)"
               />
               {{ teamMember.name || "Unnamed Team Member" }}
@@ -129,7 +129,7 @@ const tooFewBins = computed(() => !(Number(station.value.blueBins) >= station.va
         <select
           v-model="station.teamLeader"
           class="select select-sm w-full"
-          :class="!station.people.includes(station.teamLeader) ? 'select-warning' : ''"
+          :class="!station.teamMembers.includes(station.teamLeader) ? 'select-warning' : ''"
           :disabled="members.length === 0"
         >
           <option value="" disabled>

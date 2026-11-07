@@ -85,19 +85,6 @@ fn with_seeded_database(run: fn(sqlight.Connection) -> a) -> a {
   run(connection)
 }
 
-/// v4 is the last schema before Sub-Pieces, as bluebin.app had it.
-fn with_database_at_version_4(run: fn(sqlight.Connection) -> a) -> a {
-  use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.migrate_to(connection, 4)
-  exec(
-    connection,
-    "insert into demand values ('d-old', 'Old', 'Client', '2026-01-01', '2026-12-31', 1, 'active');
-     insert into piece (id, demand_id, reference, state) values ('p-old', 'd-old', 'US-1', 'in_flow');
-     insert into stream_step (position, name) values (1, 'From the Backlog'), (2, 'Step 2');",
-  )
-  run(connection)
-}
-
 fn count(connection: sqlight.Connection, sql: String) -> Int {
   let decoder = {
     use value <- decode.field(0, decode.int)
@@ -132,8 +119,9 @@ pub fn the_seed_runs_once_test() {
 /// databases with the same seed give the same fingerprint.
 fn fingerprint(connection: sqlight.Connection) -> List(Int) {
   [
-    "demand", "piece", "flow_event", "person", "work_station", "station_person",
-    "kanban", "rework", "deviation", "piece_pass", "line_step",
+    "demand", "piece", "flow_event", "team_member", "work_station",
+    "station_team_member", "kanban", "rework", "deviation", "piece_pass",
+    "line_step",
   ]
   |> list.map(fn(table) { count(connection, "select count(*) from " <> table) })
   |> list.append([
@@ -402,21 +390,6 @@ pub fn every_action_writes_one_flow_event_test() {
   assert count(connection, pieces) == before + 2
 }
 
-pub fn the_reset_keeps_the_names_of_the_steps_test() {
-  use connection <- with_database_at_version_4()
-  exec(connection, "update stream_step set name = 'Design' where position = 2")
-  let assert Ok(Nil) = db.prepare(connection)
-  assert count(connection, "select count(*) from demand") == 3
-  assert count(
-      connection,
-      "select count(*) from piece
-       where parent_id is not null and state != 'assembled'",
-    )
-    == 6
-  let assert Ok(steps) = line.list_steps(connection)
-  assert list.contains(steps, line.Step(position: 2, name: "Design"))
-}
-
 pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
   use connection <- with_seeded_database()
   // In the seed, Alice made US-4's iOS part.
@@ -554,7 +527,7 @@ pub fn finishing_a_piece_records_who_transformed_it_test() {
       connection,
       "select count(*) from piece_pass
        where piece_id = 'p-checkout-9-ios' and station_id = 'ws-ios'
-         and person_id = 'pe-karim'",
+         and team_member_id = 'pe-karim'",
     )
     == 1
 }
@@ -1366,4 +1339,24 @@ pub fn the_next_thing_shows_only_the_andons_of_my_work_stations_test() {
   let assert Ok(Nil) = flow.raise_andon(connection, "ws-ios", None)
   let mine = andon.of_stations(andons_now(connection), ["ws-web"])
   let assert [andon.Stop(station_id: "ws-web", ..)] = mine
+}
+
+/// A database made before the schema was squashed is refused, never read.
+pub fn a_database_of_another_schema_version_is_refused_test() {
+  use connection <- db.with_connection_at(":memory:")
+  exec(connection, "create table person (id text); pragma user_version = 15;")
+  let assert Error(_) = db.prepare(connection)
+  assert count(
+      connection,
+      "select count(*) from sqlite_master where name = 'demand'",
+    )
+    == 0
+}
+
+pub fn a_new_database_gets_the_schema_once_test() {
+  use connection <- with_seeded_database()
+  assert count(connection, "pragma user_version") == 1
+  let assert Ok(Nil) = db.prepare(connection)
+  assert count(connection, "select count(*) from line_label") == 1
+  assert count(connection, "select count(*) from working_calendar") == 1
 }

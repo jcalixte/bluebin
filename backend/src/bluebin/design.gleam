@@ -90,7 +90,7 @@ pub fn load(
   use team_members <- result.try(
     query(
       connection,
-      "select id, name from person where removed_at is null order by rowid",
+      "select id, name from team_member where removed_at is null order by rowid",
       [],
       {
         use id <- decode.field(0, decode.string)
@@ -101,7 +101,7 @@ pub fn load(
   )
   use members <- result.try(query(
     connection,
-    "select station_id, person_id from station_person order by rowid",
+    "select station_id, team_member_id from station_team_member order by rowid",
     [],
     pair_decoder(),
   ))
@@ -517,7 +517,7 @@ pub fn add_team_member(
   use rows <- result.try(
     query(
       connection,
-      "insert into person (id, name)
+      "insert into team_member (id, name)
        values ('pe-' || lower(hex(randomblob(6))), ?1)
        returning id, name",
       [sqlight.text(trimmed)],
@@ -534,8 +534,8 @@ pub fn add_team_member(
   )
   use _ <- result.try(
     changed(connection, [
-      #("change", json.string("person_added")),
-      #("person", json.string(team_member.id)),
+      #("change", json.string("team_member_added")),
+      #("teamMember", json.string(team_member.id)),
       #("name", json.string(team_member.name)),
     ]),
   )
@@ -687,14 +687,14 @@ fn save_team_members(
     case list.find(before, fn(one) { one.id == team_member.id }) {
       Ok(found) if found.name != name -> {
         use _ <- result.try(
-          run(connection, "update person set name = ?2 where id = ?1", [
+          run(connection, "update team_member set name = ?2 where id = ?1", [
             sqlight.text(team_member.id),
             sqlight.text(name),
           ]),
         )
         changed(connection, [
-          #("change", json.string("person_renamed")),
-          #("person", json.string(team_member.id)),
+          #("change", json.string("team_member_renamed")),
+          #("teamMember", json.string(team_member.id)),
           #("name", json.string(name)),
         ])
       }
@@ -709,21 +709,25 @@ fn remove_team_member(
   team_member: TeamMember,
 ) -> Result(Nil, DesignError) {
   use _ <- result.try(
-    run(connection, "delete from station_person where person_id = ?1", [
-      sqlight.text(team_member.id),
-    ]),
+    run(
+      connection,
+      "delete from station_team_member where team_member_id = ?1",
+      [
+        sqlight.text(team_member.id),
+      ],
+    ),
   )
   use _ <- result.try(
     run(
       connection,
-      "update person set removed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      "update team_member set removed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1",
       [sqlight.text(team_member.id)],
     ),
   )
   changed(connection, [
-    #("change", json.string("person_removed")),
-    #("person", json.string(team_member.id)),
+    #("change", json.string("team_member_removed")),
+    #("teamMember", json.string(team_member.id)),
     #("name", json.string(team_member.name)),
   ])
 }
@@ -836,7 +840,7 @@ fn remove_station(
     list.first(kanbans) |> result.unwrap(0),
   ))
   use _ <- result.try(
-    run(connection, "delete from station_person where station_id = ?1", [
+    run(connection, "delete from station_team_member where station_id = ?1", [
       sqlight.text(id),
     ]),
   )
@@ -858,7 +862,7 @@ fn set_team_members(
   team_members: List(String),
 ) -> Result(Nil, DesignError) {
   use _ <- result.try(
-    run(connection, "delete from station_person where station_id = ?1", [
+    run(connection, "delete from station_team_member where station_id = ?1", [
       sqlight.text(station_id),
     ]),
   )
@@ -866,7 +870,7 @@ fn set_team_members(
   |> list.try_each(fn(team_member) {
     run(
       connection,
-      "insert into station_person (station_id, person_id) values (?1, ?2)",
+      "insert into station_team_member (station_id, team_member_id) values (?1, ?2)",
       [sqlight.text(station_id), sqlight.text(team_member)],
     )
   })
@@ -987,7 +991,7 @@ fn station_payload(
     #("branch", json.nullable(clean(station.branch), json.string)),
     #("blueBins", json.int(station.blue_bins)),
     #("teamLeader", json.string(station.team_leader)),
-    #("people", json.array(station.team_members, json.string)),
+    #("teamMembers", json.array(station.team_members, json.string)),
   ]
 }
 
@@ -1006,7 +1010,7 @@ pub fn to_json(design: Design, held: Dict(String, Held)) -> Json {
   json.object([
     #("labels", labels_json(design.labels)),
     #(
-      "people",
+      "teamMembers",
       json.array(design.team_members, fn(team_member) {
         json.object([
           #("id", json.string(team_member.id)),
@@ -1031,7 +1035,7 @@ pub fn to_json(design: Design, held: Dict(String, Held)) -> Json {
                 #("branch", json.nullable(station.branch, json.string)),
                 #("blueBins", json.int(station.blue_bins)),
                 #("teamLeader", json.string(station.team_leader)),
-                #("people", json.array(station.team_members, json.string)),
+                #("teamMembers", json.array(station.team_members, json.string)),
                 #(
                   "locked",
                   json.bool(result.map(found, fn(h) { h.locked }) == Ok(True)),
@@ -1075,7 +1079,7 @@ pub fn decoder() -> decode.Decoder(Design) {
     )
     use blue_bins <- decode.field("blueBins", decode.int)
     use team_leader <- decode.field("teamLeader", decode.string)
-    use team_members <- decode.field("people", decode.list(decode.string))
+    use team_members <- decode.field("teamMembers", decode.list(decode.string))
     decode.success(Station(
       id:,
       name:,
@@ -1091,7 +1095,7 @@ pub fn decoder() -> decode.Decoder(Design) {
     decode.success(Step(name:, stations:))
   }
   use labels <- decode.field("labels", labels)
-  use team_members <- decode.field("people", decode.list(team_member))
+  use team_members <- decode.field("teamMembers", decode.list(team_member))
   use steps <- decode.field("steps", decode.list(step))
   decode.success(Design(labels:, team_members:, steps:))
 }

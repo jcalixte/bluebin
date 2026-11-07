@@ -9,15 +9,15 @@ import { useNextThing } from "../composables/useNextThing"
 import type { Assignment, FlowConfirm, NextThing } from "../types"
 
 /** Team Members differ from one Line to the next. */
-const storageKey = `bluebin.person.${lineId}`
+const storageKey = `bluebin.teamMember.${lineId}`
 const teamMemberId = ref(
-  new URLSearchParams(location.search).get("person") ?? localStorage.getItem(storageKey) ?? "",
+  new URLSearchParams(location.search).get("teamMember") ?? localStorage.getItem(storageKey) ?? "",
 )
 
 watch(teamMemberId, (id) => {
   localStorage.setItem(storageKey, id)
   const url = new URL(location.href)
-  url.searchParams.set("person", id)
+  url.searchParams.set("teamMember", id)
   history.replaceState(null, "", url)
 })
 
@@ -37,7 +37,7 @@ function handOverTo(assignment: Assignment) {
   return (
     view.value?.priorityLists
       .find((list) => list.station === assignment.station)
-      ?.people.filter((one) => one.id !== teamMemberId.value) ?? []
+      ?.teamMembers.filter((one) => one.id !== teamMemberId.value) ?? []
   )
 }
 

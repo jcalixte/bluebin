@@ -89,8 +89,8 @@ pub fn team_members(
   }
   use rows <- result.try(sqlight.query(
     "select pe.id, pe.name, w.name
-       from person pe
-       join station_person sp on sp.person_id = pe.id
+       from team_member pe
+       join station_team_member sp on sp.team_member_id = pe.id
        join work_station w on w.id = sp.station_id
       order by pe.name, pe.id, w.position desc, w.branch",
     on: connection,
@@ -317,7 +317,7 @@ fn team_member_name(
 ) -> Result(String, ReadError) {
   let found =
     sqlight.query(
-      "select name from person where id = ?1",
+      "select name from team_member where id = ?1",
       on: connection,
       with: [sqlight.text(team_member_id)],
       expecting: decode.at([0], decode.string),
@@ -354,7 +354,7 @@ pub fn stations(
   }
   sqlight.query(
     "select w.id, w.name, w.position, w.branch,
-            (select group_concat(sp.person_id) from station_person sp
+            (select group_concat(sp.team_member_id) from station_team_member sp
               where sp.station_id = w.id),
             w.blue_bins - (select count(*) from piece p
                             where p.station_id = w.id and p.state = 'in_bin'),
@@ -381,7 +381,7 @@ pub fn priority_list(
   }
   use reworks <- result.try(sqlight.query(
     "select r.id, p.reference, r.description,
-            (select pe.name from person pe where pe.id = r.assignee)
+            (select pe.name from team_member pe where pe.id = r.assignee)
        from rework r
        join piece p on p.id = r.piece_id
       where r.station_id = ?1 and r.closed_at is null
@@ -415,8 +415,8 @@ fn members(
     decode.success(Member(id:, name:))
   }
   sqlight.query(
-    "select pe.id, pe.name from station_person sp
-       join person pe on pe.id = sp.person_id
+    "select pe.id, pe.name from station_team_member sp
+       join team_member pe on pe.id = sp.team_member_id
       where sp.station_id = ?1
       order by pe.name",
     on: connection,
@@ -501,7 +501,7 @@ pub fn to_json(view: View, andons: Json) -> Json {
   json.object([
     #("andons", andons),
     #(
-      "person",
+      "teamMember",
       json.object([
         #("id", json.string(view.team_member_id)),
         #("name", json.string(view.name)),
@@ -516,7 +516,7 @@ pub fn to_json(view: View, andons: Json) -> Json {
           #("station", json.string(one.station_id)),
           #("name", json.string(one.station)),
           #(
-            "people",
+            "teamMembers",
             json.array(one.team_members, fn(member) {
               json.object([
                 #("id", json.string(member.id)),

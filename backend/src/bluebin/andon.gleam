@@ -70,9 +70,9 @@ pub fn andons(
   use stops <- result.try(
     sqlight.query(
       "select a.station_id, w.name,
-            (select pe.name from person pe where pe.id = a.raised_by),
+            (select pe.name from team_member pe where pe.id = a.raised_by),
             a.raised_at, w.team_leader,
-            (select pe.name from person pe where pe.id = w.team_leader)
+            (select pe.name from team_member pe where pe.id = w.team_leader)
        from andon a
        join work_station w on w.id = a.station_id
       where a.closed_at is null

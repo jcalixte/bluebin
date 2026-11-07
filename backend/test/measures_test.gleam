@@ -222,25 +222,3 @@ pub fn a_wrong_holiday_leaves_the_calendar_as_it_was_test() {
   let assert Error(calendar.Invalid(_)) =
     calendar.save(connection, Calendar(..office(), days: []))
 }
-
-pub fn the_upgrade_dates_the_backlog_and_the_kanbans_held_test() {
-  use connection <- db.with_connection_at(":memory:")
-  let assert Ok(Nil) = db.migrate_to(connection, 7)
-  let assert Ok(Nil) =
-    sqlight.exec(
-      "insert into demand values ('d-old', 'Old', 'Client', '2026-01-05', '2026-12-31', 1, 'active');
-       insert into piece (id, demand_id, reference, state) values ('p-old', 'd-old', 'US-1', 'backlog');
-       insert into work_station (id, name, position, blue_bins) values ('ws-a', 'A', 1, 2);
-       insert into kanban (id, station_id) values ('kb-1', 'ws-a');",
-      connection,
-    )
-  let assert Ok(Nil) = db.migrate(connection)
-  assert one(connection, "select entered_at from piece")
-    == "2026-01-05T00:00:00Z"
-  assert one(
-      connection,
-      "select json_extract(payload, '$.station') from flow_event
-        where kind = 'kanban_sent'",
-    )
-    == "ws-a"
-}

@@ -105,8 +105,8 @@ const activePieces = computed(() => {
   const active = new Map<string, { piece: string; position: number }>()
   for (const station of line.value?.stations ?? []) {
     for (const item of station.inProgress) {
-      if (item.personId && !item.paused) {
-        active.set(item.personId, { piece: item.piece, position: station.position })
+      if (item.teamMemberId && !item.paused) {
+        active.set(item.teamMemberId, { piece: item.piece, position: station.position })
       }
     }
   }

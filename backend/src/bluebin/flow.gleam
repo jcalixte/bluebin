@@ -691,7 +691,7 @@ fn pause_pieces(
       connection,
       "piece_paused",
       Some(piece.0),
-      json.object([#("person", json.string(team_member_id))]),
+      json.object([#("teamMember", json.string(team_member_id))]),
     ))
     Ok(piece.1)
   })
@@ -728,7 +728,7 @@ fn resume_next_piece(
         connection,
         "piece_resumed",
         Some(id),
-        json.object([#("person", json.string(team_member_id))]),
+        json.object([#("teamMember", json.string(team_member_id))]),
       ))
       Ok(Some(reference))
     }
@@ -744,8 +744,8 @@ fn holds_an_open_rework(
     sqlight.query(
       "select count(*) from rework r
         where r.assignee = ?1 and r.closed_at is null
-          and exists (select 1 from station_person sp
-                       where sp.station_id = ?2 and sp.person_id = ?1)",
+          and exists (select 1 from station_team_member sp
+                       where sp.station_id = ?2 and sp.team_member_id = ?1)",
       on: connection,
       with: [sqlight.text(team_member_id), sqlight.text(station_id)],
       expecting: decode.at([0], decode.int),
@@ -828,9 +828,9 @@ fn member_name(
 ) -> Result(String, FlowError) {
   let found =
     sqlight.query(
-      "select pe.name from station_person sp
-         join person pe on pe.id = sp.person_id
-        where sp.station_id = ?1 and sp.person_id = ?2",
+      "select pe.name from station_team_member sp
+         join team_member pe on pe.id = sp.team_member_id
+        where sp.station_id = ?1 and sp.team_member_id = ?2",
       on: connection,
       with: [sqlight.text(station_id), sqlight.text(team_member_id)],
       expecting: decode.at([0], decode.string),
@@ -875,8 +875,8 @@ pub fn raise_andon(
   let raised =
     sqlight.query(
       "insert into andon (station_id, raised_by)
-       values (?1, (select sp.person_id from station_person sp
-                     where sp.station_id = ?1 and sp.person_id = ?2))
+       values (?1, (select sp.team_member_id from station_team_member sp
+                     where sp.station_id = ?1 and sp.team_member_id = ?2))
        returning raised_by",
       on: connection,
       with: [
@@ -895,7 +895,7 @@ pub fn raise_andon(
     None,
     json.object([
       #("station", json.string(station.id)),
-      #("person", json.nullable(raised_by, json.string)),
+      #("teamMember", json.nullable(raised_by, json.string)),
     ]),
   )
 }
@@ -931,7 +931,7 @@ pub fn close_andon(
         None,
         json.object([
           #("station", json.string(station.id)),
-          #("person", json.string(team_member)),
+          #("teamMember", json.string(team_member)),
         ]),
       )
   }
@@ -975,9 +975,9 @@ fn author_of(
   }
   let found =
     sqlight.query(
-      "select pp.person_id, pe.name
+      "select pp.team_member_id, pe.name
          from piece_pass pp
-         join person pe on pe.id = pp.person_id
+         join team_member pe on pe.id = pp.team_member_id
         where pp.station_id = ?2
           and (pp.piece_id = ?1
                or pp.piece_id in (select s.id from piece s
@@ -1484,8 +1484,8 @@ fn take_in_hand(
       let taken =
         sqlight.query(
           "update piece
-              set assignee = (select sp.person_id from station_person sp
-                               where sp.station_id = ?2 and sp.person_id = ?3)
+              set assignee = (select sp.team_member_id from station_team_member sp
+                               where sp.station_id = ?2 and sp.team_member_id = ?3)
             where id = ?1
             returning assignee",
           on: connection,
@@ -1512,7 +1512,7 @@ fn record_pass(
 ) -> Result(Nil, FlowError) {
   write(
     connection,
-    "insert or replace into piece_pass (piece_id, station_id, person_id)
+    "insert or replace into piece_pass (piece_id, station_id, team_member_id)
      select ?1, ?2, assignee from piece where id = ?1",
     [sqlight.text(piece_id), sqlight.text(station_id)],
   )

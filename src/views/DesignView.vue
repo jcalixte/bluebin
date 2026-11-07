@@ -216,7 +216,7 @@ function confirmDiscard() {
               v-for="(station, stationIndex) in step.stations"
               :key="station.key"
               v-model="step.stations[stationIndex]"
-              :team-members="draft.people"
+              :team-members="draft.teamMembers"
               @remove="removeStation(index, stationIndex)"
             />
 
@@ -232,7 +232,7 @@ function confirmDiscard() {
 
       <div class="grid gap-6 xl:grid-cols-3">
         <DesignTeamMembersCard
-          v-model="draft.people"
+          v-model="draft.teamMembers"
           :add="addTeamMember"
           @remove="removeTeamMember"
         />

@@ -69,7 +69,7 @@ check "no Piece sits in two Blue Bins at once" assert_json \
   '[.stations[].blueBins[].piece | select(. != null)] | length == (unique | length)' \
   "$line"
 check "every Team Member busy at a Work Station holds a Piece there" assert_json \
-  '.stations | all(([.people[] | select(.busy)] | length) <= (.inProgress | length))' \
+  '.stations | all(([.teamMembers[] | select(.busy)] | length) <= (.inProgress | length))' \
   "$line"
 check "every Piece in a Blue Bin carries the id an action needs" assert_json \
   '.stations | all(.blueBins | all(.piece == null or (.id | length) > 0))' "$line"
@@ -98,7 +98,7 @@ check "no Work Station reports a negative Rework Time" assert_json \
 check "a paused Piece waits for a Rework its Team Member repairs first" assert_json \
   '.stations | all(.inProgress | all(.paused | type == "boolean"))' "$line"
 check "every Team Member carries the id an action needs" assert_json \
-  '.stations | all(.people | all((.id | length) > 0))' "$line"
+  '.stations | all(.teamMembers | all((.id | length) > 0))' "$line"
 check "every step of the chain carries a name" assert_json \
   '(.steps | length) > 0 and (.steps | all(.name != ""))' "$line"
 check "every Work Station sits on a named step" assert_json \
@@ -107,14 +107,14 @@ check "every Work Station sits on a named step" assert_json \
 check "every open Rework carries the id of who repairs it" assert_json \
   '.stations | all(.rework | all((.assignee == null) == (.assigneeId == null)))' "$line"
 check "every Piece in hand carries the id of who holds it" assert_json \
-  '.stations | all(.inProgress | all((.person == null) == (.personId == null)))' "$line"
+  '.stations | all(.inProgress | all((.teamMember == null) == (.teamMemberId == null)))' "$line"
 
-people=$(curl -fsS "$BASE/api/people")
-check "/api/people is a non-empty array, each Team Member of a Work Station" assert_json \
-  'type == "array" and length > 0 and all((.stations | length) > 0)' "$people"
+team_members=$(curl -fsS "$BASE/api/team-members")
+check "/api/team-members is a non-empty array, each Team Member of a Work Station" assert_json \
+  'type == "array" and length > 0 and all((.stations | length) > 0)' "$team_members"
 
-first=$(printf '%s' "$people" | jq -r '.[0].id')
-next=$(curl -fsS "$BASE/api/people/$first/next")
+first=$(printf '%s' "$team_members" | jq -r '.[0].id')
+next=$(curl -fsS "$BASE/api/team-members/$first/next")
 check "a Team Member's screen names one next thing" assert_json \
   '.next.kind | IN("continue", "take_rework", "take_kanban", "help_downstream", "wait")' \
   "$next"
@@ -124,7 +124,7 @@ check "every Priority List puts Rework before Kanbans" assert_json \
   '.priorityLists | all([.items[].kind] | . == sort_by(if . == "rework" then 0 else 1 end))' \
   "$next"
 check "an unknown Team Member has no screen" test \
-  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/people/pe-nobody/next")" = 404
+  "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/api/team-members/pe-nobody/next")" = 404
 
 measures=$(curl -fsS "$BASE/api/measures")
 check "measures name the period they cover" assert_json \
@@ -162,7 +162,7 @@ check "every bottleneck is slower than the Takt Time or has full Blue Bins in fr
   assert_json '.bottlenecks | all(.slower or .fullInFront)' "$line"
 check "closing an Andon nobody raised is refused" test \
   "$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
-     -d '{"station": "ws-nowhere", "person": "pe-nobody"}' "$BASE/api/andon/close")" = 404
+     -d '{"station": "ws-nowhere", "teamMember": "pe-nobody"}' "$BASE/api/andon/close")" = 404
 
 # The stream never ends, so curl stops it after 2 s and only its headers count.
 backlog=$(curl -fsS "$BASE/api/backlog")
@@ -181,7 +181,7 @@ design=$(curl -fsS "$BASE/api/design")
 check "the design lists the steps of the Value Stream" assert_json \
   '.steps | length > 0 and all(.stations | length > 0)' "$design"
 check "each Work Station of the design has its Team Leader among its Team Members" assert_json \
-  '[.steps[].stations[]] | all(.teamLeader as $t | .people | index($t) != null)' "$design"
+  '[.steps[].stations[]] | all(.teamLeader as $t | .teamMembers | index($t) != null)' "$design"
 check "saving the same design answers 200" test \
   "$(curl -s -o /dev/null -w '%{http_code}' -X PUT -H 'content-type: application/json' \
     -d "$design" "$BASE/api/design")" = 200

@@ -269,7 +269,7 @@ fn route(
       use <- wisp.require_method(request, http.Post)
       assign(request, database)
     }
-    ["api", "people"] ->
+    ["api", "team-members"] ->
       case request.method {
         http.Post -> add_team_member(request, database)
         _ -> {
@@ -289,7 +289,7 @@ fn route(
       use <- wisp.require_method(request, http.Get)
       labels(database)
     }
-    ["api", "people", team_member, "next"] -> {
+    ["api", "team-members", team_member, "next"] -> {
       use <- wisp.require_method(request, http.Get)
       next_thing(team_member, database)
     }
@@ -399,7 +399,7 @@ fn save_design(request: wisp.Request, database: String) -> wisp.Response {
   case decode.run(body, design.decoder()) {
     Error(_) ->
       wisp.bad_request(
-        "expected the body of GET /api/design: {\"labels\", \"people\", \"steps\"}",
+        "expected the body of GET /api/design: {\"labels\", \"teamMembers\", \"steps\"}",
       )
     Ok(wanted) ->
       case
@@ -587,7 +587,7 @@ fn raise_andon(request: wisp.Request, database: String) -> wisp.Response {
   let decoder = {
     use station <- decode.field("station", decode.string)
     use team_member <- decode.optional_field(
-      "person",
+      "teamMember",
       None,
       decode.optional(decode.string),
     )
@@ -610,14 +610,14 @@ fn close_andon(request: wisp.Request, database: String) -> wisp.Response {
   use body <- wisp.require_json(request)
   let decoder = {
     use station <- decode.field("station", decode.string)
-    use team_member <- decode.field("person", decode.string)
+    use team_member <- decode.field("teamMember", decode.string)
     decode.success(#(station, team_member))
   }
 
   case decode.run(body, decoder) {
     Error(_) ->
       wisp.bad_request(
-        "expected a body like {\"station\": \"ws-web\", \"person\": \"pe-bob\"}",
+        "expected a body like {\"station\": \"ws-web\", \"teamMember\": \"pe-bob\"}",
       )
     Ok(#(station, team_member)) ->
       andon_response(
@@ -678,7 +678,7 @@ fn pull(request: wisp.Request, database: String) -> wisp.Response {
   let decoder = {
     use station <- decode.field("station", decode.string)
     use team_member <- decode.optional_field(
-      "person",
+      "teamMember",
       None,
       decode.optional(decode.string),
     )
@@ -1024,7 +1024,7 @@ fn assign(request: wisp.Request, database: String) -> wisp.Response {
   let decoder = {
     use kind <- decode.field("kind", decode.string)
     use id <- decode.field("id", decode.string)
-    use team_member <- decode.field("person", decode.string)
+    use team_member <- decode.field("teamMember", decode.string)
     decode.success(#(kind, id, team_member))
   }
   let parsed = case decode.run(body, decoder) {
@@ -1038,7 +1038,7 @@ fn assign(request: wisp.Request, database: String) -> wisp.Response {
   case parsed {
     Error(Nil) ->
       wisp.bad_request(
-        "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"person\": \"pe-lila\"}",
+        "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"teamMember\": \"pe-lila\"}",
       )
     Ok(#(kind, id, team_member)) ->
       case
@@ -1050,7 +1050,7 @@ fn assign(request: wisp.Request, database: String) -> wisp.Response {
           json_body(
             [
               #("piece", json.string(reassigned.piece)),
-              #("person", json.string(reassigned.team_member)),
+              #("teamMember", json.string(reassigned.team_member)),
             ],
             200,
           )

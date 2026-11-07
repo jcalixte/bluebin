@@ -28,7 +28,7 @@ fn cache_control(response: wisp.Response) -> Result(String, Nil) {
 }
 
 pub fn client_route_gets_index_html_test() {
-  let response = get("/people/pe-bob")
+  let response = get("/team-members/pe-bob")
   assert response.status == 200
   assert simulate.read_body(response) == "<div id=\"app\"></div>"
   assert cache_control(response) == Ok("no-cache")

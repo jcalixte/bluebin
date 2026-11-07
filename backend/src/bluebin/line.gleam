@@ -146,8 +146,8 @@ fn station_json(
         #("id", json.string(piece.id)),
         #("piece", json.string(piece.piece)),
         #("demand", json.string(piece.demand)),
-        #("person", json.nullable(piece.team_member, json.string)),
-        #("personId", json.nullable(piece.team_member_id, json.string)),
+        #("teamMember", json.nullable(piece.team_member, json.string)),
+        #("teamMemberId", json.nullable(piece.team_member_id, json.string)),
         #("paused", json.bool(piece.paused)),
       ])
     })
@@ -207,7 +207,7 @@ fn station_json(
     #("teamLeader", json.nullable(station.team_leader, json.string)),
     #("blueBins", json.preprocessed_array(station_bins)),
     #("overflow", json.preprocessed_array(station_overflow)),
-    #("people", json.preprocessed_array(station_members)),
+    #("teamMembers", json.preprocessed_array(station_members)),
     #("inProgress", json.preprocessed_array(station_pieces)),
     #("rework", json.preprocessed_array(station_rework)),
     #("firstPassYield", json.nullable(first_pass_yield, json.float)),
@@ -277,7 +277,7 @@ fn query_stations(
   }
   sqlight.query(
     "select w.id, w.name, w.position, w.branch, w.blue_bins,
-            (select p.name from person p where p.id = w.team_leader)
+            (select p.name from team_member p where p.id = w.team_leader)
      from work_station w
      order by w.position, w.branch",
     on: connection,
@@ -325,8 +325,8 @@ fn query_members(
     "select sp.station_id, p.id, p.name,
             (select count(*) from piece pi
              where pi.assignee = p.id and pi.station_id = sp.station_id)
-     from station_person sp
-     join person p on p.id = sp.person_id
+     from station_team_member sp
+     join team_member p on p.id = sp.team_member_id
      order by sp.station_id, p.name",
     on: connection,
     with: [],
@@ -357,7 +357,7 @@ fn query_in_progress(
   }
   sqlight.query(
     "select p.station_id, p.id, p.reference, d.label,
-            (select pe.name from person pe where pe.id = p.assignee),
+            (select pe.name from team_member pe where pe.id = p.assignee),
             p.state = 'paused', p.assignee
      from piece p
      join demand d on d.id = p.demand_id
@@ -410,7 +410,7 @@ fn query_rework(
     "select r.station_id, r.id, p.reference, r.description,
             coalesce((select w.name from work_station w where w.id = r.raised_by),
                      'downstream'),
-            (select pe.name from person pe where pe.id = r.assignee),
+            (select pe.name from team_member pe where pe.id = r.assignee),
             r.assignee
      from rework r
      join piece p on p.id = r.piece_id

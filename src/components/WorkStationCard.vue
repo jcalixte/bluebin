@@ -41,7 +41,7 @@ function handOver(kind: "piece" | "rework", id: string, event: Event) {
 const keptFirst = computed(() => {
   const active = props.activePieces.get(teamMember.value)
   if (!active || active.position < props.station.position) return null
-  const name = props.station.people.find((one) => one.id === teamMember.value)?.name
+  const name = props.station.teamMembers.find((one) => one.id === teamMember.value)?.name
   return `${name} finishes ${active.piece} first: the new Piece starts paused`
 })
 
@@ -196,7 +196,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             title="The Team Member who takes the Piece in hand. Also names who raises an Andon."
           >
             <option value="">Nobody</option>
-            <option v-for="one in station.people" :key="one.id" :value="one.id">
+            <option v-for="one in station.teamMembers" :key="one.id" :value="one.id">
               {{ one.name }}
             </option>
           </select>
@@ -239,7 +239,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 @change="handOver('rework', item.id, $event)"
               >
                 <option value="" disabled>nobody repairs it</option>
-                <option v-for="one in station.people" :key="one.id" :value="one.id">
+                <option v-for="one in station.teamMembers" :key="one.id" :value="one.id">
                   {{ one.name }} repairs
                 </option>
               </select>
@@ -278,14 +278,14 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             </span>
             <select
               class="select select-ghost select-xs w-auto"
-              :value="item.personId ?? ''"
+              :value="item.teamMemberId ?? ''"
               :disabled="busy"
               aria-label="Who holds this Piece"
               title="Who holds this Piece: pick another Team Member to hand it over"
               @change="handOver('piece', item.id, $event)"
             >
               <option value="" disabled>unassigned</option>
-              <option v-for="one in station.people" :key="one.id" :value="one.id">
+              <option v-for="one in station.teamMembers" :key="one.id" :value="one.id">
                 {{ one.name }}
               </option>
             </select>
@@ -391,7 +391,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       <footer class="flex flex-col gap-2 border-t border-base-300 pt-3">
         <ul class="flex flex-wrap gap-1" aria-label="Team Members">
           <li
-            v-for="one in station.people"
+            v-for="one in station.teamMembers"
             :key="one.id"
             class="badge badge-sm badge-outline gap-1.5"
             :title="

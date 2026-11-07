@@ -48,8 +48,8 @@ export type InProgressPiece = {
   id: string
   piece: string
   demand: string
-  person: string | null
-  personId: string | null
+  teamMember: string | null
+  teamMemberId: string | null
   paused: boolean
 }
 
@@ -72,7 +72,7 @@ export type WorkStation = {
   teamLeader: string | null
   blueBins: BlueBin[]
   overflow: Overflow[]
-  people: Member[]
+  teamMembers: Member[]
   inProgress: InProgressPiece[]
   rework: Rework[]
   /** A fraction in 0..1; null until a Piece has left. */
@@ -191,12 +191,12 @@ export type PriorityItem =
 export type PriorityList = {
   station: string
   name: string
-  people: { id: string; name: string }[]
+  teamMembers: { id: string; name: string }[]
   items: PriorityItem[]
 }
 
 export type TeamMemberView = {
-  person: { id: string; name: string }
+  teamMember: { id: string; name: string }
   /** The Andons of the Team Member's Work Stations only. */
   andons: Andon[]
   next: NextThing
@@ -346,7 +346,7 @@ export type DesignStation = {
   branch: string | null
   blueBins: number
   teamLeader: string
-  people: string[]
+  teamMembers: string[]
   locked: boolean
   minBlueBins: number
 }
@@ -359,7 +359,7 @@ export type DesignStep = {
 
 export type Design = {
   labels: Labels
-  people: DesignTeamMember[]
+  teamMembers: DesignTeamMember[]
   steps: DesignStep[]
 }
 
@@ -370,11 +370,11 @@ export type DesignStationInput = {
   branch: string | null
   blueBins: number
   teamLeader: string
-  people: string[]
+  teamMembers: string[]
 }
 
 export type DesignInput = {
   labels: Labels
-  people: DesignTeamMember[]
+  teamMembers: DesignTeamMember[]
   steps: { name: string; stations: DesignStationInput[] }[]
 }

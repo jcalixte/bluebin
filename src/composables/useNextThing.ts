@@ -10,7 +10,7 @@ export function useNextThing(teamMemberId: Ref<string>) {
   const loading = ref(true)
 
   async function loadTeamMembers() {
-    const response = await fetch(api("/api/people"))
+    const response = await fetch(api("/api/team-members"))
     if (!response.ok) {
       throw new Error(`API answered ${response.status}`)
     }
@@ -29,7 +29,7 @@ export function useNextThing(teamMemberId: Ref<string>) {
         return
       }
       const response = await fetch(
-        api(`/api/people/${encodeURIComponent(teamMemberId.value)}/next`),
+        api(`/api/team-members/${encodeURIComponent(teamMemberId.value)}/next`),
       )
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
@@ -51,7 +51,7 @@ export function useNextThing(teamMemberId: Ref<string>) {
   }
 
   const pull = (station: string, reason?: string) =>
-    act("/api/pull", { station, person: teamMemberId.value, reason })
+    act("/api/pull", { station, teamMember: teamMemberId.value, reason })
 
   const finish = (station: string, piece: string, reason?: string) =>
     act("/api/finish", { station, piece, reason })
@@ -59,12 +59,13 @@ export function useNextThing(teamMemberId: Ref<string>) {
   const repair = (rework: string) => act("/api/rework/repair", { rework })
 
   const assign = (kind: "piece" | "rework", id: string, teamMember: string) =>
-    act("/api/assign", { kind, id, person: teamMember })
+    act("/api/assign", { kind, id, teamMember })
 
-  const raiseAndon = (station: string) => act("/api/andon", { station, person: teamMemberId.value })
+  const raiseAndon = (station: string) =>
+    act("/api/andon", { station, teamMember: teamMemberId.value })
 
   const closeAndon = (station: string) =>
-    act("/api/andon/close", { station, person: teamMemberId.value })
+    act("/api/andon/close", { station, teamMember: teamMemberId.value })
 
   watch(teamMemberId, load)
   onMounted(load)

@@ -413,20 +413,20 @@ pub fn a_team_member_with_no_work_in_hand_can_go_test() {
   assert current(connection) == saved
   assert count(
       connection,
-      "select count(*) from station_person where person_id = 'pe-karim'",
+      "select count(*) from station_team_member where team_member_id = 'pe-karim'",
     )
     == 0
   // The row stays, so the history keeps the name.
   assert count(
       connection,
-      "select count(*) from person
+      "select count(*) from team_member
         where id = 'pe-karim' and name = 'Karim' and removed_at is not null",
     )
     == 1
   assert count(
       connection,
       "select count(*) from flow_event where kind = 'line_changed'
-        and payload ->> 'change' = 'person_removed'",
+        and payload ->> 'change' = 'team_member_removed'",
     )
     == 1
 }
