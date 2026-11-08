@@ -479,7 +479,7 @@ const readings = [
                   class="text-3xl font-semibold leading-none tabular-nums text-primary"
                   >{{ index + 1 }}</span
                 >
-                <div class="grid gap-1.5">
+                <div class="grid content-start gap-1.5">
                   <h4 class="font-semibold leading-snug">{{ rule.title }}</h4>
                   <p class="text-pretty text-base-content/80">{{ rule.text }}</p>
                 </div>
@@ -503,7 +503,7 @@ const readings = [
               <li
                 v-for="stop in stops"
                 :key="stop.title"
-                class="grid gap-1.5 border-t-2 border-base-300 py-5"
+                class="grid content-start gap-1.5 border-t-2 border-base-300 py-5"
               >
                 <h4 class="flex items-center gap-2 font-semibold leading-snug">
                   <span class="size-2 shrink-0 rounded-full bg-andon" aria-hidden="true" />
