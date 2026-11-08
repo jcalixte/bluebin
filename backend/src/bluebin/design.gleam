@@ -770,6 +770,11 @@ fn remove_team_member(
     ),
   )
   use _ <- result.try(
+    run(connection, "delete from helper where team_member_id = ?1", [
+      sqlight.text(team_member.id),
+    ]),
+  )
+  use _ <- result.try(
     run(
       connection,
       "update team_member set removed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')

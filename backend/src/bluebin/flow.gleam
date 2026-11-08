@@ -33,6 +33,11 @@ pub type FlowError {
   NoAndon
   NotTeamLeader
   ReorderNeedsConfirmation(List(heijunka.Effect))
+  NobodyRepairs
+  NotOfReworkStations
+  RepairsItAlready
+  HelpsAnotherPiece
+  NotHelping
   StoreFailed
 }
 
@@ -125,7 +130,11 @@ pub fn pull(
   ))
   use _ <- result.try(case holder {
     None -> Ok([])
-    Some(holder) -> keep_nearest_active(connection, holder, pulled.0)
+    Some(holder) -> {
+      // Pulling is the Helper's choice of other work: the help ends.
+      use _ <- result.try(leave_help(connection, holder, "pulled"))
+      keep_nearest_active(connection, holder, pulled.0)
+    }
   })
 
   use _ <- result.try(record_event(
@@ -552,8 +561,208 @@ pub fn repair_rework(
     json.object([#("rework", json.string(rework_id))]),
   ))
 
+  use helpers <- result.try(rows(
+    connection,
+    "delete from helper where rework_id = ?1 returning team_member_id",
+    [sqlight.text(rework_id)],
+    decode.at([0], decode.string),
+  ))
+  use _ <- result.try(
+    list.try_each(helpers, fn(helper) {
+      use _ <- result.try(record_help_left(
+        connection,
+        helper,
+        piece_id,
+        rework_id,
+        "repaired",
+      ))
+      settle(connection, helper) |> result.replace(Nil)
+    }),
+  )
+
   use settled <- result.try(settle_option(connection, assignee))
   Ok(Repaired(piece: reference, resumed: settled.resumed))
+}
+
+pub type Helped {
+  Helped(piece: String, assignee: String, paused: List(String))
+}
+
+/// Help the Rework (F61): a Team Member of the Work Station that found the
+/// defect, or of the one that made it, joins the Piece while someone holds
+/// the Rework's Assignment. Their own Pieces pause (F62).
+pub fn help_the_rework(
+  connection: sqlight.Connection,
+  rework_id: String,
+  team_member_id: String,
+) -> Result(Helped, FlowError) {
+  use <- in_transaction(connection)
+  let decoder = {
+    use piece_id <- decode.field(0, decode.string)
+    use reference <- decode.field(1, decode.string)
+    use assignee <- decode.field(2, decode.optional(decode.string))
+    use assignee_name <- decode.field(3, decode.optional(decode.string))
+    use allowed <- decode.field(4, decode.int)
+    decode.success(#(piece_id, reference, assignee, assignee_name, allowed > 0))
+  }
+  use #(piece_id, reference, assignee, assignee_name, allowed) <- result.try(
+    one(
+      connection,
+      "select r.piece_id, p.reference, r.assignee, pe.name,
+            exists (select 1 from station_team_member sp
+                     where sp.team_member_id = ?2
+                       and sp.station_id in (r.station_id, r.raised_by))
+       from rework r
+       join piece p on p.id = r.piece_id
+       left join team_member pe on pe.id = r.assignee
+      where r.id = ?1 and r.closed_at is null",
+      [sqlight.text(rework_id), sqlight.text(team_member_id)],
+      decoder,
+      or: UnknownRework,
+    ),
+  )
+  use <- bool.guard(!allowed, Error(NotOfReworkStations))
+  use #(assignee, assignee_name) <- result.try(case assignee, assignee_name {
+    Some(assignee), Some(name) -> Ok(#(assignee, name))
+    _, _ -> Error(NobodyRepairs)
+  })
+  use <- bool.guard(assignee == team_member_id, Error(RepairsItAlready))
+  use repairing <- result.try(
+    exists(
+      connection,
+      "select count(*) from rework where assignee = ?1 and closed_at is null",
+      [sqlight.text(team_member_id)],
+    ),
+  )
+  use <- bool.guard(repairing, Error(ReworkFirst))
+  use helping <- result.try(helped_rework(connection, team_member_id))
+  case helping {
+    Some(#(helped, _)) if helped == rework_id ->
+      Ok(Helped(piece: reference, assignee: assignee_name, paused: []))
+    Some(_) -> Error(HelpsAnotherPiece)
+    None -> {
+      use _ <- result.try(
+        write(
+          connection,
+          "insert into helper (team_member_id, piece_id, rework_id)
+         values (?1, ?2, ?3)",
+          [
+            sqlight.text(team_member_id),
+            sqlight.text(piece_id),
+            sqlight.text(rework_id),
+          ],
+        ),
+      )
+      use _ <- result.try(record_event(
+        connection,
+        "helper_joined",
+        Some(piece_id),
+        json.object([
+          #("teamMember", json.string(team_member_id)),
+          #("rework", json.string(rework_id)),
+        ]),
+      ))
+      use settled <- result.try(settle(connection, team_member_id))
+      Ok(Helped(
+        piece: reference,
+        assignee: assignee_name,
+        paused: settled.paused,
+      ))
+    }
+  }
+}
+
+pub type StoppedHelping {
+  StoppedHelping(piece: String, resumed: Option(String))
+}
+
+/// The Helper stops before the Rework closes (F63); their next Piece resumes.
+pub fn stop_helping(
+  connection: sqlight.Connection,
+  team_member_id: String,
+) -> Result(StoppedHelping, FlowError) {
+  use <- in_transaction(connection)
+  use left <- result.try(leave_help(connection, team_member_id, "stopped"))
+  case left {
+    None -> Error(NotHelping)
+    Some(reference) -> {
+      use settled <- result.try(settle(connection, team_member_id))
+      Ok(StoppedHelping(piece: reference, resumed: settled.resumed))
+    }
+  }
+}
+
+/// The Rework that `team_member_id` helps and its Piece, if any.
+fn helped_rework(
+  connection: sqlight.Connection,
+  team_member_id: String,
+) -> Result(Option(#(String, String)), FlowError) {
+  let decoder = {
+    use rework_id <- decode.field(0, decode.string)
+    use piece_id <- decode.field(1, decode.string)
+    decode.success(#(rework_id, piece_id))
+  }
+  maybe_one(
+    connection,
+    "select rework_id, piece_id from helper where team_member_id = ?1",
+    [sqlight.text(team_member_id)],
+    decoder,
+  )
+}
+
+/// Ends the help of `team_member_id`, if any, and answers the reference of
+/// the Piece they helped. The caller settles their Pieces.
+fn leave_help(
+  connection: sqlight.Connection,
+  team_member_id: String,
+  cause: String,
+) -> Result(Option(String), FlowError) {
+  let decoder = {
+    use piece_id <- decode.field(0, decode.string)
+    use rework_id <- decode.field(1, decode.string)
+    use reference <- decode.field(2, decode.string)
+    decode.success(#(piece_id, rework_id, reference))
+  }
+  use left <- result.try(maybe_one(
+    connection,
+    "delete from helper where team_member_id = ?1
+     returning piece_id, rework_id,
+               (select reference from piece where id = helper.piece_id)",
+    [sqlight.text(team_member_id)],
+    decoder,
+  ))
+  case left {
+    None -> Ok(None)
+    Some(#(piece_id, rework_id, reference)) -> {
+      use _ <- result.try(record_help_left(
+        connection,
+        team_member_id,
+        piece_id,
+        rework_id,
+        cause,
+      ))
+      Ok(Some(reference))
+    }
+  }
+}
+
+fn record_help_left(
+  connection: sqlight.Connection,
+  team_member_id: String,
+  piece_id: String,
+  rework_id: String,
+  cause: String,
+) -> Result(Nil, FlowError) {
+  record_event(
+    connection,
+    "helper_left",
+    Some(piece_id),
+    json.object([
+      #("teamMember", json.string(team_member_id)),
+      #("rework", json.string(rework_id)),
+      #("cause", json.string(cause)),
+    ]),
+  )
 }
 
 fn load_open_rework(
@@ -667,8 +876,11 @@ fn settle(
       [sqlight.text(team_member_id)],
     ),
   )
-  case open {
-    True -> {
+  use helping <- result.try(helped_rework(connection, team_member_id))
+  case open, helping {
+    True, _ -> {
+      // Rework first: their own repair ends any help.
+      use _ <- result.try(leave_help(connection, team_member_id, "rework"))
       use _ <- result.try(start_next_rework(connection, team_member_id))
       use paused <- result.try(pause_pieces(
         connection,
@@ -678,7 +890,18 @@ fn settle(
       ))
       Ok(Settled(paused:, resumed: None))
     }
-    False -> {
+    False, Some(#(_, helped_piece)) -> {
+      // The helped Piece can be in their own hands, as at the Work Station
+      // that found the defect: it stays active.
+      use paused <- result.try(pause_pieces(
+        connection,
+        team_member_id,
+        Some(helped_piece),
+        "helping",
+      ))
+      Ok(Settled(paused:, resumed: None))
+    }
+    False, None -> {
       use resumed <- result.try(resume_next_piece(connection, team_member_id))
       Ok(Settled(paused: [], resumed:))
     }

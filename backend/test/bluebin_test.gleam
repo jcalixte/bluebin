@@ -1385,7 +1385,7 @@ pub fn the_next_thing_shows_only_the_andons_of_my_work_stations_test() {
   let assert [andon.Stop(station_id: "ws-web", ..)] = mine
 }
 
-/// A database made before the schema was squashed is refused, never read.
+/// A database of a version with no migration step is refused, never read.
 pub fn a_database_of_another_schema_version_is_refused_test() {
   use connection <- db.with_connection_at(":memory:")
   exec(connection, "create table person (id text); pragma user_version = 15;")
@@ -1399,8 +1399,153 @@ pub fn a_database_of_another_schema_version_is_refused_test() {
 
 pub fn a_new_database_gets_the_schema_once_test() {
   use connection <- with_seeded_database()
-  assert count(connection, "pragma user_version") == 2
+  assert count(connection, "pragma user_version") == 3
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from line_label") == 1
   assert count(connection, "select count(*) from working_calendar") == 1
+}
+
+fn helpers(connection: sqlight.Connection) -> Int {
+  count(connection, "select count(*) from helper")
+}
+
+fn help_left(connection: sqlight.Connection, cause: String) -> Int {
+  count(connection, "select count(*) from flow_event
+      where kind = 'helper_left'
+        and json_extract(payload, '$.cause') = '" <> cause <> "'")
+}
+
+pub fn helpers_join_a_rework_and_its_repair_ends_their_help_test() {
+  use connection <- with_seeded_database()
+  // Karim holds US-9 at iOS; Alice repairs rw-1 on US-4, held by QA iOS.
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+
+  // Yasmine, of the Work Station that found the defect, helps: US-4 is in
+  // her own hands, and stays active.
+  let assert Ok(helped) = flow.help_the_rework(connection, "rw-1", "pe-yasmine")
+  assert helped.piece == "US-4 · iOS"
+  assert helped.assignee == "Alice"
+  assert helped.paused == []
+  assert state_of(connection, "p-offline-4-ios") == "in_flow"
+
+  // Karim, of the Work Station that made it, helps: his US-9 pauses (F62).
+  let assert Ok(helped) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  assert helped.paused == ["US-9 · iOS"]
+  assert state_of(connection, "p-checkout-9-ios") == "paused"
+  assert count(
+      connection,
+      "select count(*) from flow_event
+       where kind = 'piece_paused' and piece_id = 'p-checkout-9-ios'
+         and json_extract(payload, '$.cause') = 'helping'",
+    )
+    == 1
+  assert helpers(connection) == 2
+  // Joining the same Rework again changes nothing.
+  let assert Ok(again) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  assert again.paused == []
+  assert count(
+      connection,
+      "select count(*) from flow_event
+                            where kind = 'helper_joined'",
+    )
+    == 2
+
+  // The repair ends every help and resumes the Helpers' Pieces (F63).
+  let assert Ok(_) = flow.repair_rework(connection, "rw-1")
+  assert helpers(connection) == 0
+  assert help_left(connection, "repaired") == 2
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+}
+
+pub fn a_helper_stops_and_their_piece_resumes_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  assert state_of(connection, "p-checkout-9-ios") == "paused"
+
+  let assert Ok(stopped) = flow.stop_helping(connection, "pe-karim")
+  assert stopped.piece == "US-4 · iOS"
+  assert stopped.resumed == Some("US-9 · iOS")
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+  assert help_left(connection, "stopped") == 1
+  assert flow.stop_helping(connection, "pe-karim") == Error(flow.NotHelping)
+}
+
+pub fn only_the_two_work_stations_help_while_someone_repairs_test() {
+  use connection <- with_seeded_database()
+  // Lila is of Web, a third Work Station.
+  assert flow.help_the_rework(connection, "rw-1", "pe-lila")
+    == Error(flow.NotOfReworkStations)
+  assert flow.help_the_rework(connection, "rw-1", "pe-alice")
+    == Error(flow.RepairsItAlready)
+  assert flow.help_the_rework(connection, "rw-unknown", "pe-karim")
+    == Error(flow.UnknownRework)
+
+  exec(connection, "update rework set assignee = null where id = 'rw-1'")
+  assert flow.help_the_rework(connection, "rw-1", "pe-yasmine")
+    == Error(flow.NobodyRepairs)
+  assert helpers(connection) == 0
+}
+
+pub fn a_helper_helps_one_piece_and_their_own_rework_comes_first_test() {
+  use connection <- with_seeded_database()
+  // A second open Rework on another Piece, found by QA iOS.
+  exec(
+    connection,
+    "insert into rework (id, piece_id, station_id, description, raised_by,
+                         assignee, started_at)
+     values ('rw-2', 'p-checkout-8-web', 'ws-ios', 'Broken', 'ws-qa-ios',
+             'pe-alice', strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))",
+  )
+  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  assert flow.help_the_rework(connection, "rw-2", "pe-karim")
+    == Error(flow.HelpsAnotherPiece)
+
+  // Karim takes rw-2: his own repair ends his help.
+  let assert Ok(_) =
+    flow.reassign(connection, flow.ReworkAssignment, "rw-2", "pe-karim")
+  assert helpers(connection) == 0
+  assert help_left(connection, "rework") == 1
+  assert flow.help_the_rework(connection, "rw-1", "pe-karim")
+    == Error(flow.ReworkFirst)
+}
+
+pub fn a_pull_by_a_helper_ends_the_help_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
+  assert helpers(connection) == 0
+  assert help_left(connection, "pulled") == 1
+  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
+}
+
+pub fn a_version_2_database_migrates_to_version_3_test() {
+  use connection <- with_seeded_database()
+  let pieces = count(connection, "select count(*) from piece")
+  let events = count(connection, "select count(*) from flow_event")
+  let assert Ok([helper_sql]) =
+    sqlight.query(
+      "select sql from sqlite_master where name = 'helper'",
+      on: connection,
+      with: [],
+      expecting: decode.at([0], decode.string),
+    )
+  exec(connection, "drop table helper; pragma user_version = 2;")
+
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
+  assert count(connection, "pragma user_version") == 3
+  assert count(connection, "select count(*) from piece") == pieces
+  assert count(connection, "select count(*) from flow_event") == events
+  assert count(connection, "select count(*) from sqlite_master
+        where name = 'helper' and sql = '" <> string.replace(
+      helper_sql,
+      "'",
+      "''",
+    ) <> "'") == 1
+  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+
+  // A version with no step is refused, not read.
+  exec(connection, "pragma user_version = 1;")
+  let assert Error(_) = db.prepare(connection, db.Demo)
 }

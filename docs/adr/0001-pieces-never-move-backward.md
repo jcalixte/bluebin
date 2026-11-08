@@ -7,5 +7,5 @@ When a Work Station finds a defect, the Piece stays where it is. The Work Statio
 ## Consequences
 
 - Rework is not a Kanban. It enters the Priority List of the Work Station that made the defect, first, and goes by default to the Team Member who made the Piece; the team can reassign it.
-- While Rework is open, the Work Station that found it does not pull a new Piece, except as a Deviation.
+- While Rework is open, the Work Station that found it does not pull a new Piece, except as a Deviation. Its Team Members Help the Rework instead: they join the Piece as Helpers while the Team Member of the Work Station that made the defect repairs it.
 - The repair time is Touch Time of the Piece, so Lead Time = Touch Time + Stagnation Time stays exact.

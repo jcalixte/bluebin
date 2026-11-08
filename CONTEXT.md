@@ -283,6 +283,7 @@ _Avoid_: hidden Line, secret Line
 - A **Team Member** has at most one active **Assignment**; the others are paused
 - A **Piece** has one **Assignment** and zero or more **Helpers**; a **Helper** adds people, not time, so **Touch Time** and **Rework Time** stay the time of the **Piece**
 - A **Team Member** is the **Helper** of at most one **Piece** at a time; becoming a **Helper** pauses their active **Assignment**, and the paused time is **Stagnation Time**
+- A **Team Member** becomes a **Helper** only of a **Piece** whose **Assignment** someone holds; a **Rework** with no **Assignment** waits for one, and after one hour raises an **Andon**
 - A **Helper** stops when they choose, and at the latest when the cause ends: **Help the Rework** ends when the **Rework** closes, **Help Downstream** when the **Piece** goes into a **Blue Bin**; then their paused **Assignment** nearest to **Deployment** becomes active again
 - **Rework** pauses the **Piece** that the **Team Member** is transforming upstream
 - A **Piece** never moves backward: the **Work Station** that finds a defect raises **Rework** and names the **Work Station** that made it; a **Team Member** of that **Work Station** comes to repair the **Piece** where it is
@@ -292,6 +293,7 @@ _Avoid_: hidden Line, secret Line
 - Each **Rework** lowers the **First Pass Yield** of the **Work Station** that made the defect
 - Inside one **Work Station**, the **Piece** to pull is the first one in the upstream **Blue Bin**, which keeps the **Heijunka Sequence**
 - A **Deviation** always has a reason given by the **Team Member**, and is visible to everyone at once
+- **Help Downstream** never goes to a **Work Station** stopped by its open **Rework**: only the **Team Members** of the two **Work Stations** concerned **Help the Rework**
 - A **Team Member** with no **Kanban** does **Help Downstream** when possible, and waits otherwise; a **Team Member** starts work without a **Kanban** only as a **Deviation**
 
 ## Example dialogue
@@ -307,6 +309,9 @@ _Avoid_: hidden Line, secret Line
 
 > **Dev:** "QA iOS found a defect in US-3. Do I move it back to iOS?"
 > **Domain expert:** "No, a **Piece** never moves backward. QA iOS raises **Rework** against iOS. The **Rework** goes to the top of the iOS **Priority List**, Alice gets the **Assignment**, pauses her current **Piece**, and repairs US-3 where it is. The repair counts as **Rework Time** for iOS."
+
+> **Dev:** "QA iOS has a free **Blue Bin** and a **Kanban**, but Alice still repairs US-4. Can Yasmine pull US-8?"
+> **Domain expert:** "Only as a **Deviation**. The free **Blue Bin** does not change it: QA iOS found the defect, so it stops until the **Rework** closes. Yasmine can **Help the Rework**: she joins US-4 as a **Helper**, reproduces the defect and checks the repair with Alice. Alice keeps the **Assignment**. When the **Rework** closes, Yasmine's help ends by itself."
 
 > **Dev:** "Karim signs in. Can he pull a **Piece** in Mobile app?"
 > **Domain expert:** "Only if the owner typed his email on a **Team Member** of Mobile app. If Mobile app is a **Shared Line** and he is not a **Team Member** there, his **Account** only looks."

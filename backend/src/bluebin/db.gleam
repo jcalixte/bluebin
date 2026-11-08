@@ -12,9 +12,10 @@ import sqlight
 /// volume, or the data is lost on redeploy.
 pub const workspaces_directory = "data/workspaces"
 
-/// The schema of a new database. Raise `schema_version` when it changes: a
-/// database of another version is refused, never migrated.
-const schema_version = 2
+/// The schema of a new database. Raise `schema_version` when it changes, and
+/// add a step to `migrations` when the change only adds; a database whose
+/// version has no step is refused (ADR-0006).
+const schema_version = 3
 
 /// Parents before children. `foreign_keys` holds only on the connection that
 /// runs this schema and the seed, and only outside a transaction: `ready`
@@ -157,7 +158,32 @@ create table line_label (
 );
 insert into line_label (id, demand, demands, piece, pieces)
 values (1, 'Feature', 'Features', 'User Story', 'User Stories');
+
+-- A Team Member who joins a Piece by Help the Rework, without its Assignment.
+-- One helped Piece at a time; the row goes when the help ends.
+create table helper (
+  team_member_id text primary key references team_member(id),
+  piece_id       text not null references piece(id),
+  rework_id      text not null references rework(id),
+  since          text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
 "
+
+/// Each step takes a database from the version of its key to the next one.
+/// A step only adds, and has its own SQL: the schema above moves on.
+const migrations = [
+  #(
+    2,
+    "
+create table helper (
+  team_member_id text primary key references team_member(id),
+  piece_id       text not null references piece(id),
+  rework_id      text not null references rework(id),
+  since          text not null default (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+",
+  ),
+]
 
 /// The Pieces already past a Work Station get a pass, after the seed.
 const seed_passes_sql =
@@ -469,8 +495,8 @@ pub fn with_connection_at(
   run(connection)
 }
 
-/// Makes the schema and the `start` data on a new database, and does nothing
-/// on a current one. A database of another schema version is refused, not read.
+/// Makes the schema and the `start` data on a new database, migrates an older
+/// one (ADR-0006), and does nothing on a current one.
 pub fn prepare(
   connection: sqlight.Connection,
   start: Start,
@@ -490,8 +516,26 @@ pub fn prepare(
         Empty -> sqlight.exec(start_empty_sql, connection)
       }
     }
-    _ if version == schema_version -> Ok(Nil)
-    _ ->
+    _ -> migrate(connection, version)
+  }
+}
+
+/// Runs the steps from `version` up to `schema_version`, in the caller's
+/// transaction. A version with no step is refused, not read.
+fn migrate(
+  connection: sqlight.Connection,
+  version: Int,
+) -> Result(Nil, sqlight.Error) {
+  case version == schema_version, list.key_find(migrations, version) {
+    True, _ -> Ok(Nil)
+    False, Ok(step) -> {
+      use _ <- result.try(sqlight.exec(
+        step <> "\npragma user_version = " <> int.to_string(version + 1) <> ";",
+        connection,
+      ))
+      migrate(connection, version + 1)
+    }
+    False, Error(Nil) ->
       Error(sqlight.SqlightError(
         code: sqlight.GenericError,
         message: "schema version "
@@ -591,6 +635,7 @@ pub fn now(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
 /// Children before parents, so it also runs where `foreign_keys` is on.
 const empty_sql =
   "
+delete from helper;
 delete from andon;
 delete from deviation;
 delete from rework;

@@ -782,6 +782,8 @@ fn route(
     _, ["api", "release"] -> release(request, database)
     _, ["api", "rework"] -> raise_rework(request, database)
     _, ["api", "rework", "repair"] -> repair_rework(request, database)
+    _, ["api", "help"] -> help_the_rework(request, database, act_as)
+    _, ["api", "help", "stop"] -> stop_helping(request, database, act_as)
     _, ["api", "andons"] -> andons(database)
     _, ["api", "andon"] -> raise_andon(request, database, act_as)
     _, ["api", "andon", "close"] -> close_andon(request, database, act_as)
@@ -1425,6 +1427,25 @@ fn flow_failure(failure: flow.FlowError) -> wisp.Response {
         "not_team_leader",
         "Only the Team Leader of the Work Station closes its Andon.",
       )
+    flow.NobodyRepairs ->
+      conflict(
+        "nobody_repairs",
+        "Nobody repairs this Rework yet. Help it once a Team Member of the Work Station that made the defect takes it.",
+      )
+    flow.NotOfReworkStations ->
+      conflict(
+        "not_of_rework_stations",
+        "Only the Team Members of the Work Station that found the defect, or of the one that made it, help this Rework.",
+      )
+    flow.RepairsItAlready ->
+      conflict("repairs_it_already", "This Team Member repairs this Rework.")
+    flow.HelpsAnotherPiece ->
+      conflict(
+        "helps_another_piece",
+        "This Team Member already helps another Piece. Stop helping it first.",
+      )
+    flow.NotHelping ->
+      conflict("not_helping", "This Team Member helps no Piece.")
     flow.EmptyDescription ->
       wisp.bad_request("a Rework says in one line what the defect is")
     flow.UnknownStation -> wisp.not_found()
@@ -1490,6 +1511,86 @@ fn repair_rework(request: wisp.Request, database: String) -> wisp.Response {
       ])
       |> send_json(200)
     Error(failure) -> flow_failure(failure)
+  }
+}
+
+fn help_the_rework(
+  request: wisp.Request,
+  database: String,
+  act_as: ActAs,
+) -> wisp.Response {
+  let decoder = {
+    use rework <- decode.field("rework", decode.string)
+    use team_member <- decode.optional_field(
+      "teamMember",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(#(rework, team_member))
+  }
+  use #(rework, team_member) <- require_body(
+    request,
+    decoder,
+    or: "expected a body like {\"rework\": \"rw-1\", \"teamMember\": \"pe-yasmine\"}",
+  )
+  use team_member <- acting(act_as, team_member)
+  case
+    db.with_connection_at(database, fn(connection) {
+      flow.help_the_rework(connection, rework, team_member)
+    })
+  {
+    Ok(helped) ->
+      json.object([
+        #("piece", json.string(helped.piece)),
+        #("assignee", json.string(helped.assignee)),
+        #("paused", json.array(helped.paused, json.string)),
+      ])
+      |> send_json(200)
+    Error(failure) -> flow_failure(failure)
+  }
+}
+
+fn stop_helping(
+  request: wisp.Request,
+  database: String,
+  act_as: ActAs,
+) -> wisp.Response {
+  use team_member <- require_body(
+    request,
+    decode.optional_field(
+      "teamMember",
+      None,
+      decode.optional(decode.string),
+      decode.success,
+    ),
+    or: "expected a body like {\"teamMember\": \"pe-yasmine\"}",
+  )
+  use team_member <- acting(act_as, team_member)
+  case
+    db.with_connection_at(database, fn(connection) {
+      flow.stop_helping(connection, team_member)
+    })
+  {
+    Ok(stopped) ->
+      json.object([
+        #("piece", json.string(stopped.piece)),
+        #("resumed", json.nullable(stopped.resumed, json.string)),
+      ])
+      |> send_json(200)
+    Error(failure) -> flow_failure(failure)
+  }
+}
+
+/// The Team Member an action acts as (F50); the owner must name one.
+fn acting(
+  act_as: ActAs,
+  wanted: Option(String),
+  run: fn(String) -> wisp.Response,
+) -> wisp.Response {
+  case act_as(wanted) {
+    Ok(Some(team_member)) -> run(team_member)
+    Ok(None) -> wisp.bad_request("name the Team Member who helps")
+    Error(Nil) -> not_yours()
   }
 }
 

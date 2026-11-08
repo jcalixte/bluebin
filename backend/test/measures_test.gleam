@@ -398,3 +398,27 @@ pub fn a_wrong_holiday_leaves_the_calendar_as_it_was_test() {
   let assert Error(calendar.Invalid(_)) =
     calendar.save(connection, Calendar(..office(), days: []))
 }
+
+pub fn a_pause_for_helping_counts_in_the_suggestion_like_rework_test() {
+  // A Helper's Piece waits because of a defect, not because of WIP (R14).
+  let assert [pass, _] =
+    measures.replay(
+      [
+        event(0, "piece_pulled", "p", "a", None),
+        Event(
+          at: 1 * hour,
+          kind: "piece_paused",
+          piece: Some("p"),
+          station: None,
+          from: None,
+          cause: Some("helping"),
+        ),
+        event(3 * hour, "piece_resumed", "p", "", None),
+        event(4 * hour, "piece_put_in_blue_bin", "p", "a", None),
+        event(20 * hour, "piece_pulled", "p", "b", Some("a")),
+      ],
+      dict.new(),
+      30 * hour,
+    )
+  assert pass.held == []
+}

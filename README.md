@@ -171,5 +171,7 @@ Work Station and one Team Member to rename in Design.
 - [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md) — flow event log and current state, written in one transaction
 - [ADR-0003](./docs/adr/0003-link-team-members-to-accounts-by-email.md) — Team Members link to Accounts by email, only when SSO is on
 - [ADR-0004](./docs/adr/0004-account-links-live-in-one-shared-accounts-db.md) — Accounts and their links live in one shared accounts.db, outside the Line files
+- [ADR-0005](./docs/adr/0005-heijunka-slots-from-the-remaining-rate.md) — Heijunka slots come from the remaining rate of each Demand
+- [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md) — additive schema changes migrate, other changes are refused
 
 <!-- docs:end -->

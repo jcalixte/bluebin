@@ -21,8 +21,8 @@ pub type Event {
     piece: Option(String),
     station: Option(String),
     from: Option(String),
-    /// Why a Piece paused: `rework` or `held` (DESIGN.md R11). None before the
-    /// cause was recorded, which reads as `held`.
+    /// Why a Piece paused: `rework`, `helping` or `held` (DESIGN.md R11,
+    /// R14). None before the cause was recorded, which reads as `held`.
     cause: Option(String),
   )
 }
@@ -138,7 +138,7 @@ fn step(
       update(state, unit, fn(open) {
         let open = stop_touching(open, at)
         case event.cause, open.held_since {
-          Some("rework"), _ | _, Some(_) -> open
+          Some("rework"), _ | Some("helping"), _ | _, Some(_) -> open
           _, None -> Open(..open, held_since: Some(at))
         }
       })
