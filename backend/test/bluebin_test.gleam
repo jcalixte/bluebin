@@ -1633,7 +1633,7 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
   )
   assert string.contains(
     text,
-    "\"piece\":\"US-4 · iOS\",\"demand\":\"Offline mode\",\"teamMember\":\"Yasmine\",\"teamMemberId\":\"pe-yasmine\",\"paused\":false,\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}]",
+    "\"piece\":\"US-4 · iOS\",\"demand\":\"Offline mode\",\"teamMember\":\"Yasmine\",\"teamMemberId\":\"pe-yasmine\",\"paused\":false,\"underRework\":true,\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}]",
   )
 }
 

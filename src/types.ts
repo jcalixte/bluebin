@@ -51,6 +51,8 @@ export type InProgressPiece = {
   teamMember: string | null
   teamMemberId: string | null
   paused: boolean
+  /** An open Rework repairs it: finishing it accepts the repair. */
+  underRework: boolean
   /** The Team Members who Help the Rework on this Piece. */
   helpers: TeamMemberName[]
 }

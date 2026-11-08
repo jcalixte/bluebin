@@ -422,13 +422,23 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               >
                 Rework
               </button>
-              <button
-                class="btn btn-xs"
-                :disabled="busy || item.paused"
-                @click="$emit('finish', item.id)"
-              >
-                Finish
-              </button>
+              <span class="tooltip tooltip-warning tooltip-left">
+                <span
+                  v-if="item.underRework"
+                  :id="`finish-rework-${item.id}`"
+                  class="tooltip-content text-xs"
+                >
+                  Finishing accepts the repair: its Rework closes
+                </span>
+                <button
+                  class="btn btn-xs"
+                  :disabled="busy || item.paused"
+                  :aria-describedby="item.underRework ? `finish-rework-${item.id}` : undefined"
+                  @click="$emit('finish', item.id)"
+                >
+                  Finish
+                </button>
+              </span>
             </span>
           </li>
         </ul>

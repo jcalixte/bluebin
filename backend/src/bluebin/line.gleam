@@ -44,6 +44,7 @@ pub type InProgress {
     team_member: Option(String),
     team_member_id: Option(String),
     paused: Bool,
+    under_rework: Bool,
   )
 }
 
@@ -232,6 +233,7 @@ fn in_progress_json(piece: InProgress, helpers: List(Helper)) -> Json {
     #("teamMember", json.nullable(piece.team_member, json.string)),
     #("teamMemberId", json.nullable(piece.team_member_id, json.string)),
     #("paused", json.bool(piece.paused)),
+    #("underRework", json.bool(piece.under_rework)),
     #("helpers", json.array(helpers, helper_json)),
   ])
 }
@@ -398,6 +400,7 @@ fn query_in_progress(
     use team_member <- decode.field(4, decode.optional(decode.string))
     use paused <- decode.field(5, decode.int)
     use team_member_id <- decode.field(6, decode.optional(decode.string))
+    use under_rework <- decode.field(7, decode.int)
     decode.success(InProgress(
       station_id:,
       id:,
@@ -406,12 +409,15 @@ fn query_in_progress(
       team_member:,
       team_member_id:,
       paused: paused > 0,
+      under_rework: under_rework > 0,
     ))
   }
   sqlight.query(
     "select p.station_id, p.id, p.reference, d.label,
             (select pe.name from team_member pe where pe.id = p.assignee),
-            p.state = 'paused', p.assignee
+            p.state = 'paused', p.assignee,
+            exists (select 1 from rework r
+                     where r.piece_id = p.id and r.closed_at is null)
      from piece p
      join demand d on d.id = p.demand_id
      where p.station_id is not null and p.state in ('in_flow', 'paused')
