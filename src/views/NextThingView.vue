@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { lineId, workspaceOwner } from "../api"
-import { simulation } from "../simulation/state"
 import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
@@ -17,17 +16,18 @@ const teamMemberId = ref(
 )
 
 /**
- * A Team Member with an Account sees their own work first; in the Simulation, the Team Member
- * played, each time the visitor plays another one.
+ * A Member sees only their own work, so they pick no name; the owner sees their own work first,
+ * then any Team Member's. In the Simulation, "Play as" makes the visitor that Member.
  */
-const { current, canActAs } = useWorkspaces()
+const { current, role, canActAs } = useWorkspaces()
+const pinned = computed(() => role.value === "member" && !!current.value?.teamMember)
 
 /** Who looks may not act as the Team Member picked: then no action shows. */
 const acting = computed(() => canActAs(teamMemberId.value))
 watch(
   () => current.value?.teamMember,
   (own) => {
-    if (own && (simulation || teamMemberId.value === "")) teamMemberId.value = own
+    if (own && (pinned.value || teamMemberId.value === "")) teamMemberId.value = own
   },
   { immediate: true },
 )
@@ -206,7 +206,7 @@ function since(at: string) {
         <h2 class="text-xl font-semibold">My next thing</h2>
         <p class="text-sm opacity-70">One thing to do now, chosen by the pull rules.</p>
       </div>
-      <label class="flex items-center gap-3">
+      <label v-if="!pinned" class="flex items-center gap-3">
         <span class="text-xs font-semibold uppercase tracking-wide opacity-70">I am</span>
         <select v-model="teamMemberId" class="select select-bordered h-11 w-auto min-w-56">
           <option value="" disabled>Pick your name</option>
