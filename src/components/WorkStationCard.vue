@@ -200,10 +200,11 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       <p v-if="!actsHere" class="text-sm opacity-70">
         {{ station.kanbans }} Kanban {{ station.kanbans === 1 ? "authorizes" : "authorize" }} a pull
       </p>
-      <section v-else aria-label="Pull">
+      <section v-else aria-label="Pull" class="group">
         <button
           class="btn btn-sm btn-primary w-full justify-between"
           :disabled="busy"
+          :aria-describedby="keptFirst ? `kept-first-${station.id}` : undefined"
           @click="$emit('pull', teamMember === '' ? undefined : teamMember)"
         >
           {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
@@ -236,7 +237,13 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             </option>
           </select>
         </label>
-        <p v-if="keptFirst" class="mt-1.5 text-xs text-warning-ink">{{ keptFirst }}</p>
+        <p
+          v-if="keptFirst"
+          :id="`kept-first-${station.id}`"
+          class="mt-1.5 hidden text-xs text-warning-ink group-has-[button:hover]:block group-has-[button:focus-visible]:block"
+        >
+          {{ keptFirst }}
+        </p>
       </section>
 
       <section v-if="hasRework" aria-label="Rework">
