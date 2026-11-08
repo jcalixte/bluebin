@@ -71,7 +71,8 @@ settleLineUrl()
 const opened = ref<View>(viewAt(viewPath()))
 /** A link to a hidden tab, as Measures in a Shared Line, opens the first tab. */
 const current = computed<View>({
-  get: () => (shownViews.value.includes(opened.value) ? opened.value : views[0]),
+  get: () =>
+    shownViews.value.some((view) => view.id === opened.value.id) ? opened.value : views[0],
   set: (view) => (opened.value = view),
 })
 
