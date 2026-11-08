@@ -310,6 +310,23 @@ pub fn only_akadmin_resets_a_line_test() {
   assert by_admin == 204
 }
 
+pub fn akadmin_resets_only_the_first_line_test() {
+  let #(context, owner, ada, path) = setup(True)
+  let assert Ok(other) = lines.create(owner.0, "Mobile")
+
+  let #(reset, _) =
+    call_as_admin(
+      context,
+      http.Post,
+      "/api/lines/" <> other.id <> "/reset",
+      owner,
+    )
+  clean(owner, ada, path)
+  remove(db.workspaces_directory <> "/" <> owner.0)
+
+  assert reset == 403
+}
+
 pub fn a_new_account_starts_with_an_empty_line_test() {
   let #(context, owner, ada, path) = setup(True)
 

@@ -1,6 +1,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue"
-import { api, lineId, lookOnly, pageUrl, settleLineUrl, viewPath, workspaceOwner } from "./api"
+import {
+  api,
+  firstLine,
+  lineId,
+  lookOnly,
+  pageUrl,
+  settleLineUrl,
+  viewPath,
+  workspaceOwner,
+} from "./api"
 import AppModal from "./components/AppModal.vue"
 import BrandMark from "./components/BrandMark.vue"
 import ErrorToast from "./components/ErrorToast.vue"
@@ -46,8 +55,10 @@ const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
 )
 
-/** `akadmin`, the owner of the Public Workspace: only there does Reset… show. */
+/** `akadmin`, the owner of the Public Workspace. */
 const isAdmin = computed(() => account.value?.signedIn === true && account.value.admin)
+/** Reset… shows only in the first Line of the Public Workspace, the demo one. */
+const canReset = computed(() => isAdmin.value && role.value === "owner" && lineId === firstLine)
 const inviting = ref(false)
 
 function viewAt(path: string): View {
@@ -177,7 +188,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             Invite…
           </button>
           <button
-            v-if="isAdmin && role === 'owner'"
+            v-if="canReset"
             type="button"
             class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
             :disabled="resetting"

@@ -54,10 +54,10 @@ Vite proxy sends `X-authentik-uid: dev`.
 A Workspace holds as many named Lines as its owner makes, one SQLite
 file each, so no query can read across two of them:
 
-| Line                                                                                     | File                                | API                               |
-| ---------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------- |
+| Line                                                                                      | File                                | API                               |
+| ----------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------- |
 | `main`, made on the first request: empty, or with the demo data for `akadmin` and SSO off | `data/workspaces/<uid>.db`          | `/api/lines/main/…`, and `/api/…` |
-| each one made with **New Line…**, empty                                                  | `data/workspaces/<uid>/ln-<hex>.db` | `/api/lines/ln-<hex>/…`           |
+| each one made with **New Line…**, empty                                                   | `data/workspaces/<uid>/ln-<hex>.db` | `/api/lines/ln-<hex>/…`           |
 
 `GET /api/lines` lists them by name, `POST /api/lines {"name"}` makes one,
 `PUT /api/lines/<id> {"name"}` renames one; an unknown id gets `404` and
@@ -155,10 +155,10 @@ the API refuses as a Bearer token. Without it the API answers `503`, and links a
 authentik under Directory > Invitations. In dev, the Vite proxy signs in as
 `akadmin`.
 
-**Reset…** shows only to `akadmin`, in the Public Workspace; with SSO on, the API
-refuses `POST /api/reset` (`403`) to anyone else. It acts on
-the open Line only: demo data, or one Work Station and one Team Member
-to rename in Design.
+**Reset…** shows only to `akadmin`, in the first Line (`main`) of the Public
+Workspace; with SSO on, the API refuses `POST /api/reset` (`403`) to anyone
+else, and in any other Line. It acts on that Line only: demo data, or one
+Work Station and one Team Member to rename in Design.
 
 <!-- docs:start -->
 

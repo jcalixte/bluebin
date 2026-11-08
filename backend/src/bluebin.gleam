@@ -384,7 +384,7 @@ fn open_line(
         _, ["api", "sharing"] ->
           share_line(request, context, identity, workspace, line)
         _, ["api", "reset"] ->
-          case owns_public_workspace(request, context) {
+          case owns_public_workspace(request, context) && line == lines.first {
             True -> reset(request, database, linking)
             False -> wisp.response(403)
           }
