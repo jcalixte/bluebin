@@ -67,8 +67,12 @@ The act of a Team Member without a Kanban helping the downstream Work Station th
 _Avoid_: swarm, help out, firefighting
 
 **Help the Rework**:
-The act of a Team Member of the Work Station that found a defect joining its open Rework, for example to reproduce the defect or check the repair, instead of starting new work.
+The act of a Team Member of the Work Station that found a defect, or of the Work Station that made it, joining its open Rework, for example to reproduce the defect, write the failing test, or check the repair.
 _Avoid_: swarm, pairing, QA support
+
+**Helper**:
+A Team Member who joins a Piece in another Team Member's hands, by Help the Rework or Help Downstream, without taking its Assignment.
+_Avoid_: pair, co-assignee, reviewer, contributor
 
 **Deployment**:
 The moment a complete Piece leaves the last Work Station of the Line and runs in production, even if the Client cannot use it yet.
@@ -277,6 +281,9 @@ _Avoid_: hidden Line, secret Line
 - For **Rework**, the **Assignment** goes by default to the **Team Member** who transformed the **Piece** at that **Work Station**
 - Any **Team Member** of a **Work Station** can reassign an **Assignment** to another **Team Member** of the same **Work Station**
 - A **Team Member** has at most one active **Assignment**; the others are paused
+- A **Piece** has one **Assignment** and zero or more **Helpers**; a **Helper** adds people, not time, so **Touch Time** and **Rework Time** stay the time of the **Piece**
+- A **Team Member** is the **Helper** of at most one **Piece** at a time; becoming a **Helper** pauses their active **Assignment**, and the paused time is **Stagnation Time**
+- A **Helper** stops when they choose, and at the latest when the cause ends: **Help the Rework** ends when the **Rework** closes, **Help Downstream** when the **Piece** goes into a **Blue Bin**; then their paused **Assignment** nearest to **Deployment** becomes active again
 - **Rework** pauses the **Piece** that the **Team Member** is transforming upstream
 - A **Piece** never moves backward: the **Work Station** that finds a defect raises **Rework** and names the **Work Station** that made it; a **Team Member** of that **Work Station** comes to repair the **Piece** where it is
 - When only one upstream **Work Station** can have made the defect, **Rework** names it by default
@@ -329,7 +336,7 @@ _Avoid_: hidden Line, secret Line
 - "branch" — resolved: **Branch** is the chain of **Work Stations** between a **Split** and an **Assembly**; "fork" is avoided.
 - **Assembly** — resolved: an explicit action, not a **Work Station**; it has no **Team Members** and no **Blue Bins**.
 - "swarm" — resolved: renamed **Help Downstream**, clearer for the team.
-- Helping a **Rework** vs **Help Downstream** — resolved: two terms. **Help Downstream** starts from a missing **Kanban** and goes downstream; **Help the Rework** starts from an open **Rework** and goes to the **Piece** where the defect was found, alongside the **Team Member** of the **Work Station** that made it.
+- Helping a **Rework** vs **Help Downstream** — resolved: two terms. **Help Downstream** starts from a missing **Kanban** and goes downstream; **Help the Rework** starts from an open **Rework** and goes to the **Piece** where the defect was found. It is open to the **Team Members** of the two **Work Stations** concerned (the one that found the defect and the one that made it), not to the whole **Line**: a wider call is an **Andon**.
 - "Final Inspection" of a whole **Demand** — rejected: with **Heijunka**, the **Pieces** of one **Demand** arrive mixed with others, so waiting for the last one adds **Stagnation Time** and breaks the **Takt Time**. It also blocks the upstream **Blue Bins**. Like a car on a Toyota line, each **Piece** is deployed alone.
 - UAT of a whole Feature — deferred: the software analogy for Feature-level acceptance comes later.
 - **Kanbans** at a **Split** and an **Assembly** — resolved: a **Branch** gets a new **Kanban** only from an **Assembly** of a complete **Piece**, never when its own **Blue Bin** empties alone. A fast **Branch** runs ahead only as a **Deviation**; normally its **Team Members** **Help Downstream**.

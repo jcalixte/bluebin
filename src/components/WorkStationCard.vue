@@ -200,25 +200,30 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       <p v-if="!actsHere" class="text-sm opacity-70">
         {{ station.kanbans }} Kanban {{ station.kanbans === 1 ? "authorizes" : "authorize" }} a pull
       </p>
-      <section v-else aria-label="Pull" class="group relative">
-        <button
-          class="btn btn-sm btn-primary w-full justify-between"
-          :disabled="busy"
-          :aria-describedby="keptFirst ? `kept-first-${station.id}` : undefined"
-          @click="$emit('pull', teamMember === '' ? undefined : teamMember)"
-        >
-          {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
-          <span
-            class="rounded-full bg-primary-content/10 px-2 py-0.5 text-xs font-medium tabular-nums"
-            :title="
-              station.kanbans > 0
-                ? `${station.kanbans} Kanban ${station.kanbans === 1 ? 'authorizes' : 'authorize'} a pull`
-                : 'No Kanban: a pull is a Deviation'
-            "
+      <section v-else aria-label="Pull">
+        <div class="tooltip tooltip-warning block">
+          <div v-if="keptFirst" :id="`kept-first-${station.id}`" class="tooltip-content text-xs">
+            {{ keptFirst }}
+          </div>
+          <button
+            class="btn btn-sm btn-primary w-full justify-between"
+            :disabled="busy"
+            :aria-describedby="keptFirst ? `kept-first-${station.id}` : undefined"
+            @click="$emit('pull', teamMember === '' ? undefined : teamMember)"
           >
-            {{ station.kanbans }} Kanban
-          </span>
-        </button>
+            {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
+            <span
+              class="rounded-full bg-primary-content/10 px-2 py-0.5 text-xs font-medium tabular-nums"
+              :title="
+                station.kanbans > 0
+                  ? `${station.kanbans} Kanban ${station.kanbans === 1 ? 'authorizes' : 'authorize'} a pull`
+                  : 'No Kanban: a pull is a Deviation'
+              "
+            >
+              {{ station.kanbans }} Kanban
+            </span>
+          </button>
+        </div>
         <label class="mt-1.5 flex items-center gap-2 text-xs">
           <span class="opacity-70">Taken by</span>
           <select
@@ -237,13 +242,6 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             </option>
           </select>
         </label>
-        <p
-          v-if="keptFirst"
-          :id="`kept-first-${station.id}`"
-          class="pointer-events-none invisible absolute inset-x-0 bottom-full z-10 mb-2 rounded-box border border-warning bg-base-100 px-3 py-2 text-xs text-warning-ink opacity-0 shadow-lg transition-opacity duration-150 motion-reduce:transition-none group-has-[button:hover]:visible group-has-[button:hover]:opacity-100 group-has-[button:focus-visible]:visible group-has-[button:focus-visible]:opacity-100"
-        >
-          {{ keptFirst }}
-        </p>
       </section>
 
       <section v-if="hasRework" aria-label="Rework">
