@@ -7,6 +7,10 @@ import { ref } from "vue"
  */
 export const simulation = import.meta.env.MODE === "simulation"
 
+/** Each site links to the other: the real app for a Line that stays, the Simulation to try. */
+export const appUrl = "https://bluebin.app"
+export const simulationUrl = "https://try.bluebin.app/line"
+
 /** The Team Member the visitor plays, or `""` for the owner of the Line. */
 export const actingAs = ref("")
 

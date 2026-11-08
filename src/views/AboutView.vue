@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from "vue"
 import BrandMark from "../components/BrandMark.vue"
 import ThemeToggle from "../components/ThemeToggle.vue"
+import { appUrl, simulation, simulationUrl } from "../simulation/state"
 
 const sections = [
   { id: "push-pull", title: "Push or pull" },
@@ -216,9 +217,11 @@ const readings = [
               started before it starts something new, at the pace its Clients need.
             </p>
             <div class="flex flex-wrap gap-3 pt-2">
-              <a href="/line" class="btn btn-primary h-11 px-5">Open your Line</a>
-              <a href="https://try.bluebin.app/line" class="btn btn-outline h-11 px-5">
-                Try the Simulation
+              <a href="/line" class="btn btn-primary h-11 px-5">
+                {{ simulation ? "Open the Simulation" : "Open your Line" }}
+              </a>
+              <a :href="simulation ? appUrl : simulationUrl" class="btn btn-outline h-11 px-5">
+                {{ simulation ? "Sign in to Bluebin" : "Try the Simulation" }}
               </a>
               <a href="#rules" class="btn btn-ghost h-11 px-5">Read the pull rules</a>
             </div>

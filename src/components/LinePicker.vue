@@ -6,6 +6,7 @@ import { useWorkspaces } from "../composables/useWorkspaces"
 import type { LineEntry, Workspace } from "../types"
 import AppModal from "./AppModal.vue"
 import ErrorToast from "./ErrorToast.vue"
+import { simulationUrl } from "../simulation/state"
 
 /** The view to open in another Line, as `/demands`. */
 const props = defineProps<{ view: string }>()
@@ -179,6 +180,16 @@ async function toggleSharing() {
       </template>
       <li class="mt-1 border-t border-base-300 pt-1">
         <button type="button" @click="startNaming('create')">New Line…</button>
+      </li>
+      <li>
+        <a
+          :href="simulationUrl"
+          target="_blank"
+          rel="noopener"
+          title="A Line with demo data, in a new tab: play any Team Member, nothing is saved"
+        >
+          Try the Simulation <span aria-hidden="true">↗</span>
+        </a>
       </li>
       <template v-if="owns">
         <li>
