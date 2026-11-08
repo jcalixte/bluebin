@@ -165,7 +165,7 @@ function confirmDiscard() {
           </p>
         </div>
 
-        <div class="relative overflow-x-auto pb-4">
+        <div class="relative overflow-x-auto p-2 pb-4">
           <div class="flex flex-col items-center lg:min-w-max lg:flex-row lg:items-start">
             <div
               class="flex h-10 shrink-0 items-center rounded-box border border-dashed border-base-content/30 px-4 text-xs font-semibold uppercase tracking-wide opacity-70"
