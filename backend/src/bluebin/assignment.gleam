@@ -55,6 +55,20 @@ pub type Next {
   Continue(Assignment)
   TakeRework(id: String, piece: String, station_id: String, station: String)
   TakeKanban(station_id: String, station: String)
+  Helping(
+    rework: String,
+    piece: String,
+    assignee: String,
+    station_id: String,
+    station: String,
+  )
+  HelpTheRework(
+    rework: String,
+    piece: String,
+    assignee: String,
+    station_id: String,
+    station: String,
+  )
   HelpDownstream(station_id: String, station: String, because: String)
   Wait
 }
@@ -145,6 +159,7 @@ pub fn load(
   )
   use next <- result.try(next_thing(
     connection,
+    team_member_id,
     assignments,
     lists,
     mine,
@@ -155,11 +170,16 @@ pub fn load(
 
 fn next_thing(
   connection: sqlight.Connection,
+  team_member_id: String,
   assignments: List(Assignment),
   lists: List(PriorityList),
   mine: List(Station),
   stations: List(Station),
 ) -> Result(Next, ReadError) {
+  use helping <- result.try(
+    help(connection, helping_sql, [sqlight.text(team_member_id)]),
+  )
+  use <- option.lazy_unwrap(option.map(helping, Ok))
   let active = list.find(assignments, fn(one) { one.active })
   let free_rework =
     list.find_map(lists, fn(one) {
@@ -177,21 +197,111 @@ fn next_thing(
       })
     })
   case active, free_rework {
+    // The Piece in their hands is under Rework: they help its repair rather
+    // than finish it.
+    Ok(Transform(id: piece_id, ..) as assignment), _ -> {
+      use rework <- result.try(help_the_rework(
+        connection,
+        team_member_id,
+        Some(piece_id),
+      ))
+      Ok(option.unwrap(rework, Continue(assignment)))
+    }
     Ok(assignment), _ -> Ok(Continue(assignment))
     Error(_), Ok(take) -> Ok(take)
     Error(_), Error(_) -> {
       use kanban <- result.try(first_kanban_to_take(connection, lists))
       case kanban {
         Some(take) -> Ok(take)
-        None ->
-          Ok(
-            help_downstream(mine, stations)
-            |> option.unwrap(Wait),
-          )
+        None -> {
+          use rework <- result.try(help_the_rework(
+            connection,
+            team_member_id,
+            None,
+          ))
+          case rework {
+            Some(help) -> Ok(help)
+            None ->
+              Ok(
+                help_downstream(mine, stations)
+                |> option.unwrap(Wait),
+              )
+          }
+        }
       }
     }
   }
 }
+
+/// The oldest Rework a Team Member can help, on `piece` only when given.
+fn help_the_rework(
+  connection: sqlight.Connection,
+  team_member_id: String,
+  piece: Option(String),
+) -> Result(Option(Next), ReadError) {
+  use found <- result.try(
+    help(connection, help_the_rework_sql, [
+      sqlight.text(team_member_id),
+      sqlight.nullable(sqlight.text, piece),
+    ]),
+  )
+  Ok(
+    option.map(found, fn(found) {
+      case found {
+        Helping(rework:, piece:, assignee:, station_id:, station:) ->
+          HelpTheRework(rework:, piece:, assignee:, station_id:, station:)
+        other -> other
+      }
+    }),
+  )
+}
+
+/// The Rework a Team Member helps (`helping_sql`), or one they can help
+/// (`help_the_rework_sql`), read as `Helping`.
+fn help(
+  connection: sqlight.Connection,
+  sql: String,
+  values: List(sqlight.Value),
+) -> Result(Option(Next), ReadError) {
+  let decoder = {
+    use rework <- decode.field(0, decode.string)
+    use piece <- decode.field(1, decode.string)
+    use assignee <- decode.field(2, decode.string)
+    use station_id <- decode.field(3, decode.string)
+    use station <- decode.field(4, decode.string)
+    decode.success(Helping(rework:, piece:, assignee:, station_id:, station:))
+  }
+  sqlight.query(sql, on: connection, with: values, expecting: decoder)
+  |> result.map(fn(found) { list.first(found) |> option.from_result })
+  |> read
+}
+
+const helping_sql =
+  "select r.id, p.reference, pe.name, w.id, w.name
+       from helper h
+       join rework r on r.id = h.rework_id
+       join piece p on p.id = h.piece_id
+       join team_member pe on pe.id = r.assignee
+       join work_station w on w.id = p.station_id
+      where h.team_member_id = ?1"
+
+/// F61: the two Work Stations concerned, someone repairs, not their own
+/// Rework, and none of their own waits.
+const help_the_rework_sql =
+  "select r.id, p.reference, pe.name, w.id, w.name
+       from rework r
+       join piece p on p.id = r.piece_id
+       join team_member pe on pe.id = r.assignee
+       join work_station w on w.id = p.station_id
+      where r.closed_at is null and r.assignee <> ?1
+        and (?2 is null or r.piece_id = ?2)
+        and exists (select 1 from station_team_member sp
+                     where sp.team_member_id = ?1
+                       and sp.station_id in (r.station_id, r.raised_by))
+        and not exists (select 1 from rework own
+                         where own.assignee = ?1 and own.closed_at is null)
+      order by r.opened_at, r.rowid
+      limit 1"
 
 fn first_kanban_to_take(
   connection: sqlight.Connection,
@@ -241,10 +351,11 @@ fn help_downstream(mine: List(Station), all: List(Station)) -> Option(Next) {
     && list.any(mine, fn(own) { downstream_of(other, own) })
   })
   |> list.filter_map(fn(other) {
+    // A Work Station stopped by its own Rework is for Help the Rework, open
+    // only to the two Work Stations concerned (F22).
     case other.stopped, in_front_full(other, all) {
-      True, _ -> Ok(#(other, "it found a defect and waits for its Rework"))
       False, True -> Ok(#(other, "the Blue Bins in front of it are full"))
-      False, False -> Error(Nil)
+      _, _ -> Error(Nil)
     }
   })
   |> list.sort(fn(a, b) { nearest_upstream_first(a.0, b.0) })
@@ -552,8 +663,30 @@ fn next_json(next: Next) -> Json {
         #("stationName", json.string(station)),
         #("because", json.string(because)),
       ])
+    Helping(rework:, piece:, assignee:, station_id:, station:) ->
+      help_json("helping", rework, piece, assignee, station_id, station)
+    HelpTheRework(rework:, piece:, assignee:, station_id:, station:) ->
+      help_json("help_the_rework", rework, piece, assignee, station_id, station)
     Wait -> json.object([#("kind", json.string("wait"))])
   }
+}
+
+fn help_json(
+  kind: String,
+  rework: String,
+  piece: String,
+  assignee: String,
+  station_id: String,
+  station: String,
+) -> Json {
+  json.object([
+    #("kind", json.string(kind)),
+    #("rework", json.string(rework)),
+    #("piece", json.string(piece)),
+    #("assignee", json.string(assignee)),
+    #("station", json.string(station_id)),
+    #("stationName", json.string(station)),
+  ])
 }
 
 fn assignment_json(assignment: Assignment) -> Json {

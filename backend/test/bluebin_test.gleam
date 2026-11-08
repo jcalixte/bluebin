@@ -818,10 +818,69 @@ pub fn a_rework_nobody_repairs_comes_before_any_kanban_test() {
 
 pub fn without_a_kanban_a_team_member_helps_downstream_test() {
   use connection <- with_seeded_database()
-  // QA iOS waits on the seeded Rework it raised.
-  exec(connection, "delete from kanban where station_id = 'ws-ios'")
-  let assert assignment.HelpDownstream(station_id: "ws-qa-ios", ..) =
+  // Web's Kanban is spent and QA Web's Blue Bins are full: QA Web holds up
+  // the flow in front of Lila.
+  exec(
+    connection,
+    "delete from kanban where station_id = 'ws-web';
+     update work_station set blue_bins = 0 where id = 'ws-web'",
+  )
+  let assert assignment.HelpDownstream(station_id: "ws-qa-web", ..) =
+    next_of(connection, "pe-lila")
+}
+
+pub fn a_work_station_stopped_by_its_rework_gets_help_only_from_the_two_test() {
+  use connection <- with_seeded_database()
+  // Everyone has free hands and no Kanban; QA iOS waits on rw-1, which
+  // Alice repairs.
+  exec(connection, "delete from kanban; update piece set assignee = null")
+  // QA iOS found the defect, iOS made it: both Help the Rework (F19).
+  let assert assignment.HelpTheRework(
+    rework: "rw-1",
+    piece: "US-4 · iOS",
+    assignee: "Alice",
+    station_id: "ws-qa-ios",
+    ..,
+  ) = next_of(connection, "pe-yasmine")
+  let assert assignment.HelpTheRework(rework: "rw-1", ..) =
     next_of(connection, "pe-karim")
+  // A third Work Station is not sent to QA iOS (F22).
+  list.each(["pe-marc", "pe-sofia", "pe-ines"], fn(team_member) {
+    let assert False = case next_of(connection, team_member) {
+      assignment.HelpDownstream(station_id: "ws-qa-ios", ..) -> True
+      assignment.HelpTheRework(..) -> True
+      _ -> False
+    }
+  })
+
+  // Once Karim helps, his next thing is the help itself.
+  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  let assert assignment.Helping(rework: "rw-1", assignee: "Alice", ..) =
+    next_of(connection, "pe-karim")
+}
+
+pub fn the_holder_of_a_piece_under_rework_helps_its_repair_test() {
+  use connection <- with_seeded_database()
+  // In the seed, Yasmine holds US-4 at QA iOS while Alice repairs it.
+  let assert assignment.HelpTheRework(rework: "rw-1", assignee: "Alice", ..) =
+    next_of(connection, "pe-yasmine")
+  // Once repaired, she finishes it.
+  let assert Ok(_) = flow.repair_rework(connection, "rw-1")
+  let assert assignment.Continue(assignment.Transform(id: "p-offline-4-ios", ..)) =
+    next_of(connection, "pe-yasmine")
+}
+
+pub fn nobody_is_sent_to_help_a_rework_nobody_repairs_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "delete from kanban; update piece set assignee = null;
+     update rework set assignee = null",
+  )
+  let assert False = case next_of(connection, "pe-yasmine") {
+    assignment.HelpTheRework(..) -> True
+    _ -> False
+  }
 }
 
 pub fn with_nothing_to_take_or_help_a_team_member_waits_test() {

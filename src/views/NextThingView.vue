@@ -35,8 +35,20 @@ watch(teamMemberId, (id) => {
   history.replaceState(null, "", url)
 })
 
-const { teamMembers, view, error, loading, pull, finish, repair, assign, raiseAndon, closeAndon } =
-  useNextThing(teamMemberId)
+const {
+  teamMembers,
+  view,
+  error,
+  loading,
+  pull,
+  finish,
+  repair,
+  helpTheRework,
+  stopHelping,
+  assign,
+  raiseAndon,
+  closeAndon,
+} = useNextThing(teamMemberId)
 
 function stopped(station: string) {
   return (view.value?.andons ?? []).some((one) => one.kind === "stop" && one.station === station)
@@ -75,6 +87,10 @@ function doing(now: NextThing): (reason?: string) => Promise<FlowConfirm | null>
         return assign("rework", now.rework, teamMemberId.value)
       case "take_kanban":
         return pull(now.station, reason)
+      case "help_the_rework":
+        return helpTheRework(now.rework)
+      case "helping":
+        return stopHelping()
       default:
         return Promise.resolve(null)
     }
@@ -83,9 +99,11 @@ function doing(now: NextThing): (reason?: string) => Promise<FlowConfirm | null>
 
 /** The pull rules, in the order the API tries them. The first that applies is the next thing. */
 const rules = [
+  { kind: "helping", label: "Stay with the Rework you help" },
   { kind: "continue", label: "Finish what is in your hands" },
   { kind: "take_rework", label: "Take a Rework nobody repairs" },
   { kind: "take_kanban", label: "Pull at a Kanban, nearest to Deployment first" },
+  { kind: "help_the_rework", label: "Help the Rework your Work Station found or made" },
   { kind: "help_downstream", label: "Help Downstream where the flow is held up" },
   { kind: "wait", label: "Wait" },
 ] as const
@@ -126,6 +144,20 @@ const focus = computed<{ tone: Tone; eyebrow: string; title: string; action: str
           eyebrow: "Your hands are free",
           title: `Pull the next Piece at ${now.stationName}`,
           action: "Pull a Piece",
+        }
+      case "helping":
+        return {
+          tone: "error",
+          eyebrow: "Help the Rework",
+          title: `Help ${now.assignee} on ${now.piece}`,
+          action: "Stop helping",
+        }
+      case "help_the_rework":
+        return {
+          tone: "error",
+          eyebrow: "Help the Rework",
+          title: `Help ${now.assignee} on ${now.piece}`,
+          action: "Help",
         }
       case "help_downstream":
         return {
@@ -242,6 +274,15 @@ function since(at: string) {
             <p v-else-if="next.kind === 'take_kanban'" class="opacity-80">
               A Kanban waits there, and a Piece waits upstream. It is your Work Station nearest to
               Deployment.
+            </p>
+            <p v-else-if="next.kind === 'helping'" class="opacity-80">
+              At {{ next.stationName }}, with {{ next.assignee }}: reproduce the defect, write the
+              failing test, check the repair. Your help ends when the Rework is repaired.
+            </p>
+            <p v-else-if="next.kind === 'help_the_rework'" class="opacity-80">
+              {{ next.assignee }} repairs it at {{ next.stationName }}, where the defect was found.
+              Join: reproduce the defect, write the failing test, check the repair. Do not start a
+              new Piece.
             </p>
             <p v-else-if="next.kind === 'help_downstream'" class="opacity-80">
               It holds up the flow: {{ next.because }}. Do not start a new Piece.

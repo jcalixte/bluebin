@@ -116,7 +116,7 @@ check "/api/team-members is a non-empty array, each Team Member of a Work Statio
 first=$(printf '%s' "$team_members" | jq -r '.[0].id')
 next=$(curl -fsS "$BASE/api/team-members/$first/next")
 check "a Team Member's screen names one next thing" assert_json \
-  '.next.kind | IN("continue", "take_rework", "take_kanban", "help_downstream", "wait")' \
+  '.next.kind | IN("helping", "continue", "take_rework", "take_kanban", "help_the_rework", "help_downstream", "wait")' \
   "$next"
 check "a Team Member holds at most one active Assignment" assert_json \
   '[.assignments[] | select(.active)] | length <= 1' "$next"

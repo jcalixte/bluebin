@@ -51,6 +51,11 @@ export function useNextThing(teamMemberId: Ref<string>) {
 
   const repair = (rework: string) => act("/api/rework/repair", { rework })
 
+  const helpTheRework = (rework: string) =>
+    act("/api/help", { rework, teamMember: teamMemberId.value })
+
+  const stopHelping = () => act("/api/help/stop", { teamMember: teamMemberId.value })
+
   const assign = (kind: "piece" | "rework", id: string, teamMember: string) =>
     act("/api/assign", { kind, id, teamMember })
 
@@ -73,6 +78,8 @@ export function useNextThing(teamMemberId: Ref<string>) {
     pull,
     finish,
     repair,
+    helpTheRework,
+    stopHelping,
     assign,
     raiseAndon,
     closeAndon,

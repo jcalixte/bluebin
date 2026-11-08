@@ -190,6 +190,14 @@ export type NextThing =
   | { kind: "continue"; assignment: Assignment }
   | { kind: "take_rework"; rework: string; piece: string; station: string; stationName: string }
   | { kind: "take_kanban"; station: string; stationName: string }
+  | {
+      kind: "helping" | "help_the_rework"
+      rework: string
+      piece: string
+      assignee: string
+      station: string
+      stationName: string
+    }
   | { kind: "help_downstream"; station: string; stationName: string; because: string }
   | { kind: "wait" }
 
