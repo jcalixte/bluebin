@@ -17,6 +17,8 @@ const props = defineProps<{
   taktHours: number
   /** Whether who looks may act as this Team Member, or at all with none (`access.actor`). */
   canActAs: (teamMember?: string) => boolean
+  /** The signed-in Account's own Team Member in this Line, if any. */
+  ownTeamMember?: string | null
 }>()
 
 const emit = defineEmits<{
@@ -30,19 +32,29 @@ const emit = defineEmits<{
   closeAndon: [teamMember: string]
 }>()
 
-/** A Work Station of one Team Member gives each pulled Piece to that Team Member. */
-const soleTeamMember = computed(() => {
+/**
+ * Who takes a pulled Piece by default: the signed-in Account's own Team Member when it works at
+ * this Work Station, else the only Team Member of a Work Station of one.
+ */
+const defaultTeamMember = computed(() => {
+  const own = props.ownTeamMember
+  if (own && props.station.teamMembers.some((one) => one.id === own) && props.canActAs(own)) {
+    return own
+  }
   const [only, ...others] = props.station.teamMembers
   return only && others.length === 0 && props.canActAs(only.id) ? only.id : ""
 })
 
-const teamMember = ref(soleTeamMember.value)
-watch(soleTeamMember, (id) => {
+const teamMember = ref(defaultTeamMember.value)
+watch(defaultTeamMember, (id) => {
   teamMember.value = id
 })
 
-/** Who looks may hand over only to a Team Member they act as. */
-const handsOver = computed(() => props.station.teamMembers.some((one) => props.canActAs(one.id)))
+/**
+ * Whether who looks acts as one of this Work Station's Team Members: only then may they pull a
+ * Piece or hand one over here.
+ */
+const actsHere = computed(() => props.station.teamMembers.some((one) => props.canActAs(one.id)))
 
 function handOver(kind: "piece" | "rework", id: string, event: Event) {
   const teamMember = (event.target as HTMLSelectElement).value
@@ -183,7 +195,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         </p>
       </section>
 
-      <p v-if="!canActAs()" class="text-sm opacity-70">
+      <p v-if="!actsHere" class="text-sm opacity-70">
         {{ station.kanbans }} Kanban {{ station.kanbans === 1 ? "authorizes" : "authorize" }} a pull
       </p>
       <section v-else aria-label="Pull">
@@ -253,7 +265,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               <span class="opacity-70">Found by {{ item.foundBy }}</span>
               <select
-                v-if="handsOver"
+                v-if="actsHere"
                 class="select select-ghost select-xs w-auto"
                 :value="item.assigneeId ?? ''"
                 :disabled="busy"
@@ -308,7 +320,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               {{ item.piece }}
             </span>
             <select
-              v-if="handsOver"
+              v-if="actsHere"
               class="select select-ghost select-xs w-auto"
               :value="item.teamMemberId ?? ''"
               :disabled="busy"

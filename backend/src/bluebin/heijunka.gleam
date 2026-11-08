@@ -12,16 +12,13 @@ import gleam/result
 import gleam/string
 import sqlight
 
-/// A Piece waiting in the Backlog. `ordinal` is its place inside its Demand,
-/// first-in first-out from 1; `arrived` is its global insertion order.
+/// A Piece waiting in the Backlog. `arrived` is its global insertion order.
 pub type Waiting {
   Waiting(
     id: String,
     reference: String,
     demand: String,
     arrived: Int,
-    ordinal: Int,
-    working_days_before_start: Int,
     urgent: Option(Int),
   )
 }
@@ -41,31 +38,9 @@ pub type Effect {
   Effect(demand: Demand, places: Int, hours: Float, takt_gap: Float)
 }
 
-/// Working days count from the start of the first active Demand, so the slots
-/// of Demands that started on different days compare.
-const waiting_sql = "
-with recursive
-  span(first_day, last_day) as (
-    select min(started_on), max(started_on) from demand where state = 'active'
-  ),
-  days(day) as (
-    select first_day from span where first_day is not null
-    union all
-    select date(day, '+1 day') from days, span where day < last_day
-  ),
-  working_day(day) as (
-    select day from days where " <> calendar.working_day_sql <> "
-  )
-select
-  p.id,
-  p.reference,
-  p.demand_id,
-  p.rowid,
-  (select count(*) from piece o
-    where o.demand_id = p.demand_id and o.parent_id is null
-      and o.rowid <= p.rowid),
-  (select count(*) from working_day w where w.day < d.started_on),
-  p.urgent
+const waiting_sql =
+  "
+select p.id, p.reference, p.demand_id, p.rowid, p.urgent
 from piece p
 join demand d on d.id = p.demand_id
 where p.state = 'backlog' and p.parent_id is null and d.state = 'active'
@@ -87,38 +62,37 @@ fn waiting_decoder() -> decode.Decoder(Waiting) {
   use reference <- decode.field(1, decode.string)
   use demand <- decode.field(2, decode.string)
   use arrived <- decode.field(3, decode.int)
-  use ordinal <- decode.field(4, decode.int)
-  use working_days_before_start <- decode.field(5, decode.int)
-  use urgent <- decode.field(6, decode.optional(decode.int))
-  decode.success(Waiting(
-    id:,
-    reference:,
-    demand:,
-    arrived:,
-    ordinal:,
-    working_days_before_start:,
-    urgent:,
-  ))
+  use urgent <- decode.field(4, decode.optional(decode.int))
+  decode.success(Waiting(id:, reference:, demand:, arrived:, urgent:))
 }
 
 /// The Heijunka Sequence (F23): the Pieces made urgent by hand first, in the
 /// order they were made urgent, then the earliest slot, the earliest due date,
-/// first-in first-out. The slot of the n-th Piece of a Demand is n Takt Times
-/// after the Demand started.
+/// first-in first-out. A Demand spreads the Pieces it has left in the Backlog
+/// evenly over the Working Time it has left: the slot of its k-th Piece is
+/// (k - 0.5) of that interval from now, so a late Demand gets more slots, still
+/// mixed with the others.
 pub fn sequence(waiting: List(Waiting), demands: List(Demand)) -> List(Placed) {
-  waiting
-  |> list.filter_map(fn(piece) {
-    use demand <- result.map(
-      list.find(demands, fn(demand) { demand.id == piece.demand }),
-    )
-    let slot_hours =
-      int.to_float(piece.working_days_before_start)
-      *. demand.hours_per_day
-      +. int.to_float(piece.ordinal)
-      *. demand.takt_time_hours(demand)
-    Placed(piece:, demand:, slot_hours:)
+  demands
+  |> list.flat_map(fn(demand) {
+    let pieces =
+      waiting
+      |> list.filter(fn(piece) { piece.demand == demand.id })
+      |> list.sort(fn(a, b) { int.compare(a.arrived, b.arrived) })
+    let interval = hours_left(demand) /. int.to_float(list.length(pieces))
+    list.index_map(pieces, fn(piece, index) {
+      let slot_hours = { int.to_float(index) +. 0.5 } *. interval
+      Placed(piece:, demand:, slot_hours:)
+    })
   })
   |> list.sort(compare)
+}
+
+/// Working Time from today to the due date, today included. A Demand past its
+/// due date keeps one day, so its Pieces all go in the first day.
+fn hours_left(demand: Demand) -> Float {
+  let days = demand.working_days_total - demand.working_days_elapsed + 1
+  int.to_float(int.max(days, 1)) *. demand.hours_per_day
 }
 
 fn compare(a: Placed, b: Placed) -> order.Order {

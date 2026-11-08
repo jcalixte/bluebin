@@ -7,7 +7,7 @@ A pull system for software teams, built on Toyota Production System principles: 
 ### Flow
 
 **Line**:
-The ordered chain of Work Stations that a Piece crosses from Demand to production.
+The ordered chain of Work Stations that a Piece crosses from Demand to Deployment.
 _Avoid_: value stream, value flow, kanban system, pipeline, workflow, board
 
 **Work Station**:
@@ -19,7 +19,7 @@ A request for a quantity of Pieces by a due date, for example a Feature.
 _Avoid_: request, ticket, epic
 
 **Client**:
-The person or group that asks for a Demand and receives its Pieces in production.
+The person or group that asks for a Demand and receives its Pieces at their Release.
 _Avoid_: customer, stakeholder, user, requester
 
 **Backlog**:
@@ -66,6 +66,14 @@ _Avoid_: override, exception, violation, bypass
 The act of a Team Member without a Kanban helping the downstream Work Station that holds up the flow, instead of starting new work.
 _Avoid_: swarm, help out, firefighting
 
+**Deployment**:
+The moment a complete Piece leaves the last Work Station of the Line and runs in production, even if the Client cannot use it yet.
+_Avoid_: ship, push to prod, delivery, go live
+
+**Release**:
+The moment the Client can use a deployed Piece, for example when its feature flag goes on.
+_Avoid_: go live, launch, rollout, delivery
+
 ### Pace
 
 **Takt Time**:
@@ -77,11 +85,11 @@ The number of Pieces that a Demand is ahead of (+) or behind (−) its Takt Time
 _Avoid_: delay, slippage, burn-down, variance
 
 **Forecast**:
-The day a Demand will reach production at its current pace: the Pieces it has left, at the rate of Pieces it has produced per working day since it started.
+The day the last Piece of a Demand will reach Deployment at its current pace: the Pieces it has left, at the rate of Pieces it has deployed per working day since it started.
 _Avoid_: ETA, estimate, projection
 
 **On-Time Delivery**:
-The share of Demands delivered by their due date. A Demand is delivered when its last Piece reaches production.
+The share of Demands delivered by their due date. A Demand is delivered at the Release of its last Piece.
 _Avoid_: success rate, SLA
 
 **Andon**:
@@ -115,7 +123,7 @@ Elapsed time counted only inside the Working Calendar.
 _Avoid_: business time, office time
 
 **Lead Time**:
-The time from entering the Backlog to reaching production, measured for each Piece and for each Demand (until its last Piece).
+The time from entering the Backlog to Release, measured for each Piece and for each Demand (until its last Piece).
 _Avoid_: cycle time, delivery time
 
 **Touch Time**:
@@ -131,7 +139,7 @@ The share of Pieces that leave a Work Station and need no Rework later.
 _Avoid_: quality rate, success rate, defect rate
 
 **Stagnation Time**:
-The time a Piece waits with nobody transforming it: in the Backlog, in a Blue Bin, or paused.
+The time a Piece waits with nobody transforming it: in the Backlog, in a Blue Bin, paused, or deployed and waiting for its Release.
 _Avoid_: idle time, wait time, blocked time
 
 **Station Lead Time**:
@@ -198,13 +206,20 @@ _Avoid_: hidden Line, secret Line
 - A **Demand** is decomposed into one or more **Pieces**; a **Piece** belongs to exactly one **Demand**
 - A **Demand** comes from exactly one **Client**; a **Client** can have many **Demands**
 - A **Demand** has one **Takt Time**: its available Working Time divided by its number of **Pieces**
-- A **Demand** has no **Forecast** until one of its **Pieces** reaches production; it is late when its **Forecast** falls after its due date
+- A **Demand** has no **Forecast** until one of its **Pieces** is deployed; it is late when its **Forecast** falls after its due date
 - The **Takt Time** of the **Line** combines all active **Demands**: 1 ÷ (sum of 1 ÷ **Takt Time** of each active **Demand**); it changes when a **Demand** enters or ends
+- A **Demand** ends at the **Release** of its last **Piece**; until then it counts in the **Takt Time** of the **Line**, even when all its **Pieces** are deployed
 - A **Work Station** compares its **Touch Time** per **Piece** with the **Takt Time** of the **Line**, not of one **Demand**
 - A **Piece** has no size; the team decides how big each **Piece** is. **Takt Time** counts **Pieces**, so a **Piece** much bigger than the others shows as a slow **Touch Time** against the **Takt Time** and a falling **Takt Gap**
 - A **Piece** waits in the **Backlog**, then flows alone through the **Line** (one-piece flow)
+- A **Piece** leaves the **Line** at its **Deployment**; its **Release** comes at the same time or later, and is not the work of a **Work Station**
+- By default a **Piece** is released at its **Deployment**; a **Team Member** can hold it for a later **Release** instead. A held **Piece** has already left the **Line**: it holds no **Blue Bin**, its **Kanban** is already sent, and holding it is not a **Deviation**
+- Several deployed **Pieces** can have one **Release** together, for example the web, iOS and Android **Pieces** of one **Demand**
+- Line measures count **Deployments**: **Takt Gap**, **Andon** and **Forecast** show if the **Line** keeps its pace. Client measures count **Releases**: **Lead Time** and **On-Time Delivery** show what the **Client** gets
+- The wait from **Deployment** to **Release** is **Stagnation Time** of the **Piece**, so a common **Release** date shows its cost in the **Lead Time**
 - The **Heijunka Sequence** decides which **Piece** leaves the **Backlog**; a **Kanban** from the first **Work Station** decides when
-- In the **Heijunka Sequence**, each **Piece** has an ideal slot at a multiple of its **Demand**'s **Takt Time**; the earliest slot goes first, then the earliest due date, then first-in, first-out
+- In the **Heijunka Sequence**, each **Demand** spreads the **Pieces** it has left in the **Backlog** evenly over the Working Time it has left until its due date; each **Piece** has an ideal slot at the middle of its interval, counted from now; the earliest slot goes first, then the earliest due date, then first-in, first-out
+- A late **Demand** gets more slots in the **Heijunka Sequence**, mixed with the other **Demands**; its **Takt Gap** still uses its **Takt Time**
 - Inside one **Demand**, **Pieces** keep first-in, first-out order
 - A **Team Member** can reorder the **Heijunka Sequence** by hand for urgent work, only as a **Deviation**
 - A manual reorder moves the next **Piece** of one **Demand** to the top of the **Backlog**, behind the **Pieces** already moved there; **Pieces** further back in the same **Demand** keep their order
@@ -216,14 +231,14 @@ _Avoid_: hidden Line, secret Line
 - At a **Split**, each **Branch** pulls its own **Sub-Piece** with its own **Kanban**; the **Piece** leaves the upstream **Blue Bin** only when all its **Sub-Pieces** are pulled
 - Across a **Split**, the **Lead Time** of a **Piece** is set by its slowest **Sub-Piece**
 - Every **Work Station** transforms one **Piece** at a time; no **Work Station** waits for all **Pieces** of a **Demand**
-- Each **Piece** goes to production as soon as it is complete, at the pace of its **Demand**'s **Takt Time**
+- Each **Piece** is deployed as soon as it is complete, at the pace of its **Demand**'s **Takt Time**
 - **Lead Time** = **Touch Time** + **Stagnation Time**
-- **Lead Time** = the **Backlog** wait + the sum of the **Station Lead Times**
+- **Lead Time** = the **Backlog** wait + the sum of the **Station Lead Times** + the wait from **Deployment** to **Release**
 - **Station Lead Time** = **Replenishment Time** + the wait in its **Blue Bin**; **Replenishment Time** = **Touch Time** at that **Work Station** + its pauses
 - **Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Calendar Time** by default, and in **Working Time** as a second view
 - **Touch Time** is net time, so it is the same in both views
 - **Takt Time** always uses **Working Time**
-- The **Takt Gap** of a **Demand** = its **Pieces** in production − the elapsed **Working Time** ÷ its **Takt Time**
+- The **Takt Gap** of a **Demand** = its deployed **Pieces** − the elapsed **Working Time** ÷ its **Takt Time**
 - A **Demand** with a **Takt Gap** of −1 or less raises an **Andon**
 - A **Rework** that waits one hour of **Working Time** with no active **Assignment** raises an **Andon** on the **Work Station** that made the defect
 - Any **Team Member** can raise an **Andon** on their **Work Station**; it stops that **Work Station** until its **Team Leader** closes it
@@ -236,7 +251,7 @@ _Avoid_: hidden Line, secret Line
 - A **Workspace** has exactly one owner **Account**; its owner and each **Account** that is a **Team Member** in one of its **Lines** can open it
 - The **Public Workspace** is the **Workspace** of one chosen **Account**; everyone can look at its **Shared Lines**, and only that **Account** changes it
 - Only the owner of a **Workspace** makes, renames, empties or redesigns its **Lines** (**Work Stations**, **Team Members**, **Blue Bins**, labels), and makes each one **Shared** or **Private**
-- A **Team Member** with an **Account** does the daily flow of their **Line** (pull, **Andon**, **Rework**, **Deviation**, **Assignment**) and adds **Demands**
+- A **Team Member** with an **Account** does the daily flow of their **Line** (pull, **Andon**, **Rework**, **Deviation**, **Assignment**, **Release**) and adds **Demands**
 - A linked **Team Member** acts only through their own **Account**; the owner acts for the **Team Members** with no **Account**
 - Apart from the owner's changes, an **Account** acts in a **Line** only as one of its **Team Members**; in a **Shared Line** where it is not a **Team Member**, it only looks
 - A **Line** is either a **Shared Line** or a **Private Line**; the owner of its **Workspace** chooses which when making it, and can change it at any time
@@ -246,14 +261,14 @@ _Avoid_: hidden Line, secret Line
 - A new **Blue Bin** brings one **Kanban** to its **Work Station**; a removed empty **Blue Bin** takes one back
 - **Starvation Time** belongs to a **Work Station**, never to a **Piece**, and is not part of the **Lead Time**
 - The **Andon Time** of a **Line** is the time at least one of its **Work Stations** is stopped; stops at the same time count once
-- A **Team Member** transforms at most one **Piece** at a time; when another **Piece** comes into their hands, the one nearest to production stays active and the other pauses, and the paused time is **Stagnation Time**. On a tie, the new **Piece** waits: finishing beats starting
+- A **Team Member** transforms at most one **Piece** at a time; when another **Piece** comes into their hands, the one nearest to **Deployment** stays active and the other pauses, and the paused time is **Stagnation Time**. On a tie, the new **Piece** waits: finishing beats starting
 - A **Work Station** transforms as many **Pieces** at the same time as it has **Team Members** working
 - Priority works in two stages: first which **Work Station** must work, then which **Team Member** of that **Work Station** does it (**Assignment**)
-- Stage 1: across the **Line**, the **Work Station** nearest to production comes first
+- Stage 1: across the **Line**, the **Work Station** nearest to **Deployment** comes first
 - A **Work Station** has one **Priority List**, made of its **Rework** and its **Kanbans**, ordered: **Rework** first, then the oldest **Kanban**
 - Stage 2: an **Assignment** gives one item of a **Priority List** to one **Team Member** of that **Work Station**
-- A **Team Member** sees the **Assignments** they hold in all their **Work Stations**; the **Assignment** in the **Work Station** nearest to production comes first
-- For a **Kanban**, a free **Team Member** takes the top item of the **Priority List** of their **Work Station** nearest to production; nobody pushes a **Kanban** to a **Team Member**
+- A **Team Member** sees the **Assignments** they hold in all their **Work Stations**; the **Assignment** in the **Work Station** nearest to **Deployment** comes first
+- For a **Kanban**, a free **Team Member** takes the top item of the **Priority List** of their **Work Station** nearest to **Deployment**; nobody pushes a **Kanban** to a **Team Member**
 - A **Piece** pulled at a **Work Station** of one **Team Member** goes by default to that **Team Member**
 - For **Rework**, the **Assignment** goes by default to the **Team Member** who transformed the **Piece** at that **Work Station**
 - Any **Team Member** of a **Work Station** can reassign an **Assignment** to another **Team Member** of the same **Work Station**
@@ -299,7 +314,9 @@ _Avoid_: hidden Line, secret Line
 - "the Demand is one piece" — resolved: a **Demand** is decomposed into **Pieces**, so that **Heijunka** can mix **Pieces** of different **Demands**.
 - **Stagnation Time** between two **Work Stations** — resolved: the wait from "Kanban sent" to "pulled in" is the **Starvation Time** of the **Work Station**, not the **Stagnation Time** of the **Piece**. This stops the same wait being counted twice.
 - "a standard size for a User Story" — resolved: no rule. Unlike cars of one model, **Pieces** differ in work content. Bluebin does not size or weight them; the team cuts its **Pieces** and sees the consequences in **Touch Time**, **Takt Gap** and **Andons**.
-- Pauses during **Touch Time** — resolved: a **Team Member** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to production; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
+- "production" — resolved: two separate events. **Deployment** is when a **Piece** runs in production; **Release** is when the **Client** can use it. A team can deploy behind a flag and release later, for example to release all platforms on one date.
+- "release" for a manual reorder of the **Backlog** — avoid: **Release** is the moment the **Client** can use a **Piece**. A manual reorder is a **Deviation** on the **Heijunka Sequence**.
+- Pauses during **Touch Time** — resolved: a **Team Member** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to **Deployment**; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
 - Time measures and the working calendar — resolved: measures show **Calendar Time** by default and **Working Time** as a second view; **Takt Time** uses **Working Time** only.
 - **Takt Time** of a **Demand** vs of the **Line** — resolved: one term, two scopes. The **Takt Time** of the **Line** is computed from all active **Demands**.
 - **Heijunka** order — resolved: computed as the **Heijunka Sequence**, released only on a **Kanban** (pull, not a timed pitch), with manual reorder allowed.
@@ -307,7 +324,7 @@ _Avoid_: hidden Line, secret Line
 - "branch" — resolved: **Branch** is the chain of **Work Stations** between a **Split** and an **Assembly**; "fork" is avoided.
 - **Assembly** — resolved: an explicit action, not a **Work Station**; it has no **Team Members** and no **Blue Bins**.
 - "swarm" — resolved: renamed **Help Downstream**, clearer for the team.
-- "Final Inspection" of a whole **Demand** — rejected: with **Heijunka**, the **Pieces** of one **Demand** arrive mixed with others, so waiting for the last one adds **Stagnation Time** and breaks the **Takt Time**. It also blocks the upstream **Blue Bins**. Like a car on a Toyota line, each **Piece** goes to production alone.
+- "Final Inspection" of a whole **Demand** — rejected: with **Heijunka**, the **Pieces** of one **Demand** arrive mixed with others, so waiting for the last one adds **Stagnation Time** and breaks the **Takt Time**. It also blocks the upstream **Blue Bins**. Like a car on a Toyota line, each **Piece** is deployed alone.
 - UAT of a whole Feature — deferred: the software analogy for Feature-level acceptance comes later.
 - **Kanbans** at a **Split** and an **Assembly** — resolved: a **Branch** gets a new **Kanban** only from an **Assembly** of a complete **Piece**, never when its own **Blue Bin** empties alone. A fast **Branch** runs ahead only as a **Deviation**; normally its **Team Members** **Help Downstream**.
 - Order of a **Team Member**'s **Kanbans** — resolved: **Rework** first, then downstream first, then the oldest **Kanban**. Finishing beats starting, also when a **Team Member** pulls a new **Piece** upstream while they hold one downstream.

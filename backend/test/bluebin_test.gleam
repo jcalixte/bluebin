@@ -8,6 +8,7 @@ import bluebin/heijunka
 import bluebin/line
 import bluebin/measures
 import gleam/dynamic/decode
+import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
@@ -939,27 +940,18 @@ pub fn a_quote_in_a_name_is_stored_as_typed_test() {
   assert step.name == "Dev's turn"
 }
 
-fn heijunka_demand(id: String, due_on: String, pieces_asked: Int) -> Demand {
-  // Ten working days of 7 hours: 10 Pieces is a Takt Time of 7 h, 20 of 3.5 h.
-  Demand(..a_demand(pieces_asked, 0, 10, 0), id:, label: id, due_on:)
+/// Days of 7 hours; today is the first day left.
+fn heijunka_demand(id: String, due_on: String, days_left: Int) -> Demand {
+  Demand(..a_demand(10, 0, 10, 11 - days_left), id:, label: id, due_on:)
 }
 
 fn waiting(
   id: String,
   demand: String,
   arrived: Int,
-  ordinal: Int,
   urgent: option.Option(Int),
 ) -> heijunka.Waiting {
-  heijunka.Waiting(
-    id:,
-    reference: id,
-    demand:,
-    arrived:,
-    ordinal:,
-    working_days_before_start: 0,
-    urgent:,
-  )
+  heijunka.Waiting(id:, reference: id, demand:, arrived:, urgent:)
 }
 
 fn ids(sequence: List(heijunka.Placed)) -> List(String) {
@@ -969,22 +961,48 @@ fn ids(sequence: List(heijunka.Placed)) -> List(String) {
 pub fn the_heijunka_sequence_takes_the_earliest_slot_first_test() {
   let demands = [
     heijunka_demand("a", "2026-12-01", 10),
-    heijunka_demand("b", "2026-12-31", 20),
+    heijunka_demand("b", "2026-12-31", 10),
   ]
-  // Slots: a1 7 h, a2 14 h; b1 3.5 h, b2 7 h, b3 10.5 h. a1 and b2 tie on
-  // the slot, and a is due first.
+  // 70 h left. a: 2 Pieces, slots 17.5 h and 52.5 h. b: 4 Pieces, slots
+  // 8.75 h, 26.25 h, 43.75 h and 61.25 h.
   let sequence =
     heijunka.sequence(
       [
-        waiting("a1", "a", 1, 1, None),
-        waiting("a2", "a", 2, 2, None),
-        waiting("b1", "b", 3, 1, None),
-        waiting("b2", "b", 4, 2, None),
-        waiting("b3", "b", 5, 3, None),
+        waiting("a1", "a", 1, None),
+        waiting("a2", "a", 2, None),
+        waiting("b1", "b", 3, None),
+        waiting("b2", "b", 4, None),
+        waiting("b3", "b", 5, None),
+        waiting("b4", "b", 6, None),
       ],
       demands,
     )
-  assert ids(sequence) == ["b1", "a1", "b2", "b3", "a2"]
+  assert ids(sequence) == ["b1", "a1", "b2", "b3", "a2", "b4"]
+}
+
+/// Regression: absolute slots (n Takt Times after the start) put every Piece
+/// of a late Demand ahead of the others, in one block.
+pub fn a_late_demand_gets_more_slots_but_stays_mixed_test() {
+  let demands = [
+    heijunka_demand("late", "2026-11-12", 5),
+    heijunka_demand("soon", "2026-11-18", 11),
+    heijunka_demand("later", "2026-12-02", 25),
+  ]
+  let pieces =
+    list.flatten([
+      list.map([1, 2, 3, 4, 5], fn(i) { #("late", i) }),
+      list.map([1, 2, 3], fn(i) { #("soon", i) }),
+      list.map([1, 2, 3, 4, 5, 6], fn(i) { #("later", i) }),
+    ])
+    |> list.index_map(fn(piece, arrived) {
+      let #(demand, i) = piece
+      waiting(demand <> int.to_string(i), demand, arrived, None)
+    })
+  assert ids(heijunka.sequence(pieces, demands))
+    == [
+      "late1", "late2", "soon1", "later1", "late3", "late4", "late5", "soon2",
+      "later2", "soon3", "later3", "later4", "later5", "later6",
+    ]
 }
 
 pub fn the_heijunka_sequence_ends_a_tie_first_in_first_out_test() {
@@ -994,7 +1012,7 @@ pub fn the_heijunka_sequence_ends_a_tie_first_in_first_out_test() {
   ]
   let sequence =
     heijunka.sequence(
-      [waiting("b1", "b", 2, 1, None), waiting("a1", "a", 1, 1, None)],
+      [waiting("b1", "b", 2, None), waiting("a1", "a", 1, None)],
       demands,
     )
   assert ids(sequence) == ["a1", "b1"]
@@ -1005,9 +1023,9 @@ pub fn urgent_pieces_lead_the_heijunka_sequence_in_their_order_test() {
   let sequence =
     heijunka.sequence(
       [
-        waiting("a1", "a", 1, 1, None),
-        waiting("a2", "a", 2, 2, Some(2)),
-        waiting("a3", "a", 3, 3, Some(1)),
+        waiting("a1", "a", 1, None),
+        waiting("a2", "a", 2, Some(2)),
+        waiting("a3", "a", 3, Some(1)),
       ],
       demands,
     )
@@ -1017,11 +1035,11 @@ pub fn urgent_pieces_lead_the_heijunka_sequence_in_their_order_test() {
 pub fn a_reorder_shows_what_each_demand_gains_and_loses_test() {
   let demands = [
     heijunka_demand("a", "2026-12-01", 10),
-    heijunka_demand("b", "2026-12-31", 20),
+    Demand(..heijunka_demand("b", "2026-12-31", 10), pieces_asked: 20),
   ]
   let before =
     heijunka.sequence(
-      [waiting("a1", "a", 1, 1, None), waiting("b2", "b", 2, 2, None)],
+      [waiting("a1", "a", 1, None), waiting("b2", "b", 2, None)],
       demands,
     )
   let after = heijunka.make_urgent(before, "b2")

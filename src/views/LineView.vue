@@ -28,7 +28,7 @@ const {
   closeAndon,
 } = useLine()
 
-const { role, canActAs } = useWorkspaces()
+const { role, canActAs, current } = useWorkspaces()
 
 const stale = computed(
   () => new Set((line.value?.stale ?? []).map((one) => `${one.kind}:${one.id}`)),
@@ -249,6 +249,7 @@ const taktLabel = computed(() => {
                 :bottleneck="bottleneckOf(station.id)"
                 :takt-hours="line?.taktTimeHours ?? 0"
                 :can-act-as="canActAs"
+                :own-team-member="current?.teamMember"
                 @andon="(who) => run(() => raiseAndon(station.id, who))"
                 @close-andon="(who) => run(() => closeAndon(station.id, who))"
                 @pull="(who) => run((why) => pull(station.id, who, why))"
