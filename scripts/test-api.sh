@@ -51,8 +51,8 @@ check "every Takt Time is a positive number of hours" assert_json \
   'all(.taktTimeHours > 0)' "$demands"
 check "an Andon is raised exactly when the Takt Gap is a whole Piece behind" \
   assert_json 'all(.andon == (.taktGap <= -1))' "$demands"
-check "no Demand reports more Pieces produced than asked" assert_json \
-  'all(.piecesProduced <= .piecesAsked)' "$demands"
+check "no Demand reports more Pieces deployed than asked" assert_json \
+  'all(.piecesDeployed <= .piecesAsked)' "$demands"
 
 line=$(curl -fsS "$BASE/api/line")
 check "the Value Stream has Work Stations" assert_json \

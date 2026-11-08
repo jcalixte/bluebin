@@ -28,10 +28,10 @@ const behind = computed(() => demands.value.filter((d) => d.andon).length)
 const pieces = computed(() =>
   demands.value.reduce(
     (total, d) => ({
-      produced: total.produced + d.piecesProduced,
+      deployed: total.deployed + d.piecesDeployed,
       asked: total.asked + d.piecesAsked,
     }),
-    { produced: 0, asked: 0 },
+    { deployed: 0, asked: 0 },
   ),
 )
 </script>
@@ -67,10 +67,8 @@ const pieces = computed(() =>
               {{ labels.pieces }}
             </dt>
             <dd class="text-2xl font-semibold tabular-nums">
-              {{ pieces.produced }}
-              <span class="text-sm font-normal opacity-70">
-                of {{ pieces.asked }} in production
-              </span>
+              {{ pieces.deployed }}
+              <span class="text-sm font-normal opacity-70"> of {{ pieces.asked }} deployed </span>
             </dd>
           </div>
         </dl>

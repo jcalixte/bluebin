@@ -34,11 +34,11 @@ const expected = computed(() => round(timeShare.value * props.demand.piecesAsked
 const percentOf = (pieces: number) =>
   props.demand.piecesAsked === 0 ? 0 : Math.min(100, (pieces / props.demand.piecesAsked) * 100)
 
-const producedPercent = computed(() => percentOf(props.demand.piecesProduced))
+const deployedPercent = computed(() => percentOf(props.demand.piecesDeployed))
 const taktPercent = computed(() => timeShare.value * 100)
 
-/** The Pieces the Takt Time asked for by now and that are not in production. */
-const owedPercent = computed(() => Math.max(0, taktPercent.value - producedPercent.value))
+/** The Pieces the Takt Time asked for by now and that are not deployed yet. */
+const owedPercent = computed(() => Math.max(0, taktPercent.value - deployedPercent.value))
 
 const ticks = computed(() => {
   const asked = props.demand.piecesAsked
@@ -75,7 +75,7 @@ const forecast = computed(() => {
 
 const barLabel = computed(
   () =>
-    `${props.demand.piecesProduced} of ${props.demand.piecesAsked} Pieces in production. ` +
+    `${props.demand.piecesDeployed} of ${props.demand.piecesAsked} Pieces deployed. ` +
     `The Takt Time asks for ${expected.value} by now.`,
 )
 </script>
@@ -106,7 +106,7 @@ const barLabel = computed(
           </span>
         </p>
         <p v-else class="mt-2 text-sm opacity-70">
-          No forecast yet: no {{ labels.piece }} produced
+          No forecast yet: no {{ labels.piece }} deployed
         </p>
         <p class="mt-1 text-xs opacity-70">
           Takt Time <span class="font-medium tabular-nums">{{ taktLabel }}</span> per Piece
@@ -122,13 +122,13 @@ const barLabel = computed(
           >
             <div
               class="absolute inset-y-0 left-0 bg-primary"
-              :style="{ width: `${producedPercent}%` }"
+              :style="{ width: `${deployedPercent}%` }"
             />
             <div
               v-if="owedPercent > 0"
               class="owed absolute inset-y-0"
               :class="status === 'andon' ? 'text-error' : 'text-warning-ink'"
-              :style="{ left: `${producedPercent}%`, width: `${owedPercent}%` }"
+              :style="{ left: `${deployedPercent}%`, width: `${owedPercent}%` }"
             />
             <div
               v-if="ticks > 0"
@@ -151,8 +151,8 @@ const barLabel = computed(
           <span class="flex items-center gap-1.5">
             <span class="size-2.5 rounded-xs bg-primary" />
             <span>
-              <strong class="font-semibold">{{ demand.piecesProduced }}</strong>
-              <span class="opacity-70">/{{ demand.piecesAsked }} in production</span>
+              <strong class="font-semibold">{{ demand.piecesDeployed }}</strong>
+              <span class="opacity-70">/{{ demand.piecesAsked }} deployed</span>
             </span>
           </span>
           <span class="flex items-center gap-1.5">

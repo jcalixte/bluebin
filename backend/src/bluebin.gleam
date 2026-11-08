@@ -778,7 +778,7 @@ fn route(
     _, ["api", "backlog", "urgent"] -> make_urgent(request, database)
     _, ["api", "pull"] -> pull(request, database, act_as)
     _, ["api", "finish"] -> finish(request, database)
-    _, ["api", "deliver"] -> deliver(request, database)
+    _, ["api", "deploy"] -> deploy(request, database)
     _, ["api", "rework"] -> raise_rework(request, database)
     _, ["api", "rework", "repair"] -> repair_rework(request, database)
     _, ["api", "andons"] -> andons(database)
@@ -1298,7 +1298,7 @@ fn finish(request: wisp.Request, database: String) -> wisp.Response {
   )
 }
 
-fn deliver(request: wisp.Request, database: String) -> wisp.Response {
+fn deploy(request: wisp.Request, database: String) -> wisp.Response {
   use piece <- require_body(
     request,
     decode.field("piece", decode.string, decode.success),
@@ -1306,7 +1306,7 @@ fn deliver(request: wisp.Request, database: String) -> wisp.Response {
   )
   flow_response(
     db.with_connection_at(database, fn(connection) {
-      flow.deliver(connection, piece)
+      flow.deploy(connection, piece)
     }),
   )
 }

@@ -104,7 +104,7 @@ const rules = [
   },
   {
     title: "Finishing beats starting",
-    text: "Across the Line, the Work Station nearest to production works first. Rework comes before new work, and the oldest Kanban comes before a new one.",
+    text: "Across the Line, the Work Station nearest to Deployment works first. Rework comes before new work, and the oldest Kanban comes before a new one.",
   },
   {
     title: "Help Downstream",

@@ -256,6 +256,11 @@ fn seeded(run: fn(sqlight.Connection) -> a) -> a {
   run(connection)
 }
 
+fn exec(connection: sqlight.Connection, sql: String) -> Nil {
+  let assert Ok(Nil) = sqlight.exec(sql, connection)
+  Nil
+}
+
 fn one(connection: sqlight.Connection, sql: String) -> String {
   let assert Ok([value]) =
     sqlight.query(
@@ -274,7 +279,7 @@ fn last_weeks(connection: sqlight.Connection) -> measures.Measures {
   found
 }
 
-pub fn every_produced_piece_of_the_seed_is_measured_exactly_test() {
+pub fn every_deployed_piece_of_the_seed_is_measured_exactly_test() {
   use connection <- seeded()
   let found = last_weeks(connection)
   assert list.length(found.pieces) == 11
@@ -285,6 +290,38 @@ pub fn every_produced_piece_of_the_seed_is_measured_exactly_test() {
   })
   let assert Ok(web) = list.find(found.stations, fn(s) { s.id == "ws-web" })
   assert list.length(web.passes) == 11
+}
+
+pub fn the_lead_time_ends_at_the_release_test() {
+  use connection <- seeded()
+  let measured = fn() {
+    let assert Ok(piece) =
+      list.find(last_weeks(connection).pieces, fn(p) { p.id == "p-checkout-7" })
+    piece.span
+  }
+  let at_deployment = measured()
+  // Held for 12 hours after its Deployment, then released.
+  exec(
+    connection,
+    "update piece set released_at =
+       strftime('%Y-%m-%dT%H:%M:%SZ', deployed_at, '+12 hours')
+     where id = 'p-checkout-7'",
+  )
+  let held = measured()
+  assert held.touch == at_deployment.touch
+  assert held.stagnation == at_deployment.stagnation + 12 * hour
+  assert measures.lead(held) == held.touch + held.stagnation
+}
+
+pub fn a_held_piece_has_no_lead_time_yet_test() {
+  use connection <- seeded()
+  exec(
+    connection,
+    "update piece set released_at = null where id = 'p-checkout-7'",
+  )
+  let found = last_weeks(connection)
+  assert !list.any(found.pieces, fn(p) { p.id == "p-checkout-7" })
+  assert list.length(found.pieces) == 10
 }
 
 pub fn the_seed_gets_a_replenishment_time_and_a_suggestion_test() {

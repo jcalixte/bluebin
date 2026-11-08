@@ -4,13 +4,13 @@ export type Demand = {
   client: string
   dueOn: string
   piecesAsked: number
-  piecesProduced: number
+  piecesDeployed: number
   workingDaysTotal: number
   workingDaysElapsed: number
   taktTimeHours: number
   taktGap: number
   andon: boolean
-  /** `YYYY-MM-DD`; null until a Piece of the Demand reached production. */
+  /** `YYYY-MM-DD`; null until a Piece of the Demand is deployed. */
   forecastOn: string | null
   /** Working days from `dueOn` to `forecastOn`: above 0 is late, 0 or less is on time. */
   forecastLateDays: number | null
@@ -148,7 +148,7 @@ export type Line = {
   bottlenecks: Bottleneck[]
 }
 
-/** `stations` is ordered nearest to production first. */
+/** `stations` is ordered nearest to Deployment first. */
 export type TeamMember = {
   id: string
   name: string
@@ -244,7 +244,7 @@ export type Duration = {
 
 export type TimeView = keyof Duration
 
-/** Averages per Piece that reached production in the period. */
+/** Averages per Piece released in the period. */
 export type PieceMeasures = {
   count: number
   leadTime: Duration | null
@@ -261,7 +261,7 @@ export type DemandMeasures = {
   leadTime: Duration | null
   touchTime: Duration | null
   stagnationTime: Duration | null
-  /** The Demand's own Lead Time: null until its last Piece reached production. */
+  /** The Demand's own Lead Time: null until its last Piece is released. */
   demandLeadTime: Duration | null
 }
 

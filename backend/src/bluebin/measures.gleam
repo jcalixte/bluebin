@@ -77,7 +77,7 @@ type Replay {
 /// Replays the flow events in order into the Passes of every Piece and
 /// Sub-Piece. A Piece is in hand from its pull (or Assembly, or resume) to its
 /// pause or its Blue Bin; it leaves the Blue Bin on the next pull from there,
-/// on its Split, on its Assembly (for its Sub-Pieces) or in production.
+/// on its Split, on its Assembly (for its Sub-Pieces) or at its Deployment.
 pub fn replay(
   events: List(Event),
   children: Dict(String, List(String)),
@@ -157,8 +157,7 @@ fn step(
           Some(_) -> open
         }
       })
-    "piece_split", _ | "piece_reached_production", _ ->
-      leave_any(state, unit, at)
+    "piece_split", _ | "piece_deployed", _ -> leave_any(state, unit, at)
     _, _ -> state
   }
 }
@@ -411,7 +410,7 @@ pub type PieceMeasure {
   PieceMeasure(
     id: String,
     demand: String,
-    produced: Int,
+    released: Int,
     span: Span,
     backlog: Option(Span),
   )
@@ -486,7 +485,7 @@ type PieceRow {
     parent: Option(String),
     demand: String,
     entered: Int,
-    produced: Option(Int),
+    released: Option(Int),
   )
 }
 
@@ -530,13 +529,13 @@ pub fn load(
       reworks_by_unit: group(reworks, fn(rework) { rework.0 })
         |> dict.map_values(fn(_, found) { list.map(found, fn(one) { one.1 }) }),
     )
-  let produced = piece_measures(context, pieces)
+  let released = piece_measures(context, pieces)
   let #(andon, andon_working) =
     stops |> list.map(fn(stop) { stop.1 }) |> union |> measured(context, _)
   Ok(Measures(
     period:,
-    pieces: produced,
-    demands: demand_measures(context, demands, pieces, produced),
+    pieces: released,
+    demands: demand_measures(context, demands, pieces, released),
     stations: station_measures(
       context,
       stations,
@@ -646,15 +645,15 @@ fn touches(context: Context, piece: String) -> List(Interval) {
   })
 }
 
-/// The Pieces that reached production in the period.
+/// The Pieces released in the period. The Lead Time ends at the Release.
 fn piece_measures(
   context: Context,
   pieces: List(PieceRow),
 ) -> List(PieceMeasure) {
   list.filter_map(pieces, fn(piece) {
-    case piece.parent, piece.produced {
-      None, Some(produced) ->
-        case in_period(context, produced) {
+    case piece.parent, piece.released {
+      None, Some(released) ->
+        case in_period(context, released) {
           True -> {
             let first_pull =
               lookup(context.passes_by_unit, piece.id)
@@ -663,11 +662,11 @@ fn piece_measures(
             Ok(PieceMeasure(
               id: piece.id,
               demand: piece.demand,
-              produced:,
+              released:,
               span: span(
                 context.calendar,
                 piece.entered,
-                produced,
+                released,
                 touches(context, piece.id),
               ),
               backlog: first_pull
@@ -684,21 +683,21 @@ fn piece_measures(
   })
 }
 
-/// The Demands with a Piece produced in the period. The Demand Lead Time
-/// shows once every Piece of the Demand is in production.
+/// The Demands with a Piece released in the period. The Demand Lead Time
+/// shows once every Piece of the Demand is released.
 fn demand_measures(
   context: Context,
   demands: List(DemandRow),
   pieces: List(PieceRow),
-  produced: List(PieceMeasure),
+  released: List(PieceMeasure),
 ) -> List(DemandMeasure) {
-  let produced_by_demand = group(produced, fn(piece) { piece.demand })
+  let released_by_demand = group(released, fn(piece) { piece.demand })
   let pieces_by_demand =
     pieces
     |> list.filter(fn(piece) { piece.parent == None })
     |> group(fn(piece) { piece.demand })
   list.filter_map(demands, fn(demand) {
-    case lookup(produced_by_demand, demand.id) {
+    case lookup(released_by_demand, demand.id) {
       [] -> Error(Nil)
       measured ->
         Ok(DemandMeasure(
@@ -717,9 +716,9 @@ fn demand_lead(context: Context, all: List(PieceRow)) -> Option(Span) {
   let end = context.period.end
   let last =
     all
-    |> list.map(fn(piece) { option.unwrap(piece.produced, end) })
+    |> list.map(fn(piece) { option.unwrap(piece.released, end) })
     |> list.fold(0, int.max)
-  case list.all(all, fn(piece) { piece.produced != None }) && last < end {
+  case list.all(all, fn(piece) { piece.released != None }) && last < end {
     True -> {
       let first =
         all
@@ -899,7 +898,7 @@ select cast(strftime('%s', at) as integer), kind, piece_id,
   from flow_event
  where kind in ('piece_pulled', 'piece_assembled', 'piece_paused',
                 'piece_resumed', 'piece_put_in_blue_bin', 'piece_split',
-                'piece_reached_production', 'kanban_sent', 'kanban_spent')
+                'piece_deployed', 'kanban_sent', 'kanban_spent')
  order by at, id
 "
 
@@ -907,7 +906,7 @@ const pieces_sql =
   "
 select p.id, p.parent_id, p.demand_id,
        cast(strftime('%s', coalesce(p.entered_at, d.started_on)) as integer),
-       cast(strftime('%s', p.produced_at) as integer)
+       cast(strftime('%s', p.released_at) as integer)
   from piece p join demand d on d.id = p.demand_id
 "
 
@@ -933,12 +932,12 @@ select id, name, branch, position from work_station
 
 const demands_sql = "select id, label, client from demand order by due_on"
 
-/// A Demand is delivered on the day of its last Piece in production.
+/// A Demand is delivered on the day of the Release of its last Piece.
 const on_time_sql =
   "
 select count(*), coalesce(sum(delivered_on <= due_on), 0)
   from (select d.due_on,
-               (select date(max(p.produced_at)) from piece p
+               (select date(max(p.released_at)) from piece p
                  where p.demand_id = d.id and p.parent_id is null) as delivered_on
           from demand d
          where d.state = 'delivered')
@@ -971,8 +970,8 @@ fn piece_decoder() -> decode.Decoder(PieceRow) {
   use parent <- decode.field(1, decode.optional(decode.string))
   use demand <- decode.field(2, decode.string)
   use entered <- decode.field(3, decode.int)
-  use produced <- decode.field(4, decode.optional(decode.int))
-  decode.success(PieceRow(id:, parent:, demand:, entered:, produced:))
+  use released <- decode.field(4, decode.optional(decode.int))
+  decode.success(PieceRow(id:, parent:, demand:, entered:, released:))
 }
 
 /// A Rework of a Piece, or an Andon of a Work Station, with its interval.

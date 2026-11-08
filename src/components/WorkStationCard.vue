@@ -24,7 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   pull: [teamMember: string | undefined]
   finish: [piece: string]
-  deliver: [piece: string]
+  deploy: [piece: string]
   rework: [piece: string]
   repair: [rework: string]
   assign: [kind: "piece" | "rework", id: string, teamMember: string]
@@ -63,7 +63,7 @@ function handOver(kind: "piece" | "rework", id: string, event: Event) {
   }
 }
 
-/** Finishing beats starting: a Piece nearer to production keeps the Team Member's hands. */
+/** Finishing beats starting: a Piece nearer to Deployment keeps the Team Member's hands. */
 const keptFirst = computed(() => {
   const active = props.activePieces.get(teamMember.value)
   if (!active || active.position < props.station.position) return null
@@ -342,7 +342,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
             <span
               v-if="item.paused"
               class="badge badge-xs badge-warning"
-              title="Paused: its Team Member finishes a Rework or a Piece nearer to production first"
+              title="Paused: its Team Member finishes a Rework or a Piece nearer to Deployment first"
             >
               paused
             </span>
@@ -408,9 +408,9 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 v-if="last && bin.id && canActAs()"
                 class="btn btn-xs"
                 :disabled="busy"
-                @click="$emit('deliver', bin.id)"
+                @click="$emit('deploy', bin.id)"
               >
-                Deliver
+                Deploy
               </button>
             </template>
             <span v-else class="sr-only">Empty Blue Bin</span>
@@ -427,9 +427,9 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               v-if="last && canActAs()"
               class="btn btn-xs"
               :disabled="busy"
-              @click="$emit('deliver', extra.id)"
+              @click="$emit('deploy', extra.id)"
             >
-              Deliver
+              Deploy
             </button>
           </li>
         </ul>

@@ -85,7 +85,7 @@ function doing(now: NextThing): (reason?: string) => Promise<FlowConfirm | null>
 const rules = [
   { kind: "continue", label: "Finish what is in your hands" },
   { kind: "take_rework", label: "Take a Rework nobody repairs" },
-  { kind: "take_kanban", label: "Pull at a Kanban, nearest to production first" },
+  { kind: "take_kanban", label: "Pull at a Kanban, nearest to Deployment first" },
   { kind: "help_downstream", label: "Help Downstream where the flow is held up" },
   { kind: "wait", label: "Wait" },
 ] as const
@@ -241,7 +241,7 @@ function since(at: string) {
             </p>
             <p v-else-if="next.kind === 'take_kanban'" class="opacity-80">
               A Kanban waits there, and a Piece waits upstream. It is your Work Station nearest to
-              production.
+              Deployment.
             </p>
             <p v-else-if="next.kind === 'help_downstream'" class="opacity-80">
               It holds up the flow: {{ next.because }}. Do not start a new Piece.
@@ -383,7 +383,7 @@ function since(at: string) {
 
         <section aria-labelledby="stations-title">
           <h3 id="stations-title" class="text-xs font-semibold uppercase tracking-wide opacity-70">
-            My Work Stations, nearest to production first
+            My Work Stations, nearest to Deployment first
           </h3>
           <div class="mt-3 grid gap-3">
             <article

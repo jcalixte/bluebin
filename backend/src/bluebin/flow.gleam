@@ -211,7 +211,7 @@ pub fn finish(
   )
 }
 
-pub fn deliver(
+pub fn deploy(
   connection: sqlight.Connection,
   piece_id: String,
 ) -> Result(Flowed, FlowError) {
@@ -223,8 +223,9 @@ pub fn deliver(
     write(
       connection,
       "update piece
-        set state = 'produced', station_id = null, assignee = null,
-            produced_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+        set state = 'deployed', station_id = null, assignee = null,
+            deployed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+            released_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
             since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1",
       [sqlight.text(piece.id)],
@@ -235,9 +236,16 @@ pub fn deliver(
 
   use _ <- result.try(record_event(
     connection,
-    "piece_reached_production",
+    "piece_deployed",
     Some(piece.id),
     json.object([#("station", json.string(piece.station_id))]),
+  ))
+
+  use _ <- result.try(record_event(
+    connection,
+    "piece_released",
+    Some(piece.id),
+    json.object([]),
   ))
 
   use _ <- result.try(deliver_demand_when_complete(connection, piece.id))
@@ -261,7 +269,7 @@ fn deliver_demand_when_complete(
         and state = 'active'
         and (select count(*) from piece p
               where p.demand_id = demand.id and p.parent_id is null
-                and p.state = 'produced') >= pieces_asked
+                and p.released_at is not null) >= pieces_asked
      returning id",
     [sqlight.text(piece_id)],
     decode.at([0], decode.string),
@@ -622,7 +630,7 @@ fn start_next_rework(
 }
 
 /// A Team Member transforms one Piece at a time. When a Piece comes into their
-/// hands, the one nearest to production stays active and the others pause; on
+/// hands, the one nearest to Deployment stays active and the others pause; on
 /// a tie the newcomer waits. Finishing beats starting.
 fn keep_nearest_active(
   connection: sqlight.Connection,
@@ -1124,7 +1132,7 @@ fn load_station(
   )
 }
 
-/// The position of the last Work Station, whose Blue Bin feeds production.
+/// The position of the last Work Station, whose Blue Bin feeds the Deployment.
 fn last_position(connection: sqlight.Connection) -> Result(Int, FlowError) {
   one(
     connection,

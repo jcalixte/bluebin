@@ -20,7 +20,7 @@ const {
   renameStep,
   pull,
   finish,
-  deliver,
+  deploy,
   raiseRework,
   repairRework,
   assign,
@@ -254,7 +254,7 @@ const taktLabel = computed(() => {
                 @close-andon="(who) => run(() => closeAndon(station.id, who))"
                 @pull="(who) => run((why) => pull(station.id, who, why))"
                 @finish="(piece) => run((why) => finish(station.id, piece, why))"
-                @deliver="(piece) => run(() => deliver(piece))"
+                @deploy="(piece) => run(() => deploy(piece))"
                 @rework="(piece) => openRework(station, piece)"
                 @repair="(rework) => run(() => repairRework(rework))"
                 @assign="(kind, id, teamMember) => run(() => assign(kind, id, teamMember))"

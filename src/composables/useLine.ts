@@ -32,7 +32,7 @@ export function useLine() {
   const finish = (station: string, piece: string, reason?: string) =>
     act("/api/finish", { station, piece, reason })
 
-  const deliver = (piece: string) => act("/api/deliver", { piece })
+  const deploy = (piece: string) => act("/api/deploy", { piece })
 
   const raiseRework = (station: string, piece: string, madeBy: string, description: string) =>
     act("/api/rework", { station, piece, madeBy, description })
@@ -76,7 +76,7 @@ export function useLine() {
     renameStep,
     pull,
     finish,
-    deliver,
+    deploy,
     raiseRework,
     repairRework,
     assign,

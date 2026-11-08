@@ -119,7 +119,7 @@ fn put_in_last_blue_bin(connection: sqlight.Connection, piece: String) -> Nil {
      where id = '" <> piece <> "'")
 }
 
-pub fn the_last_piece_in_production_delivers_the_demand_test() {
+pub fn the_last_deployed_piece_delivers_the_demand_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
     demand.create(connection, "Search", "Retail", today(connection), 2)
@@ -129,12 +129,12 @@ pub fn the_last_piece_in_production_delivers_the_demand_test() {
     "select count(*) from flow_event where kind = 'demand_delivered'"
 
   put_in_last_blue_bin(connection, pieces <> "-1")
-  let assert Ok(_) = flow.deliver(connection, pieces <> "-1")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-1")
   assert text(connection, state) == "active"
   assert count(connection, delivered) == 0
 
   put_in_last_blue_bin(connection, pieces <> "-2")
-  let assert Ok(_) = flow.deliver(connection, pieces <> "-2")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-2")
   assert text(connection, state) == "delivered"
   assert count(connection, delivered) == 1
   let assert Ok(active) = demand.list_active(connection)
@@ -144,9 +144,49 @@ pub fn the_last_piece_in_production_delivers_the_demand_test() {
 pub fn a_piece_of_an_unfinished_demand_does_not_deliver_it_test() {
   use connection <- with_seeded_database()
   put_in_last_blue_bin(connection, "p-billing-3")
-  let assert Ok(_) = flow.deliver(connection, "p-billing-3")
+  let assert Ok(_) = flow.deploy(connection, "p-billing-3")
   assert text(connection, "select state from demand where id = 'd-billing'")
     == "active"
+}
+
+pub fn deploying_a_piece_releases_it_at_the_same_moment_test() {
+  use connection <- with_seeded_database()
+  put_in_last_blue_bin(connection, "p-billing-3")
+  let assert Ok(_) = flow.deploy(connection, "p-billing-3")
+  assert count(
+      connection,
+      "select count(*) from piece where id = 'p-billing-3'
+         and released_at is not null and released_at = deployed_at",
+    )
+    == 1
+  assert count(
+      connection,
+      "select count(*) from flow_event
+        where kind = 'piece_released' and piece_id = 'p-billing-3'",
+    )
+    == 1
+}
+
+pub fn a_demand_is_delivered_at_the_release_of_its_last_piece_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(id) =
+    demand.create(connection, "Search", "Retail", today(connection), 2)
+  let pieces = "p-" <> string.drop_start(id, 2)
+  put_in_last_blue_bin(connection, pieces <> "-1")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-1")
+  // The first Piece is held: deployed, not released yet.
+  exec(connection, "update piece set released_at = null
+     where id = '" <> pieces <> "-1'")
+
+  put_in_last_blue_bin(connection, pieces <> "-2")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-2")
+  assert text(connection, "select state from demand where id = '" <> id <> "'")
+    == "active"
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'demand_delivered'",
+    )
+    == 0
 }
 
 /// Friday 2026-11-06, day 20_763 since 1970-01-01.
@@ -156,14 +196,14 @@ fn office() -> calendar.Calendar {
   Calendar(days: [1, 2, 3, 4, 5], start: 9 * 60, end: 16 * 60, holidays: [])
 }
 
-fn a_demand(asked: Int, produced: Int, elapsed: Int, due_on: String) -> Demand {
+fn a_demand(asked: Int, deployed: Int, elapsed: Int, due_on: String) -> Demand {
   Demand(
     id: "d-test",
     label: "Test",
     client: "Client",
     due_on:,
     pieces_asked: asked,
-    pieces_produced: produced,
+    pieces_deployed: deployed,
     working_days_total: 20,
     working_days_elapsed: elapsed,
     hours_per_day: 7.0,
@@ -195,7 +235,7 @@ pub fn the_remaining_working_days_round_up_test() {
   // 3 Pieces in 2 days: 7 left need 4.7 days, so 5.
   assert demand.remaining_working_days(a_demand(10, 3, 2, "2026-12-31"))
     == Some(5)
-  // A Piece produced on a day off still gives a pace.
+  // A Piece deployed on a day off still gives a pace.
   assert demand.remaining_working_days(a_demand(2, 1, 0, "2026-12-31"))
     == Some(1)
 }
@@ -217,6 +257,8 @@ pub fn no_forecast_before_the_first_piece_or_years_away_test() {
     == None
 }
 
+/// On time is judged at the Release: Late was deployed before its due date
+/// but released after it.
 pub fn the_on_time_share_counts_the_demands_delivered_in_the_period_test() {
   use connection <- with_seeded_database()
   exec(
@@ -225,10 +267,14 @@ pub fn the_on_time_share_counts_the_demands_delivered_in_the_period_test() {
        ('d-early', 'Early', 'A', '2026-09-01', '2026-10-10', 1, 'delivered'),
        ('d-late', 'Late', 'B', '2026-09-01', '2026-10-03', 1, 'delivered'),
        ('d-before', 'Before', 'C', '2026-08-01', '2026-09-30', 1, 'delivered');
-     insert into piece (id, demand_id, reference, state, produced_at) values
-       ('p-early', 'd-early', 'US-1', 'produced', '2026-10-10T15:00:00Z'),
-       ('p-late', 'd-late', 'US-1', 'produced', '2026-10-05T10:00:00Z'),
-       ('p-before', 'd-before', 'US-1', 'produced', '2026-09-20T10:00:00Z');",
+     insert into piece
+       (id, demand_id, reference, state, deployed_at, released_at) values
+       ('p-early', 'd-early', 'US-1', 'deployed',
+        '2026-10-09T15:00:00Z', '2026-10-10T15:00:00Z'),
+       ('p-late', 'd-late', 'US-1', 'deployed',
+        '2026-10-02T10:00:00Z', '2026-10-05T10:00:00Z'),
+       ('p-before', 'd-before', 'US-1', 'deployed',
+        '2026-09-20T10:00:00Z', '2026-09-20T10:00:00Z');",
   )
   let assert Ok(found) = measures.load(connection, "2026-10-01", "2026-10-31")
   assert found.delivered == 2

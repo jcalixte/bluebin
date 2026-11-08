@@ -101,7 +101,7 @@ const summary = computed(() => {
   ]
   return [
     {
-      label: "Pieces reached production",
+      label: "Pieces released",
       before: String(a.count),
       after: String(b.count),
       change: countChange(a.count, b.count),
@@ -215,8 +215,8 @@ const deviationList = computed(() =>
       <div>
         <h2 class="text-xl font-semibold">Measures</h2>
         <p class="text-sm opacity-70">
-          Lead Time, Touch Time and Stagnation Time of the Pieces that reached production, before
-          and after a change
+          Lead Time, Touch Time and Stagnation Time of the Pieces released, before and after a
+          change
         </p>
       </div>
       <div class="tabs tabs-box tabs-sm bg-base-100" role="group" aria-label="Time view">
@@ -341,8 +341,8 @@ const deviationList = computed(() =>
       <div class="card border border-base-300 bg-base-100 shadow-sm">
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Demand</h3>
-          <p class="text-sm opacity-70">Averages per Piece that reached production.</p>
-          <p v-if="demands.length === 0" class="opacity-70">No Piece reached production.</p>
+          <p class="text-sm opacity-70">Averages per Piece released.</p>
+          <p v-if="demands.length === 0" class="opacity-70">No Piece released.</p>
           <div v-else class="overflow-x-auto">
             <table class="table table-sm">
               <thead>
@@ -394,8 +394,8 @@ const deviationList = computed(() =>
             </table>
           </div>
           <p v-if="showDemandLeadTime" class="text-xs opacity-60">
-            Demand Lead Time is the Lead Time of the whole Demand, known once its last Piece reached
-            production.
+            Demand Lead Time is the Lead Time of the whole Demand, known once its last Piece is
+            released.
           </p>
         </div>
       </div>

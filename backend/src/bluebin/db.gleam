@@ -12,9 +12,9 @@ import sqlight
 /// volume, or the data is lost on redeploy.
 pub const workspaces_directory = "data/workspaces"
 
-/// The schema of a new database. Raise `schema_version` when it changes, and
-/// add the step that brings a database from the previous version.
-const schema_version = 1
+/// The schema of a new database. Raise `schema_version` when it changes: a
+/// database of another version is refused, never migrated.
+const schema_version = 2
 
 /// Parents before children. `foreign_keys` holds only on the connection that
 /// runs this schema and the seed, and only outside a transaction: `ready`
@@ -60,7 +60,8 @@ create table piece (
   demand_id   text not null references demand(id),
   reference   text not null,
   state       text not null,
-  produced_at text,
+  deployed_at text,
+  released_at text,
   station_id  text references work_station(id),
   assignee    text references team_member(id),
   since       text,
@@ -165,9 +166,9 @@ insert or ignore into piece_pass (piece_id, station_id, team_member_id, at)
 select p.id, w.id,
        (select sp.team_member_id from station_team_member sp
          where sp.station_id = w.id order by sp.rowid limit 1),
-       p.produced_at
+       p.deployed_at
   from piece p, work_station w
- where p.state = 'produced' and p.produced_at is not null;
+ where p.state = 'deployed' and p.deployed_at is not null;
 
 insert or ignore into piece_pass (piece_id, station_id, team_member_id, at)
 select p.id, w.id,
@@ -209,29 +210,36 @@ insert into demand (id, label, client, started_on, due_on, pieces_asked, state) 
   ('d-billing',  'Billing export',    'Finance',   date('now', '-3 day'),  date('now', '+25 day'),  8, 'active');
 
 with recursive n(i) as (select 1 union all select i + 1 from n where i < 12)
-insert into piece (id, demand_id, reference, state, produced_at)
+insert into piece (id, demand_id, reference, state, deployed_at)
 select 'p-checkout-' || i, 'd-checkout', 'US-' || i,
-  case when i <= 7 then 'produced' when i <= 9 then 'in_flow' else 'backlog' end,
+  case when i <= 7 then 'deployed' when i <= 9 then 'in_flow' else 'backlog' end,
   case when i <= 7 then strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-' || (8 - i) || ' day') end
 from n;
 
 with recursive n(i) as (select 1 union all select i + 1 from n where i < 10)
-insert into piece (id, demand_id, reference, state, produced_at)
+insert into piece (id, demand_id, reference, state, deployed_at)
 select 'p-offline-' || i, 'd-offline', 'US-' || i,
-  case when i <= 3 then 'produced' when i <= 5 then 'in_flow' else 'backlog' end,
+  case when i <= 3 then 'deployed' when i <= 5 then 'in_flow' else 'backlog' end,
   case when i <= 3 then strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-' || (12 - 3 * i) || ' day') end
 from n;
 
 with recursive n(i) as (select 1 union all select i + 1 from n where i < 8)
-insert into piece (id, demand_id, reference, state, produced_at)
+insert into piece (id, demand_id, reference, state, deployed_at)
 select 'p-billing-' || i, 'd-billing', 'US-' || i,
-  case when i = 1 then 'produced' when i = 2 then 'in_flow' else 'backlog' end,
+  case when i = 1 then 'deployed' when i = 2 then 'in_flow' else 'backlog' end,
   case when i = 1 then strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day') end
 from n;
 
+update piece set released_at = deployed_at where state = 'deployed';
+
 insert into flow_event (at, kind, piece_id, payload)
-select produced_at, 'piece_reached_production', id, null
-from piece where state = 'produced' order by produced_at;
+select at, kind, id, null
+from (select deployed_at as at, 'piece_deployed' as kind, id, 0 as step
+        from piece where state = 'deployed'
+      union all
+      select released_at, 'piece_released', id, 1
+        from piece where state = 'deployed')
+order by at, step;
 "
 
 const seed_line_sql =
@@ -313,18 +321,18 @@ insert into flow_event (at, kind, piece_id, payload)
 select strftime('%Y-%m-%dT%H:%M:%SZ', since, '-1 day'),
        'piece_pulled', id, '{\"station\":\"ws-analysis\",\"from\":null}'
   from piece
- where parent_id is null and state not in ('backlog', 'produced')
+ where parent_id is null and state not in ('backlog', 'deployed')
  order by 1;
 
--- Each produced Piece crossed the whole Line: the trunk, one Sub-Piece
--- per Branch, the Assembly and UAT. Hours count back from its production and
+-- Each deployed Piece crossed the whole Line: the trunk, one Sub-Piece
+-- per Branch, the Assembly and UAT. Hours count back from its Deployment and
 -- stretch a little from one Piece to the next, so the measures vary.
 insert into piece (id, demand_id, reference, state, parent_id, branch)
 select p.id || '-' || lower(b.branch), p.demand_id,
        p.reference || ' · ' || b.branch, 'assembled', p.id, b.branch
   from piece p,
        (select 'Web' as branch union all select 'iOS' union all select 'Android') b
- where p.state = 'produced';
+ where p.state = 'deployed';
 
 with
   step(hours, kind, station, from_station) as (values
@@ -348,20 +356,20 @@ with
     ('Android', 36, 'piece_put_in_blue_bin', 'ws-android', null),
     ('Android', 31, 'piece_pulled', 'ws-qa-android', 'ws-android'),
     ('Android', 25, 'piece_put_in_blue_bin', 'ws-qa-android', null)),
-  history(at_hours, kind, piece_id, station, from_station, produced_at) as (
+  history(at_hours, kind, piece_id, station, from_station, deployed_at) as (
     select s.hours * (1 + (p.rowid % 3) * 0.3), s.kind, p.id, s.station,
-           s.from_station, p.produced_at
+           s.from_station, p.deployed_at
       from piece p, step s
-     where p.state = 'produced'
+     where p.state = 'deployed'
     union all
     select s.hours * (1 + (p.rowid % 3) * 0.3), s.kind, sub.id, s.station,
-           s.from_station, p.produced_at
+           s.from_station, p.deployed_at
       from piece p
       join piece sub on sub.parent_id = p.id
       join branch_step s on s.branch = sub.branch
-     where p.state = 'produced')
+     where p.state = 'deployed')
 insert into flow_event (at, kind, piece_id, payload)
-select strftime('%Y-%m-%dT%H:%M:%SZ', produced_at, '-' || at_hours || ' hours'),
+select strftime('%Y-%m-%dT%H:%M:%SZ', deployed_at, '-' || at_hours || ' hours'),
        kind, piece_id,
        case when kind = 'piece_pulled'
             then json_object('station', station, 'from', from_station)

@@ -20,7 +20,7 @@ pub type Demand {
     client: String,
     due_on: String,
     pieces_asked: Int,
-    pieces_produced: Int,
+    pieces_deployed: Int,
     working_days_total: Int,
     working_days_elapsed: Int,
     hours_per_day: Float,
@@ -53,7 +53,7 @@ select
   d.client,
   d.due_on,
   d.pieces_asked,
-  (select count(*) from piece p where p.demand_id = d.id and p.state = 'produced'),
+  (select count(*) from piece p where p.demand_id = d.id and p.state = 'deployed'),
   (select count(*) from working_day w where w.day >= d.started_on and w.day <= d.due_on),
   (select count(*) from working_day w where w.day >= d.started_on and w.day <= date('now')),
   (select (strftime('%s', '2000-01-01 ' || day_end) - strftime('%s', '2000-01-01 ' || day_start)) / 3600.0
@@ -75,7 +75,7 @@ fn decoder() -> decode.Decoder(Demand) {
   use client <- decode.field(2, decode.string)
   use due_on <- decode.field(3, decode.string)
   use pieces_asked <- decode.field(4, decode.int)
-  use pieces_produced <- decode.field(5, decode.int)
+  use pieces_deployed <- decode.field(5, decode.int)
   use working_days_total <- decode.field(6, decode.int)
   use working_days_elapsed <- decode.field(7, decode.int)
   use hours_per_day <- decode.field(8, decode.float)
@@ -85,7 +85,7 @@ fn decoder() -> decode.Decoder(Demand) {
     client:,
     due_on:,
     pieces_asked:,
-    pieces_produced:,
+    pieces_deployed:,
     working_days_total:,
     working_days_elapsed:,
     hours_per_day:,
@@ -109,7 +109,7 @@ pub fn takt_gap(demand: Demand) -> Float {
       let share =
         int.to_float(demand.working_days_elapsed) /. int.to_float(total)
       let expected = float.min(1.0, share) *. int.to_float(demand.pieces_asked)
-      round_to_tenth(int.to_float(demand.pieces_produced) -. expected)
+      round_to_tenth(int.to_float(demand.pieces_deployed) -. expected)
     }
   }
 }
@@ -123,23 +123,23 @@ pub fn round_to_tenth(value: Float) -> Float {
 }
 
 /// The working days the Demand still needs at its pace so far: Pieces
-/// produced ÷ working days elapsed. None until a Piece is produced.
+/// deployed ÷ working days elapsed. None until a Piece is deployed.
 pub fn remaining_working_days(demand: Demand) -> Option(Int) {
-  case demand.pieces_produced > 0 {
+  case demand.pieces_deployed > 0 {
     False -> None
     True -> {
-      let remaining = int.max(0, demand.pieces_asked - demand.pieces_produced)
+      let remaining = int.max(0, demand.pieces_asked - demand.pieces_deployed)
       let elapsed = int.max(1, demand.working_days_elapsed)
-      // ceil(remaining ÷ (produced ÷ elapsed)), in whole numbers.
+      // ceil(remaining ÷ (deployed ÷ elapsed)), in whole numbers.
       Some(
-        { remaining * elapsed + demand.pieces_produced - 1 }
-        / demand.pieces_produced,
+        { remaining * elapsed + demand.pieces_deployed - 1 }
+        / demand.pieces_deployed,
       )
     }
   }
 }
 
-/// The day the last Piece should reach production, and how many working days
+/// The day the last Piece should be deployed, and how many working days
 /// after the due date that is (≤ 0: on time).
 pub type Forecast {
   Forecast(on: String, late_days: Int)
@@ -186,7 +186,7 @@ pub fn to_json(
       #("client", json.string(demand.client)),
       #("dueOn", json.string(demand.due_on)),
       #("piecesAsked", json.int(demand.pieces_asked)),
-      #("piecesProduced", json.int(demand.pieces_produced)),
+      #("piecesDeployed", json.int(demand.pieces_deployed)),
       #("workingDaysTotal", json.int(demand.working_days_total)),
       #("workingDaysElapsed", json.int(demand.working_days_elapsed)),
       #("taktTimeHours", json.float(round_to_tenth(takt_time_hours(demand)))),

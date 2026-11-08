@@ -22,7 +22,7 @@ pub fn main() -> Nil {
 
 fn a_demand(
   pieces_asked: Int,
-  pieces_produced: Int,
+  pieces_deployed: Int,
   working_days_total: Int,
   working_days_elapsed: Int,
 ) -> Demand {
@@ -32,7 +32,7 @@ fn a_demand(
     client: "Client",
     due_on: "2026-12-31",
     pieces_asked:,
-    pieces_produced:,
+    pieces_deployed:,
     working_days_total:,
     working_days_elapsed:,
     hours_per_day: 7.0,
@@ -127,7 +127,7 @@ fn fingerprint(connection: sqlight.Connection) -> List(Int) {
   |> list.map(fn(table) { count(connection, "select count(*) from " <> table) })
   |> list.append([
     count(connection, "select count(*) from line_step where name like 'Step %'"),
-    count(connection, "select count(*) from piece where state = 'produced'"),
+    count(connection, "select count(*) from piece where state = 'deployed'"),
   ])
 }
 
@@ -371,15 +371,15 @@ pub fn delivering_sends_a_kanban_back_to_the_last_work_station_test() {
      where id = 'p-billing-3'",
   )
 
-  let assert Ok(flowed) = flow.deliver(connection, "p-billing-3")
+  let assert Ok(flowed) = flow.deploy(connection, "p-billing-3")
   assert flowed.kanbans_sent_to == ["ws-uat"]
-  assert state_of(connection, "p-billing-3") == "produced"
+  assert state_of(connection, "p-billing-3") == "deployed"
   assert kanbans_over_empty_blue_bins(connection) == 0
 }
 
-pub fn only_the_last_work_station_delivers_to_production_test() {
+pub fn only_the_last_work_station_deploys_test() {
   use connection <- with_seeded_database()
-  assert flow.deliver(connection, "p-checkout-9") == Error(flow.PieceNotHere)
+  assert flow.deploy(connection, "p-checkout-9") == Error(flow.PieceNotHere)
 }
 
 pub fn every_action_writes_one_flow_event_test() {
@@ -841,7 +841,7 @@ pub fn the_team_member_payload_carries_the_shape_the_screen_reads_test() {
   assert string.contains(text, "\"kind\":\"rework\",\"id\":\"rw-1\"")
   assert string.contains(text, "\"priorityLists\":[{\"station\":\"ws-ios\"")
   let assert Ok(team_members) = assignment.team_members(connection)
-  // Nearest to production first.
+  // Nearest to Deployment first.
   assert list.contains(
     team_members,
     assignment.TeamMember(id: "pe-marc", name: "Marc", stations: [
@@ -1398,7 +1398,7 @@ pub fn a_database_of_another_schema_version_is_refused_test() {
 
 pub fn a_new_database_gets_the_schema_once_test() {
   use connection <- with_seeded_database()
-  assert count(connection, "pragma user_version") == 1
+  assert count(connection, "pragma user_version") == 2
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from line_label") == 1
   assert count(connection, "select count(*) from working_calendar") == 1
