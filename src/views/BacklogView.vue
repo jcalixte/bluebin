@@ -179,7 +179,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                     <th class="font-medium">{{ row.label }}</th>
                     <td v-for="cell in row.cells" :key="cell.day" class="text-center">
                       <span
-                        class="badge badge-sm tabular-nums"
+                        class="badge badge-sm whitespace-nowrap tabular-nums"
                         :class="cell.onPlan ? 'badge-success' : 'badge-error'"
                         :title="`${cell.real} left the Backlog, ${cell.planned} planned`"
                       >

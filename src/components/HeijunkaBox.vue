@@ -40,7 +40,7 @@ const lanes = computed(() => {
 })
 
 const columns = computed(() => ({
-  gridTemplateColumns: `var(--lane-head) repeat(${props.sequence.length}, minmax(0.75rem, 1fr))`,
+  gridTemplateColumns: `var(--lane-head) repeat(${props.sequence.length}, minmax(0.75rem, 2.5rem))`,
 }))
 
 /** A mark on the first position and every fifth, so a position is easy to find. */
@@ -64,7 +64,7 @@ function slotClass(piece: BacklogPiece | null, index: number) {
 </script>
 
 <template>
-  <figure class="heijunka-box overflow-x-auto pb-1">
+  <figure class="heijunka-box block overflow-x-auto pb-1">
     <div class="grid min-w-fit gap-y-1.5">
       <div class="grid items-end gap-x-0.5" :style="columns" aria-hidden="true">
         <span class="sticky left-0 z-10 bg-base-100 pr-3 text-xs opacity-70">Position</span>
