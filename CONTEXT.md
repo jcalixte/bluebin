@@ -66,6 +66,10 @@ _Avoid_: override, exception, violation, bypass
 The act of a Team Member without a Kanban helping the downstream Work Station that holds up the flow, instead of starting new work.
 _Avoid_: swarm, help out, firefighting
 
+**Help the Rework**:
+The act of a Team Member of the Work Station that found a defect joining its open Rework, for example to reproduce the defect or check the repair, instead of starting new work.
+_Avoid_: swarm, pairing, QA support
+
 **Deployment**:
 The moment a complete Piece leaves the last Work Station of the Line and runs in production, even if the Client cannot use it yet.
 _Avoid_: ship, push to prod, delivery, go live
@@ -276,7 +280,7 @@ _Avoid_: hidden Line, secret Line
 - **Rework** pauses the **Piece** that the **Team Member** is transforming upstream
 - A **Piece** never moves backward: the **Work Station** that finds a defect raises **Rework** and names the **Work Station** that made it; a **Team Member** of that **Work Station** comes to repair the **Piece** where it is
 - When only one upstream **Work Station** can have made the defect, **Rework** names it by default
-- While **Rework** waits or runs, the downstream **Work Station** does not pull a new **Piece**; it does **Help Downstream** or waits
+- While **Rework** waits or runs, the downstream **Work Station** does not pull a new **Piece**; it does **Help the Rework**, **Help Downstream**, or waits
 - **Rework** is **Touch Time** of the **Piece**, and also **Rework Time** of the **Work Station** that made the defect
 - Each **Rework** lowers the **First Pass Yield** of the **Work Station** that made the defect
 - Inside one **Work Station**, the **Piece** to pull is the first one in the upstream **Blue Bin**, which keeps the **Heijunka Sequence**
@@ -325,6 +329,7 @@ _Avoid_: hidden Line, secret Line
 - "branch" — resolved: **Branch** is the chain of **Work Stations** between a **Split** and an **Assembly**; "fork" is avoided.
 - **Assembly** — resolved: an explicit action, not a **Work Station**; it has no **Team Members** and no **Blue Bins**.
 - "swarm" — resolved: renamed **Help Downstream**, clearer for the team.
+- Helping a **Rework** vs **Help Downstream** — resolved: two terms. **Help Downstream** starts from a missing **Kanban** and goes downstream; **Help the Rework** starts from an open **Rework** and goes to the **Piece** where the defect was found, alongside the **Team Member** of the **Work Station** that made it.
 - "Final Inspection" of a whole **Demand** — rejected: with **Heijunka**, the **Pieces** of one **Demand** arrive mixed with others, so waiting for the last one adds **Stagnation Time** and breaks the **Takt Time**. It also blocks the upstream **Blue Bins**. Like a car on a Toyota line, each **Piece** is deployed alone.
 - UAT of a whole Feature — deferred: the software analogy for Feature-level acceptance comes later.
 - **Kanbans** at a **Split** and an **Assembly** — resolved: a **Branch** gets a new **Kanban** only from an **Assembly** of a complete **Piece**, never when its own **Blue Bin** empties alone. A fast **Branch** runs ahead only as a **Deviation**; normally its **Team Members** **Help Downstream**.
