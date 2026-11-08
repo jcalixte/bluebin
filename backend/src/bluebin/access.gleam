@@ -73,7 +73,6 @@ fn routes(segments: List(String)) -> List(#(http.Method, Need)) {
     ["api", "calendar"] -> [#(http.Get, Read), #(http.Put, Own)]
     ["api", "steps", _] -> [#(http.Put, Own)]
     ["api", "sharing"] -> [#(http.Put, Own)]
-    ["api", "reset"] -> [#(http.Post, Own)]
     _ -> []
   }
 }

@@ -430,8 +430,8 @@ pub fn workspace_path(workspace: String) -> String {
   workspaces_directory <> "/" <> workspace <> ".db"
 }
 
-/// What a new Line holds: the demo data, only in the Public Workspace, or one
-/// Work Station and one Team Member to rename in Design.
+/// What a new Line holds: the demo data, in the Simulation and with SSO off,
+/// or one Work Station and one Team Member to rename in Design.
 pub type Start {
   Demo
   Empty

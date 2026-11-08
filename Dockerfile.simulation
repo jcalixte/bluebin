@@ -1,0 +1,27 @@
+# try.bluebin.app: the Simulation, static files only. No API, no database and
+# no sign-in: the Line lives in the visitor's page. Coolify builds this file
+# as its own app, with no forward-auth labels.
+
+ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine
+
+# The API's Line routes, compiled to JavaScript for the browser.
+FROM ${GLEAM_IMAGE} AS sim
+WORKDIR /build
+COPY backend/ backend/
+COPY sim/ sim/
+RUN cd sim && gleam build
+
+FROM node:22-alpine AS web
+WORKDIR /app
+COPY package.json pnpm-lock.yaml* ./
+RUN corepack enable && pnpm install --frozen-lockfile
+COPY . .
+COPY --from=sim /build/sim/build/dev/javascript ./sim/build/dev/javascript
+RUN pnpm build:sim
+
+FROM nginx:stable-alpine
+COPY simulation.nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=web /app/dist /usr/share/nginx/html
+EXPOSE 80
+HEALTHCHECK --interval=15s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1

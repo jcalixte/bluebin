@@ -1,5 +1,5 @@
 import { onMounted, ref, watch, type Ref } from "vue"
-import { api, postAction } from "../api"
+import { lineFetch, postAction } from "../api"
 import type { FlowConfirm, TeamMember, TeamMemberView } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
@@ -9,7 +9,7 @@ export function useNextThing(teamMemberId: Ref<string>) {
   const view = ref<TeamMemberView | null>(null)
 
   async function loadTeamMembers() {
-    const response = await fetch(api("/api/team-members"))
+    const response = await lineFetch("/api/team-members")
     if (!response.ok) {
       throw new Error(`API answered ${response.status}`)
     }
@@ -24,8 +24,8 @@ export function useNextThing(teamMemberId: Ref<string>) {
       if (teamMemberId.value === "") {
         return null
       }
-      const response = await fetch(
-        api(`/api/team-members/${encodeURIComponent(teamMemberId.value)}/next`),
+      const response = await lineFetch(
+        `/api/team-members/${encodeURIComponent(teamMemberId.value)}/next`,
       )
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)

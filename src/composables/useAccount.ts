@@ -1,13 +1,15 @@
 import { ref } from "vue"
 import { lookOnly } from "../api"
+import { simulation } from "../simulation/state"
 import type { Account } from "../types"
 
 const account = ref<Account | null>(null)
 const checked = ref(false)
 
 async function fetchAccount() {
-  // authentik guards `/api/account`: a look-only visitor would get its sign-in page.
-  if (lookOnly) {
+  // authentik guards `/api/account`: a look-only visitor or one in the Simulation would get its
+  // sign-in page.
+  if (lookOnly || simulation) {
     checked.value = true
     return
   }

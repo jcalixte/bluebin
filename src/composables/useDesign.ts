@@ -1,5 +1,5 @@
 import { computed, onMounted, ref } from "vue"
-import { api } from "../api"
+import { lineFetch } from "../api"
 import type {
   BlueBinSuggestion,
   Design,
@@ -210,7 +210,7 @@ export function useDesign() {
   async function load() {
     loading.value = true
     try {
-      const response = await fetch(api("/api/design"))
+      const response = await lineFetch("/api/design")
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
@@ -236,7 +236,7 @@ export function useDesign() {
     if (!draft.value) return
     saving.value = true
     try {
-      const response = await fetch(api("/api/design"), {
+      const response = await lineFetch("/api/design", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(toPayload(draft.value)),
@@ -255,7 +255,7 @@ export function useDesign() {
 
   async function addTeamMember(name: string) {
     try {
-      const response = await fetch(api("/api/team-members"), {
+      const response = await lineFetch("/api/team-members", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name }),

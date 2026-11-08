@@ -1,9 +1,15 @@
 import tailwindcss from "@tailwindcss/vite"
 import vue from "@vitejs/plugin-vue"
+import { fileURLToPath } from "node:url"
 import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
+  resolve: {
+    // sqlight's JavaScript side opens SQLite through `node:sqlite`; the Simulation runs it on
+    // sql.js in the browser instead.
+    alias: { "node:sqlite": fileURLToPath(new URL("./src/simulation/sqlite.ts", import.meta.url)) },
+  },
   server: {
     proxy: {
       // In production Traefik forward auth sets these headers from the authentik

@@ -1,5 +1,5 @@
 import { onMounted, ref } from "vue"
-import { api, postAction } from "../api"
+import { lineFetch, postAction } from "../api"
 import type { FlowConfirm, Line } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
@@ -9,7 +9,7 @@ export function useLine() {
 
   const { error, loading, load } = useLoad(
     async () => {
-      const response = await fetch(api("/api/line"))
+      const response = await lineFetch("/api/line")
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }
@@ -57,7 +57,7 @@ export function useLine() {
 
   /** The server trims the name, so its answer wins over ours. */
   async function renameStep(position: number, name: string) {
-    const response = await fetch(api(`/api/steps/${position}`), {
+    const response = await lineFetch(`/api/steps/${position}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ name }),

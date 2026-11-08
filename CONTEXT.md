@@ -192,9 +192,9 @@ _Avoid_: user, login, identity, profile
 All the Lines of one Account, its owner. Each Line has a name and its own data.
 _Avoid_: tenant, organization, board
 
-**Public Workspace**:
-The one Workspace that everyone can look at, signed in or not, to see Bluebin run.
-_Avoid_: demo workspace, sandbox, shared workspace
+**Simulation**:
+One Line that lives only in the visitor's page, with no sign-in and nothing saved, where the visitor plays the owner or any Team Member and changes who at any time.
+_Avoid_: demo, sandbox, playground, Public Workspace
 
 **Shared Line**:
 A Line that anyone can look at from its link, signed in or not.
@@ -257,7 +257,7 @@ _Avoid_: hidden Line, secret Line
 - The owner links a **Team Member** to an **Account** by its email; the link holds from that **Account**'s next sign-in
 - A linked **Team Member** shows the first and last name of its **Account**; the owner names only the **Team Members** with no **Account**
 - A **Workspace** has exactly one owner **Account**; its owner and each **Account** that is a **Team Member** in one of its **Lines** can open it
-- The **Public Workspace** is the **Workspace** of one chosen **Account**; everyone can look at its **Shared Lines**, and only that **Account** changes it
+- A **Simulation** belongs to no **Workspace** and no **Account**; it starts from the demo data, follows the same rules as any **Line**, and ends when its page closes
 - Only the owner of a **Workspace** makes, renames, empties or redesigns its **Lines** (**Work Stations**, **Team Members**, **Blue Bins**, labels), and makes each one **Shared** or **Private**
 - A **Team Member** with an **Account** does the daily flow of their **Line** (pull, **Andon**, **Rework**, **Deviation**, **Assignment**, **Release**) and adds **Demands**
 - A linked **Team Member** acts only through their own **Account**; the owner acts for the **Team Members** with no **Account**
@@ -287,7 +287,6 @@ _Avoid_: hidden Line, secret Line
 - A **Helper** stops when they choose, and at the latest when the cause ends: **Help the Rework** ends when the **Rework** closes, **Help Downstream** when the **Piece** goes into a **Blue Bin**; then their paused **Assignment** nearest to **Deployment** becomes active again
 - **Rework** pauses the **Piece** that the **Team Member** is transforming upstream
 - A **Piece** never moves backward: the **Work Station** that finds a defect raises **Rework** and names the **Work Station** that made it; a **Team Member** of that **Work Station** comes to repair the **Piece** where it is
-- When the **Work Station** that found a defect finishes the **Piece**, it accepts the repair: the **Rework** closes, as if repaired
 - When only one upstream **Work Station** can have made the defect, **Rework** names it by default
 - While **Rework** waits or runs, the downstream **Work Station** does not pull a new **Piece**; it does **Help the Rework**, **Help Downstream**, or waits
 - **Rework** is **Touch Time** of the **Piece**, and also **Rework Time** of the **Work Station** that made the defect
@@ -353,7 +352,7 @@ _Avoid_: hidden Line, secret Line
 - Hard vs soft pull rules — resolved: the pull rules are the norm, and a **Team Member** can break one only as a **Deviation**, with a reason. "Never" in this glossary means "never without a **Deviation**" for the pull rules. A manual reorder of the **Heijunka Sequence** is also a **Deviation**.
 - "team leader" — resolved: **Team Leader** answers **Andons**; it does not assign work, so pull stays intact.
 - "stop the line" — resolved: an **Andon** stops one **Work Station**; pull then stops the rest of the **Line**, upstream and downstream, by itself.
-- "public Line" — resolved: **Shared Line**. "Public" names only the **Public Workspace**.
-- Owner of the **Public Workspace** — resolved: one chosen **Account** owns it and alone changes it; everyone else, signed in or not, only looks.
+- "public Line" — resolved: **Shared Line**. No term uses "public".
+- **Public Workspace** — removed (2026-11-08): the **Simulation** shows Bluebin run to anyone, signed in or not, and no **Line** of a signed-in **Account** starts from the demo data any more.
 - "client" — resolved: **Client** is who asks for a **Demand**; who signs in is an **Account**.
 - Who makes the **Assignment** — resolved: a **Team Member** takes a **Kanban** (pull); **Rework** goes to its author by default; the team can reassign. No team lead pushes work.

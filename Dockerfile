@@ -5,11 +5,21 @@
 # Before the first FROM, or the FROM lines below cannot read it.
 ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine
 
+# The Simulation's code (try.bluebin.app, Dockerfile.simulation) imports the
+# API's Line routes compiled to JavaScript. This build drops it, but vue-tsc
+# still checks it, so it needs that output too.
+FROM ${GLEAM_IMAGE} AS sim
+WORKDIR /build
+COPY backend/ backend/
+COPY sim/ sim/
+RUN cd sim && gleam build
+
 FROM node:22-alpine AS web
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
 RUN corepack enable && pnpm install --frozen-lockfile
 COPY . .
+COPY --from=sim /build/sim/build/dev/javascript ./sim/build/dev/javascript
 RUN pnpm build
 
 FROM ${GLEAM_IMAGE} AS api

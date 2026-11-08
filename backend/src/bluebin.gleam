@@ -237,7 +237,7 @@ pub fn handle_request(
             http.Post -> create_line(request, workspace)
             _ -> {
               use <- wisp.require_method(request, http.Get)
-              list_lines(workspace, start_of(request, context))
+              list_lines(workspace, start_of(context))
             }
           }
         ["api", "lines", line, ..rest] ->
@@ -273,25 +273,51 @@ fn in_line(
     Error(Nil) -> wisp.internal_server_error()
     // A Private Line does not show it exists (F48).
     Ok(access.NoRole) -> wisp.not_found()
-    Ok(role) ->
-      case access.need(request.method, segments) {
-        Error(refusal) -> refused(refusal)
-        Ok(need) ->
-          case access.allows(role, need) {
-            False -> wisp.response(403)
-            True ->
-              open_line(
-                request,
-                context,
-                identity_of(request, context, caller),
-                role,
-                workspace,
-                line,
-                segments,
-              )
-          }
+    Ok(role) -> {
+      use <- guard(request.method, segments, role)
+      open_line(
+        request,
+        context,
+        identity_of(request, context, caller),
+        role,
+        workspace,
+        line,
+        segments,
+      )
+    }
+  }
+}
+
+/// The role table refuses a route missing from it, and one the role may not
+/// use (F48).
+fn guard(
+  method: http.Method,
+  segments: List(String),
+  role: access.Role,
+  next: fn() -> wisp.Response,
+) -> wisp.Response {
+  case access.need(method, segments) {
+    Error(refusal) -> refused(refusal)
+    Ok(need) ->
+      case access.allows(role, need) {
+        False -> wisp.response(403)
+        True -> next()
       }
   }
+}
+
+/// The routes of one Line as `role`, behind the same guard as the API, with
+/// no Workspace and no Account: the Simulation runs them in the browser, on
+/// its own Line that lives only in the page (`sim/`).
+pub fn simulate(
+  request: wisp.Request,
+  role: access.Role,
+  database: String,
+) -> wisp.Response {
+  let segments = wisp.path_segments(request)
+  use <- guard(request.method, segments, role)
+  let act_as = access.actor(role, _, fn(_) { False })
+  route(request, request.method, segments, database, None, act_as)
 }
 
 /// authentik lets `/api/s/` through with no sign-in, so the request has no
@@ -355,7 +381,7 @@ fn open_line(
   line: String,
   segments: List(String),
 ) -> wisp.Response {
-  case lines.database(workspace, line, start_of(request, context)) {
+  case lines.database(workspace, line, start_of(context)) {
     Error(lines.UnknownLine) -> wisp.not_found()
     Error(_) -> wisp.internal_server_error()
     Ok(database) -> {
@@ -383,11 +409,6 @@ fn open_line(
         http.Get, ["api"] -> line_name(workspace, line)
         _, ["api", "sharing"] ->
           share_line(request, context, identity, workspace, line)
-        _, ["api", "reset"] ->
-          case owns_public_workspace(request, context) && line == lines.first {
-            True -> reset(request, database, linking)
-            False -> wisp.response(403)
-          }
         method, _ -> route(request, method, segments, database, linking, act_as)
       }
     }
@@ -433,18 +454,13 @@ fn share_line(
   }
 }
 
-/// The Public Workspace is `akadmin`'s, with SSO on (DESIGN §10); with SSO
-/// off everyone shares the `public` one. Only there do Lines start from the
-/// demo data and does Reset… run.
-fn owns_public_workspace(request: wisp.Request, context: Context) -> Bool {
-  !context.sso || invitations.is_admin(request)
-}
-
-/// How the caller's own first Line starts, when this request makes it.
-fn start_of(request: wisp.Request, context: Context) -> db.Start {
-  case owns_public_workspace(request, context) {
-    True -> db.Demo
-    False -> db.Empty
+/// How the caller's own first Line starts, when this request makes it: empty
+/// with SSO on, where the Simulation shows the demo data; from the demo data
+/// with SSO off, as in dev and in the smoke test.
+fn start_of(context: Context) -> db.Start {
+  case context.sso {
+    True -> db.Empty
+    False -> db.Demo
   }
 }
 
@@ -467,7 +483,7 @@ fn identity_of(
   context: Context,
   workspace: String,
 ) -> Identity {
-  case context.sso, workspace == workspace.public {
+  case context.sso, workspace == workspace.anonymous {
     False, _ | True, True -> SignedOut
     True, False ->
       case accounts.email_of(request) {
@@ -635,7 +651,7 @@ fn list_workspaces(
       context.accounts,
       caller,
       email,
-      start_of(request, context),
+      start_of(context),
     )
   {
     Ok(workspaces) -> send_json(json.array(workspaces, workspace_json), 200)
@@ -750,13 +766,13 @@ fn require_workspace(
 /// The caller's own Workspace. With SSO on, forward auth sets the uid on
 /// every request it lets through signed in; one with no uid came through a
 /// path authentik does not guard (`/api/s/`, a crafted `..`), so it gets
-/// nothing, and never the `public` Workspace.
+/// nothing, and never the `anonymous` Workspace.
 fn caller_of(
   request: request.Request(body),
   context: Context,
 ) -> Result(String, Nil) {
   case workspace.from_request(request) {
-    Ok(caller) if context.sso && caller == workspace.public -> Error(Nil)
+    Ok(caller) if context.sso && caller == workspace.anonymous -> Error(Nil)
     found -> found
   }
 }
@@ -1017,48 +1033,6 @@ fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
 fn labels(database: String) -> wisp.Response {
   use connection <- read(database)
   design.load_labels(connection) |> result.map(design.labels_json)
-}
-
-/// `{"mode": "empty"}` starts from scratch; anything else, or no body at all
-/// as the SPA sent before, puts back the demo data.
-/// A Reset can bring back Team Member ids, so the Line's links go too.
-fn reset(
-  request: wisp.Request,
-  database: String,
-  linking: Option(Linking),
-) -> wisp.Response {
-  let mode =
-    wisp.read_body_bits(request)
-    |> result.try(fn(body) {
-      json.parse_bits(body, decode.field("mode", decode.string, decode.success))
-      |> result.replace_error(Nil)
-    })
-  let run = case mode {
-    Ok("empty") -> db.reset_empty
-    _ -> db.reset
-  }
-  let cleared = fn() {
-    case linking {
-      None -> Ok(Nil)
-      Some(linking) ->
-        accounts.save_links(
-          linking.accounts,
-          linking.workspace,
-          linking.line,
-          wanted: [],
-          kept: [],
-        )
-    }
-  }
-  // The links go only once the Line is reset: a failed reset keeps them.
-  case db.with_connection_at(database, run) {
-    Ok(Nil) ->
-      case cleared() {
-        Ok(Nil) -> wisp.no_content()
-        Error(_) -> wisp.internal_server_error()
-      }
-    Error(_) -> wisp.internal_server_error()
-  }
 }
 
 fn announce_change(

@@ -8,15 +8,15 @@ import gleam/string
 const header = "x-authentik-uid"
 
 /// The Workspace of a request without an identity, shared by everyone while
-/// the app is public. Not hex, so no authentik uid can collide with it.
-pub const public = "public"
+/// SSO is off. Not hex, so no authentik uid can collide with it.
+pub const anonymous = "anonymous"
 
 const allowed =
   "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"
 
 /// The caller's own Workspace. Another owner's comes from the URL (`parse`),
 /// behind the guard of `bluebin/access`.
-/// No header means the `public` workspace; `Error(Nil)` when the header is
+/// No header means the `anonymous` workspace; `Error(Nil)` when the header is
 /// unsafe as a file name.
 pub fn from_request(request: Request(body)) -> Result(String, Nil) {
   case request.get_header(request, header) {
@@ -25,7 +25,7 @@ pub fn from_request(request: Request(body)) -> Result(String, Nil) {
         True -> Ok(uid)
         False -> Error(Nil)
       }
-    Error(Nil) -> Ok(public)
+    Error(Nil) -> Ok(anonymous)
   }
 }
 

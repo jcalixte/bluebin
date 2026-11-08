@@ -1,5 +1,5 @@
 import { onMounted, ref } from "vue"
-import { api, postAction } from "../api"
+import { lineFetch, postAction } from "../api"
 import type { Backlog } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
@@ -9,7 +9,7 @@ export function useBacklog() {
 
   const { error, loading, load } = useLoad(
     async () => {
-      const response = await fetch(api("/api/backlog"))
+      const response = await lineFetch("/api/backlog")
       if (!response.ok) {
         throw new Error(`API answered ${response.status}`)
       }

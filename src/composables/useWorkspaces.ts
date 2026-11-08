@@ -1,14 +1,15 @@
 import { computed, ref } from "vue"
 import { lineId, lookOnly, workspaceOwner } from "../api"
-import type { LineRole, Workspace } from "../types"
+import { actingAs, simulation } from "../simulation/state"
+import type { LineEntry, LineRole, Workspace } from "../types"
 
 const workspaces = ref<Workspace[]>([])
 const loaded = ref(false)
 const problem = ref<string | null>(null)
 
 async function fetchWorkspaces() {
-  // A look-only visitor has no Account, so no Line menu.
-  if (lookOnly) {
+  // A look-only visitor has no Account, so no Line menu; the Simulation has one Line only.
+  if (lookOnly || simulation) {
     loaded.value = true
     return
   }
@@ -31,7 +32,18 @@ const workspace = computed(() =>
   workspaces.value.find((one) => (workspaceOwner ? one.owner === workspaceOwner : one.own)),
 )
 
-const current = computed(() => workspace.value?.lines.find((one) => one.id === lineId))
+/** In the Simulation, the visitor is the owner or a Member, as `actingAs` says. */
+const simulated = computed<LineEntry>(() => ({
+  id: lineId,
+  name: "Simulation",
+  shared: false,
+  role: actingAs.value === "" ? "owner" : "member",
+  teamMember: actingAs.value === "" ? null : actingAs.value,
+}))
+
+const current = computed(() =>
+  simulation ? simulated.value : workspace.value?.lines.find((one) => one.id === lineId),
+)
 
 /** Until the menu loads, the own Workspace is the owner's and any other is look-only. */
 const role = computed<LineRole>(() => current.value?.role ?? (workspaceOwner ? "viewer" : "owner"))

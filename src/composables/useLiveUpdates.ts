@@ -1,5 +1,6 @@
 import { onBeforeUnmount, onMounted } from "vue"
 import { api } from "../api"
+import { onSimulatedChange, simulation } from "../simulation/state"
 
 /** A closed stream (the proxy or the SSO answered something else) is not retried by the browser. */
 const reopenAfterMs = 5000
@@ -48,6 +49,13 @@ export function useLiveUpdates(reload: () => Promise<unknown>) {
         reopen = setTimeout(open, reopenAfterMs)
       }
     }
+  }
+
+  if (simulation) {
+    let stop = () => {}
+    onMounted(() => (stop = onSimulatedChange(() => void refresh())))
+    onBeforeUnmount(() => stop())
+    return
   }
 
   onMounted(open)

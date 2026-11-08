@@ -1,5 +1,5 @@
 import { onMounted, ref } from "vue"
-import { api } from "../api"
+import { lineFetch } from "../api"
 import type { Andon, Demand } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
@@ -11,8 +11,8 @@ export function useDemands() {
   const { error, loading, load } = useLoad(
     async () => {
       const [demandsResponse, andonsResponse] = await Promise.all([
-        fetch(api("/api/demands")),
-        fetch(api("/api/andons")),
+        lineFetch("/api/demands"),
+        lineFetch("/api/andons"),
       ])
       for (const response of [demandsResponse, andonsResponse]) {
         if (!response.ok) {

@@ -1,5 +1,5 @@
 import { ref } from "vue"
-import { api } from "../api"
+import { lineFetch } from "../api"
 import type { Labels } from "../types"
 
 const labels = ref<Labels>({
@@ -12,7 +12,7 @@ let loaded: Promise<void> | null = null
 
 async function fetchLabels() {
   try {
-    const response = await fetch(api("/api/labels"))
+    const response = await lineFetch("/api/labels")
     if (response.ok) {
       labels.value = (await response.json()) as Labels
     }

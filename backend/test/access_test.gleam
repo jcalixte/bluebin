@@ -44,7 +44,6 @@ const routes = [
   #(http.Put, ["api", "design"], access.Own),
   #(http.Put, ["api", "steps", "1"], access.Own),
   #(http.Put, ["api", "calendar"], access.Own),
-  #(http.Post, ["api", "reset"], access.Own),
 ]
 
 pub fn each_route_has_its_need_test() {
@@ -58,8 +57,10 @@ pub fn a_route_missing_from_the_table_is_refused_test() {
   assert access.need(http.Get, ["api", "nothing"]) == Error(access.NoSuchRoute)
   assert access.need(http.Delete, ["api", "demands"])
     == Error(access.WrongMethod([http.Get, http.Post]))
-  assert access.need(http.Get, ["api", "reset"])
+  assert access.need(http.Get, ["api", "pull"])
     == Error(access.WrongMethod([http.Post]))
+  // Reset lives in the Simulation only, never in a real Line.
+  assert access.need(http.Post, ["api", "reset"]) == Error(access.NoSuchRoute)
 }
 
 /// An unknown path inside a Line answers 404 and a known one with another
@@ -238,7 +239,7 @@ fn world(sso: Bool) -> World {
   let carol = #(random("access-carol-"), "carol@example.com")
   let bob = #(random("access-bob-"), "bob@example.com")
   let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
-  // Only the Public Workspace starts from the demo data; these tests need it.
+  // With SSO on a Line starts empty; these tests need the demo data.
   let assert Ok(Nil) = db.ready(db.workspace_path(owner.0), db.Demo)
   let on = context(path, True)
   named(on, owner, "Olga")
@@ -316,7 +317,6 @@ pub fn a_member_does_the_flow_but_not_the_design_test() {
   let #(_, design) = call(world.context, http.Get, at("/design"), world.ada, "")
   let #(redesign, _) =
     call(world.context, http.Put, at("/design"), world.ada, design)
-  let #(reset, _) = call(world.context, http.Post, at("/reset"), world.ada, "")
   let #(rename, _) =
     call(world.context, http.Put, at(""), world.ada, "{\"name\": \"Mine\"}")
   let #(share, _) =
@@ -354,7 +354,6 @@ pub fn a_member_does_the_flow_but_not_the_design_test() {
   clean(world)
 
   assert redesign == 403
-  assert reset == 403
   assert rename == 403
   assert share == 403
   assert as_bob == 403

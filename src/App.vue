@@ -1,21 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue"
-import {
-  api,
-  firstLine,
-  lineId,
-  lookOnly,
-  pageUrl,
-  settleLineUrl,
-  viewPath,
-  workspaceOwner,
-} from "./api"
+import { lineId, lookOnly, pageUrl, settleLineUrl, viewPath, workspaceOwner } from "./api"
 import AppModal from "./components/AppModal.vue"
 import BrandMark from "./components/BrandMark.vue"
 import ErrorToast from "./components/ErrorToast.vue"
 import FirstSignIn from "./components/FirstSignIn.vue"
 import InviteDialog from "./components/InviteDialog.vue"
 import LinePicker from "./components/LinePicker.vue"
+import SimulationBar from "./components/SimulationBar.vue"
 import ThemeToggle from "./components/ThemeToggle.vue"
 import BacklogView from "./views/BacklogView.vue"
 import DemandsView from "./views/DemandsView.vue"
@@ -26,6 +18,7 @@ import LineView from "./views/LineView.vue"
 import { useAccount } from "./composables/useAccount"
 import { useLabels } from "./composables/useLabels"
 import { homeLine, useWorkspaces } from "./composables/useWorkspaces"
+import { restartSimulation, simulation } from "./simulation/state"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
@@ -55,10 +48,8 @@ const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
 )
 
-/** `akadmin`, the owner of the Public Workspace. */
+/** `akadmin`, authentik's own admin, who invites people. */
 const isAdmin = computed(() => account.value?.signedIn === true && account.value.admin)
-/** Reset… shows only in the first Line of the Public Workspace, the demo one. */
-const canReset = computed(() => isAdmin.value && role.value === "owner" && lineId === firstLine)
 const inviting = ref(false)
 
 function viewAt(path: string): View {
@@ -66,7 +57,7 @@ function viewAt(path: string): View {
 }
 
 /** Opened at `/`, as after sign-in: the Account's own work comes first (F45). */
-const landing = ref(location.pathname === "/" && !lookOnly)
+const landing = ref(location.pathname === "/" && !lookOnly && !simulation)
 settleLineUrl()
 const opened = ref<View>(viewAt(viewPath()))
 /** A link to a hidden tab, as Measures in a Shared Line, opens the first tab. */
@@ -102,26 +93,15 @@ function open(view: View) {
   current.value = view
 }
 
-const choosingReset = ref(false)
-const resetting = ref(false)
-const resetError = ref<string | null>(null)
+const choosingRestart = ref(false)
+const restartError = ref<string | null>(null)
 
-async function reset(mode: "demo" | "empty") {
-  resetting.value = true
+function restart(demo: boolean) {
+  choosingRestart.value = false
   try {
-    const response = await fetch(api("/api/reset"), {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode }),
-    })
-    if (!response.ok) {
-      throw new Error((await response.text()) || `API answered ${response.status}`)
-    }
-    location.reload()
+    restartSimulation(demo)
   } catch (cause) {
-    resetting.value = false
-    choosingReset.value = false
-    resetError.value = `The reset failed: ${cause instanceof Error ? cause.message : String(cause)}`
+    restartError.value = cause instanceof Error ? cause.message : String(cause)
   }
 }
 
@@ -152,7 +132,8 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
             <BrandMark />
             <h1 class="text-2xl font-semibold leading-tight">Bluebin</h1>
           </a>
-          <LinePicker :view="current.path" />
+          <SimulationBar v-if="simulation" @restart="choosingRestart = true" />
+          <LinePicker v-else :view="current.path" />
         </div>
         <div class="flex flex-wrap items-center gap-3">
           <nav class="tabs tabs-box">
@@ -188,23 +169,17 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
           >
             Invite…
           </button>
-          <button
-            v-if="canReset"
-            type="button"
-            class="btn btn-sm btn-ghost [--btn-rest-fg:var(--color-primary-content)]"
-            :disabled="resetting"
-            title="Load the demo data, or start empty"
-            @click="choosingReset = true"
-          >
-            Reset…
-          </button>
           <ThemeToggle class="[--btn-rest-fg:var(--color-primary-content)]" />
         </div>
       </div>
     </header>
 
     <main class="mx-auto max-w-[110rem] px-6 py-8">
-      <p v-if="lookOnly" role="status" class="alert alert-info mb-6">
+      <p v-if="simulation" role="status" class="alert alert-info mb-6">
+        This Line lives only in this page: nothing is saved, and a reload starts it again. Play as
+        any Team Member, or as the owner to change the Design.
+      </p>
+      <p v-else-if="lookOnly" role="status" class="alert alert-info mb-6">
         <span>
           You look at this Shared Line. Only its Team Members act in it:
           <a :href="pageUrl(current.path, lineId, workspaceOwner, false)" class="link font-medium"
@@ -224,19 +199,15 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
       <NextThingView v-else />
     </main>
 
-    <AppModal v-if="choosingReset" @close="choosingReset = false">
-      <h3 class="text-lg font-semibold">Reset this Line</h3>
+    <AppModal v-if="choosingRestart" @close="choosingRestart = false">
+      <h3 class="text-lg font-semibold">Restart the Simulation</h3>
       <p class="py-2 text-sm opacity-80">
-        Every change made in this Line is lost. The other Lines stay. Pick what to start from.
+        Every change made in the Simulation is lost, and you play the owner again. Pick what to
+        start from.
       </p>
       <div class="grid gap-3">
         <div class="rounded-box border border-base-300 p-4">
-          <button
-            type="button"
-            class="btn btn-primary btn-sm"
-            :disabled="resetting"
-            @click="reset('demo')"
-          >
+          <button type="button" class="btn btn-primary btn-sm" @click="restart(true)">
             Load the demo data
           </button>
           <p class="mt-2 text-sm opacity-80">
@@ -245,9 +216,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
           </p>
         </div>
         <div class="rounded-box border border-base-300 p-4">
-          <button type="button" class="btn btn-sm" :disabled="resetting" @click="reset('empty')">
-            Start empty
-          </button>
+          <button type="button" class="btn btn-sm" @click="restart(false)">Start empty</button>
           <p class="mt-2 text-sm opacity-80">
             Removes every {{ labels.demand }}, {{ labels.piece }}, Team Member and Work Station.
             Keeps the Working Calendar and the labels. Leaves one Work Station and one Team Member
@@ -256,12 +225,12 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
         </div>
       </div>
       <div class="modal-action">
-        <button type="button" class="btn btn-ghost" @click="choosingReset = false">Cancel</button>
+        <button type="button" class="btn btn-ghost" @click="choosingRestart = false">Cancel</button>
       </div>
     </AppModal>
 
     <InviteDialog v-if="inviting" @close="inviting = false" />
 
-    <ErrorToast v-model="resetError" tone="error" />
+    <ErrorToast v-model="restartError" tone="error" />
   </div>
 </template>

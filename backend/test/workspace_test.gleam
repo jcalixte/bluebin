@@ -25,8 +25,8 @@ pub fn the_workspace_is_the_authentik_uid_test() {
   assert workspace.from_request(with_uid(uid)) == Ok(uid)
 }
 
-pub fn no_identity_means_the_public_workspace_test() {
-  assert workspace.from_request(request.new()) == Ok(workspace.public)
+pub fn no_identity_means_the_anonymous_workspace_test() {
+  assert workspace.from_request(request.new()) == Ok(workspace.anonymous)
 }
 
 pub fn an_empty_identity_is_refused_test() {

@@ -217,6 +217,9 @@ const readings = [
             </p>
             <div class="flex flex-wrap gap-3 pt-2">
               <a href="/line" class="btn btn-primary h-11 px-5">Open your Line</a>
+              <a href="https://try.bluebin.app/line" class="btn btn-outline h-11 px-5">
+                Try the Simulation
+              </a>
               <a href="#rules" class="btn btn-ghost h-11 px-5">Read the pull rules</a>
             </div>
           </div>

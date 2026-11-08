@@ -1636,31 +1636,3 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
     "\"piece\":\"US-4 · iOS\",\"demand\":\"Offline mode\",\"teamMember\":\"Yasmine\",\"teamMemberId\":\"pe-yasmine\",\"paused\":false,\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}]",
   )
 }
-
-pub fn finishing_a_piece_under_rework_accepts_its_repair_test() {
-  use connection <- with_seeded_database()
-  // Karim helps rw-1 on US-4 while his US-9 waits.
-  let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
-  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
-  assert state_of(connection, "p-checkout-9-ios") == "paused"
-
-  // QA iOS finishes US-4: the Rework closes, as if repaired.
-  let assert Ok(_) =
-    flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
-  assert state_of(connection, "p-offline-4-ios") == "in_bin"
-  assert count(
-      connection,
-      "select count(*) from rework where id = 'rw-1' and closed_at is not null",
-    )
-    == 1
-  assert count(
-      connection,
-      "select count(*) from flow_event
-        where kind = 'rework_repaired'
-          and json_extract(payload, '$.by') = 'finish'",
-    )
-    == 1
-  assert helpers(connection) == 0
-  assert state_of(connection, "p-checkout-9-ios") == "in_flow"
-  assert flow.repair_rework(connection, "rw-1") == Error(flow.UnknownRework)
-}

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
 import { lineId, workspaceOwner } from "../api"
+import { simulation } from "../simulation/state"
 import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
@@ -15,7 +16,10 @@ const teamMemberId = ref(
   new URLSearchParams(location.search).get("teamMember") ?? localStorage.getItem(storageKey) ?? "",
 )
 
-/** A Team Member with an Account sees their own work first. */
+/**
+ * A Team Member with an Account sees their own work first; in the Simulation, the Team Member
+ * played, each time the visitor plays another one.
+ */
 const { current, canActAs } = useWorkspaces()
 
 /** Who looks may not act as the Team Member picked: then no action shows. */
@@ -23,7 +27,7 @@ const acting = computed(() => canActAs(teamMemberId.value))
 watch(
   () => current.value?.teamMember,
   (own) => {
-    if (own && teamMemberId.value === "") teamMemberId.value = own
+    if (own && (simulation || teamMemberId.value === "")) teamMemberId.value = own
   },
   { immediate: true },
 )

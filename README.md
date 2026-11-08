@@ -8,10 +8,14 @@ A pull system for software teams, built on Toyota Production System principles: 
 
 ```bash
 pnpm install
+pnpm sim           # compile the Simulation's Gleam to JavaScript (needs gleam), before dev or build
+pnpm sim:test      # the Simulation's own tests, on Node through the browser's sql.js stand-in
 pnpm dev           # SPA on :5173, /api proxied to :8000
+pnpm dev:sim       # the Simulation on :5173, no API needed (after pnpm sim)
 pnpm lint          # oxlint  (pnpm lint:fix to autofix)
 pnpm fmt           # oxfmt   (pnpm fmt:check to verify only)
 pnpm build         # vue-tsc + vite build, the same build Coolify runs
+pnpm build:sim     # the same for the Simulation (try.bluebin.app)
 
 cd backend && gleam run     # API on :8000 (needs Erlang/OTP and a C toolchain)
 docker build -t bluebin . && docker run -p 8000:8000 bluebin
@@ -48,17 +52,17 @@ Traefik forward auth sends each request to the authentik outpost `bluebin`
 (provider and app `bluebin`), which signs people in on `auth.bluebin.app`. It
 copies the `X-authentik-uid` header from the outpost's answer, which replaces any value the client sends. The API trusts only that
 header: each uid is one Workspace. A request without it gets `401` with
-`BLUEBIN_SSO=on`, and uses the shared `public` Workspace with SSO off; a uid
+`BLUEBIN_SSO=on`, and uses the shared `anonymous` Workspace with SSO off; a uid
 that is not a safe file name gets `401`. In dev, the
 Vite proxy sends `X-authentik-uid: dev`.
 
 A Workspace holds as many named Lines as its owner makes, one SQLite
 file each, so no query can read across two of them:
 
-| Line                                                                                      | File                                | API                               |
-| ----------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------- |
-| `main`, made on the first request: empty, or with the demo data for `akadmin` and SSO off | `data/workspaces/<uid>.db`          | `/api/lines/main/…`, and `/api/…` |
-| each one made with **New Line…**, empty                                                   | `data/workspaces/<uid>/ln-<hex>.db` | `/api/lines/ln-<hex>/…`           |
+| Line                                                                                  | File                                | API                               |
+| ------------------------------------------------------------------------------------- | ----------------------------------- | --------------------------------- |
+| `main`, made on the first request: empty with SSO on, with the demo data with SSO off | `data/workspaces/<uid>.db`          | `/api/lines/main/…`, and `/api/…` |
+| each one made with **New Line…**, empty                                               | `data/workspaces/<uid>/ln-<hex>.db` | `/api/lines/ln-<hex>/…`           |
 
 `GET /api/lines` lists them by name, `POST /api/lines {"name"}` makes one,
 `PUT /api/lines/<id> {"name"}` renames one; an unknown id gets `404` and
@@ -156,10 +160,26 @@ the API refuses as a Bearer token. Without it the API answers `503`, and links a
 authentik under Directory > Invitations. In dev, the Vite proxy signs in as
 `akadmin`.
 
-**Reset…** shows only to `akadmin`, in the first Line (`main`) of the Public
-Workspace; with SSO on, the API refuses `POST /api/reset` (`403`) to anyone
-else, and in any other Line. It acts on that Line only: demo data, or one
-Work Station and one Team Member to rename in Design.
+## Simulation
+
+[try.bluebin.app](https://try.bluebin.app/line) shows one Line that lives
+only in the page, with no sign-in and no server call: nothing is saved, and a
+reload starts it again from the demo data. **Play as** picks the owner or any
+Team Member, at any time; **Restart…** loads the demo data again, or starts
+empty.
+
+It is the same SPA, built with `--mode simulation`. It runs the API's own Line
+routes and role guard (`bluebin.simulate`), compiled to JavaScript by the Gleam
+package [`sim/`](./sim), on an in-memory SQLite: sql.js stands in for
+`node:sqlite`, which sqlight imports on JavaScript (the Vite alias in
+`vite.config.ts`). The real build drops SQLite and the Gleam code. The holidays
+of the Working Calendar come from Nager.Date, straight from the browser.
+
+[`Dockerfile.simulation`](./Dockerfile.simulation) makes a static nginx image
+of it ([`simulation.nginx.conf`](./simulation.nginx.conf)). It is its own Coolify
+app, on `try.bluebin.app`, with no forward-auth labels: it reads no real Line,
+so it needs no sign-in. The main `Dockerfile` compiles `sim/` too, because
+vue-tsc checks the Simulation code.
 
 <!-- docs:start -->
 

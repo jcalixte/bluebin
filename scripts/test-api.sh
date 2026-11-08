@@ -38,7 +38,7 @@ echo "Bluebin API smoke test against $BASE"
 
 health=$(curl -fsS "$BASE/api/health" || true)
 check "GET /api/health answers OK" test "$health" = "OK"
-check "a request without an identity uses the public workspace" test \
+check "a request without an identity uses the anonymous workspace" test \
   "$(command curl -s -o /dev/null -w '%{http_code}' "$BASE/api/demands")" = 200
 check "an identity that could leave the workspaces directory is refused" test \
   "$(command curl -s -o /dev/null -w '%{http_code}' -H 'X-authentik-uid: ../app' "$BASE/api/demands")" = 401

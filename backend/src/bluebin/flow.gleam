@@ -185,28 +185,6 @@ pub fn finish(
     reason,
   ))
 
-  // Finishing the Piece accepts its repair: its open Rework closes.
-  use open <- result.try(
-    rows(
-      connection,
-      "select id, assignee from rework
-      where piece_id = ?1 and closed_at is null
-      order by opened_at, rowid",
-      [sqlight.text(piece.id)],
-      {
-        use id <- decode.field(0, decode.string)
-        use assignee <- decode.field(1, decode.optional(decode.string))
-        decode.success(#(id, assignee))
-      },
-    ),
-  )
-  use _ <- result.try(
-    list.try_each(open, fn(rework) {
-      close_rework(connection, rework.0, piece.id, rework.1, "finish")
-      |> result.replace(Nil)
-    }),
-  )
-
   // Before the assignee is cleared below: piece_pass records who transformed
   // the Piece, for the Rework author (F13) and First Pass Yield (F16).
   use _ <- result.try(record_pass(connection, piece.id, station.id))
@@ -565,26 +543,7 @@ pub fn repair_rework(
     connection,
     rework_id,
   ))
-  use resumed <- result.try(close_rework(
-    connection,
-    rework_id,
-    piece_id,
-    assignee,
-    "repaired",
-  ))
-  Ok(Repaired(piece: reference, resumed:))
-}
 
-/// Closes an open Rework: ends its help (F63) and frees its repairer.
-/// `by` is `repaired`, or `finish` when the Work Station that found the
-/// defect finishes the Piece, which accepts the repair.
-fn close_rework(
-  connection: sqlight.Connection,
-  rework_id: String,
-  piece_id: String,
-  assignee: Option(String),
-  by: String,
-) -> Result(Option(String), FlowError) {
   use _ <- result.try(
     write(
       connection,
@@ -599,10 +558,7 @@ fn close_rework(
     connection,
     "rework_repaired",
     Some(piece_id),
-    json.object([
-      #("rework", json.string(rework_id)),
-      #("by", json.string(by)),
-    ]),
+    json.object([#("rework", json.string(rework_id))]),
   ))
 
   use helpers <- result.try(rows(
@@ -625,7 +581,7 @@ fn close_rework(
   )
 
   use settled <- result.try(settle_option(connection, assignee))
-  Ok(settled.resumed)
+  Ok(Repaired(piece: reference, resumed: settled.resumed))
 }
 
 pub type Helped {

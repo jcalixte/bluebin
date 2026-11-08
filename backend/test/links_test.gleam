@@ -122,7 +122,7 @@ fn setup(sso: Bool) {
   let ada = #(random("links-ada-"), "Ada@Example.com")
   let path = random("data/links-test-") <> ".db"
   let assert Ok(Nil) = simplifile.create_directory_all(db.workspaces_directory)
-  // Only the Public Workspace starts from the demo data; these tests need it.
+  // With SSO on a Line starts empty; these tests need the demo data.
   let assert Ok(Nil) = db.ready(db.workspace_path(owner.0), db.Demo)
   #(context(path, sso), owner, ada, path)
 }
@@ -251,80 +251,13 @@ pub fn a_wrong_or_shared_email_is_refused_test() {
     == "Bad request: Two Team Members have the email ada@example.com."
 }
 
-pub fn a_reset_removes_the_links_of_the_line_test() {
+pub fn no_line_has_a_reset_test() {
   let #(context, owner, ada, path) = setup(True)
 
-  let #(_, design) = call(context, http.Get, "/api/design", owner, "")
-  let _ =
-    call(
-      context,
-      http.Put,
-      "/api/design",
-      owner,
-      with_email_for_ines(design, "ada@example.com"),
-    )
   let #(reset, _) = call_as_admin(context, http.Post, "/api/reset", owner)
-  let left = emails(path, owner.0)
   clean(owner, ada, path)
 
-  assert reset == 204
-  assert left == []
-}
-
-pub fn a_failed_reset_keeps_the_links_test() {
-  let #(context, owner, ada, path) = setup(True)
-
-  let #(_, design) = call(context, http.Get, "/api/design", owner, "")
-  let _ =
-    call(
-      context,
-      http.Put,
-      "/api/design",
-      owner,
-      with_email_for_ines(design, "ada@example.com"),
-    )
-  let assert Ok(Nil) = {
-    use connection <- db.with_connection_at(db.workspace_path(owner.0))
-    sqlight.exec(
-      "create trigger no_reset before delete on demand
-       begin select raise(abort, 'no reset'); end;",
-      connection,
-    )
-  }
-  let #(reset, _) = call_as_admin(context, http.Post, "/api/reset", owner)
-  let left = emails(path, owner.0)
-  clean(owner, ada, path)
-
-  assert reset == 500
-  assert left == [#("pe-ines", "ada@example.com")]
-}
-
-pub fn only_akadmin_resets_a_line_test() {
-  let #(context, owner, ada, path) = setup(True)
-
-  let #(by_owner, _) = call(context, http.Post, "/api/reset", owner, "")
-  let #(by_admin, _) = call_as_admin(context, http.Post, "/api/reset", owner)
-  clean(owner, ada, path)
-
-  assert by_owner == 403
-  assert by_admin == 204
-}
-
-pub fn akadmin_resets_only_the_first_line_test() {
-  let #(context, owner, ada, path) = setup(True)
-  let assert Ok(other) = lines.create(owner.0, "Mobile")
-
-  let #(reset, _) =
-    call_as_admin(
-      context,
-      http.Post,
-      "/api/lines/" <> other.id <> "/reset",
-      owner,
-    )
-  clean(owner, ada, path)
-  remove(db.workspaces_directory <> "/" <> owner.0)
-
-  assert reset == 403
+  assert reset == 404
 }
 
 pub fn a_new_account_starts_with_an_empty_line_test() {
@@ -337,13 +270,14 @@ pub fn a_new_account_starts_with_an_empty_line_test() {
   assert !string.contains(design, "pe-ines")
 }
 
-pub fn akadmin_starts_with_the_demo_data_test() {
+pub fn akadmin_starts_with_an_empty_line_test() {
   let #(context, owner, ada, path) = setup(True)
 
   let #(_, design) = call_as_admin(context, http.Get, "/api/design", ada)
   clean(owner, ada, path)
 
-  assert string.contains(design, "pe-ines")
+  assert string.contains(design, "Team Member 1")
+  assert !string.contains(design, "pe-ines")
 }
 
 pub fn with_sso_off_nothing_links_test() {
