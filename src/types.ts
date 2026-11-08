@@ -51,7 +51,11 @@ export type InProgressPiece = {
   teamMember: string | null
   teamMemberId: string | null
   paused: boolean
+  /** The Team Members who Help the Rework on this Piece. */
+  helpers: TeamMemberName[]
 }
+
+export type TeamMemberName = { id: string; name: string }
 
 export type Rework = {
   id: string
@@ -61,6 +65,9 @@ export type Rework = {
   foundBy: string
   assignee: string | null
   assigneeId: string | null
+  helpers: TeamMemberName[]
+  /** Who may join as Helper now: the two Work Stations concerned, while someone repairs. */
+  canHelp: TeamMemberName[]
 }
 
 export type WorkStation = {

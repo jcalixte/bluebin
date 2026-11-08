@@ -44,6 +44,11 @@ export function useLine() {
   const assign = (kind: "piece" | "rework", id: string, teamMember: string) =>
     act("/api/assign", { kind, id, teamMember })
 
+  const helpTheRework = (rework: string, teamMember: string) =>
+    act("/api/help", { rework, teamMember })
+
+  const stopHelping = (teamMember: string) => act("/api/help/stop", { teamMember })
+
   const raiseAndon = (station: string, teamMember?: string) =>
     act("/api/andon", { station, teamMember })
 
@@ -83,6 +88,8 @@ export function useLine() {
     raiseRework,
     repairRework,
     assign,
+    helpTheRework,
+    stopHelping,
     raiseAndon,
     closeAndon,
   }

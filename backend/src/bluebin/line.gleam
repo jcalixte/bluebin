@@ -63,6 +63,11 @@ pub type Rework {
   )
 }
 
+/// A Team Member on a Rework's Piece: one who helps it, or one who can.
+pub type Helper {
+  Helper(rework_id: String, piece_id: String, id: String, name: String)
+}
+
 pub type Quality {
   Quality(station_id: String, passes: Int, defects: Int, rework_hours: Float)
 }
@@ -84,6 +89,8 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
   use in_progress <- result.try(query_in_progress(connection))
   use kanbans <- result.try(query_kanbans(connection))
   use rework <- result.try(query_rework(connection))
+  use helpers <- result.try(query_helpers(connection, helpers_sql))
+  use can_help <- result.try(query_helpers(connection, can_help_sql))
   use quality <- result.try(query_quality(connection))
   use deviations <- result.try(query_deviations(connection))
 
@@ -95,6 +102,9 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
       kanbans: list.map(kanbans, fn(one) { #(one.station_id, one.count) })
         |> dict.from_list,
       rework: by_station(rework, fn(one) { one.station_id }),
+      helpers_of_rework: by_station(helpers, fn(one) { one.rework_id }),
+      helpers_of_piece: by_station(helpers, fn(one) { one.piece_id }),
+      can_help: by_station(can_help, fn(one) { one.rework_id }),
       quality: list.map(quality, fn(one) { #(one.station_id, one) })
         |> dict.from_list,
       deviations: by_station(deviations, fn(one) { one.station_id }),
@@ -113,6 +123,9 @@ type Rows {
     in_progress: Dict(String, List(InProgress)),
     kanbans: Dict(String, Int),
     rework: Dict(String, List(Rework)),
+    helpers_of_rework: Dict(String, List(Helper)),
+    helpers_of_piece: Dict(String, List(Helper)),
+    can_help: Dict(String, List(Helper)),
     quality: Dict(String, Quality),
     deviations: Dict(String, List(Deviation)),
   )
@@ -131,7 +144,11 @@ fn by_station(
 }
 
 fn of(groups: Dict(String, List(a)), station: Station) -> List(a) {
-  dict.get(groups, station.id) |> result.unwrap([])
+  rows_of(groups, station.id)
+}
+
+fn rows_of(groups: Dict(String, List(a)), key: String) -> List(a) {
+  dict.get(groups, key) |> result.unwrap([])
 }
 
 fn station_json(station: Station, rows: Rows) -> Json {
@@ -161,8 +178,22 @@ fn station_json(station: Station, rows: Rows) -> Json {
     ),
     #("overflow", json.array(over, overflow_json)),
     #("teamMembers", json.array(of(rows.members, station), member_json)),
-    #("inProgress", json.array(of(rows.in_progress, station), in_progress_json)),
-    #("rework", json.array(of(rows.rework, station), rework_json)),
+    #(
+      "inProgress",
+      json.array(of(rows.in_progress, station), fn(piece) {
+        in_progress_json(piece, rows_of(rows.helpers_of_piece, piece.id))
+      }),
+    ),
+    #(
+      "rework",
+      json.array(of(rows.rework, station), fn(item) {
+        rework_json(
+          item,
+          rows_of(rows.helpers_of_rework, item.id),
+          rows_of(rows.can_help, item.id),
+        )
+      }),
+    ),
     #("firstPassYield", json.nullable(first_pass_yield, json.float)),
     #("reworkHours", json.float(rework_hours)),
     #(
@@ -192,7 +223,7 @@ fn member_json(member: Member) -> Json {
   ])
 }
 
-fn in_progress_json(piece: InProgress) -> Json {
+fn in_progress_json(piece: InProgress, helpers: List(Helper)) -> Json {
   json.object([
     #("id", json.string(piece.id)),
     #("piece", json.string(piece.piece)),
@@ -200,10 +231,22 @@ fn in_progress_json(piece: InProgress) -> Json {
     #("teamMember", json.nullable(piece.team_member, json.string)),
     #("teamMemberId", json.nullable(piece.team_member_id, json.string)),
     #("paused", json.bool(piece.paused)),
+    #("helpers", json.array(helpers, helper_json)),
   ])
 }
 
-fn rework_json(item: Rework) -> Json {
+fn helper_json(helper: Helper) -> Json {
+  json.object([
+    #("id", json.string(helper.id)),
+    #("name", json.string(helper.name)),
+  ])
+}
+
+fn rework_json(
+  item: Rework,
+  helpers: List(Helper),
+  can_help: List(Helper),
+) -> Json {
   json.object([
     #("id", json.string(item.id)),
     #("piece", json.string(item.piece)),
@@ -211,6 +254,8 @@ fn rework_json(item: Rework) -> Json {
     #("foundBy", json.string(item.found_by)),
     #("assignee", json.nullable(item.assignee, json.string)),
     #("assigneeId", json.nullable(item.assignee_id, json.string)),
+    #("helpers", json.array(helpers, helper_json)),
+    #("canHelp", json.array(can_help, helper_json)),
   ])
 }
 
@@ -390,6 +435,39 @@ fn query_kanbans(
     expecting: decoder,
   )
 }
+
+fn query_helpers(
+  connection: sqlight.Connection,
+  sql: String,
+) -> Result(List(Helper), sqlight.Error) {
+  let decoder = {
+    use rework_id <- decode.field(0, decode.string)
+    use piece_id <- decode.field(1, decode.string)
+    use id <- decode.field(2, decode.string)
+    use name <- decode.field(3, decode.string)
+    decode.success(Helper(rework_id:, piece_id:, id:, name:))
+  }
+  sqlight.query(sql, on: connection, with: [], expecting: decoder)
+}
+
+const helpers_sql =
+  "select h.rework_id, h.piece_id, h.team_member_id, pe.name
+       from helper h
+       join team_member pe on pe.id = h.team_member_id
+      order by h.since, h.rowid"
+
+/// F61: the Team Members of the two Work Stations concerned, while someone
+/// repairs, but not who repairs nor who already helps a Piece.
+const can_help_sql =
+  "select r.id, r.piece_id, pe.id, pe.name
+       from rework r
+       join team_member pe
+         on pe.id in (select sp.team_member_id from station_team_member sp
+                       where sp.station_id in (r.station_id, r.raised_by))
+      where r.closed_at is null and r.assignee is not null
+        and pe.id <> r.assignee
+        and not exists (select 1 from helper h where h.team_member_id = pe.id)
+      order by r.id, pe.name, pe.id"
 
 fn query_rework(
   connection: sqlight.Connection,

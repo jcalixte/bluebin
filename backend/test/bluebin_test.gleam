@@ -1608,3 +1608,26 @@ pub fn a_version_2_database_migrates_to_version_3_test() {
   exec(connection, "pragma user_version = 1;")
   let assert Error(_) = db.prepare(connection, db.Demo)
 }
+
+pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
+  use connection <- with_seeded_database()
+  // Alice repairs rw-1: Karim (iOS) and Yasmine (QA iOS) can help (F61).
+  let assert Ok(payload) = line.load(connection)
+  assert string.contains(
+    json.to_string(payload),
+    "\"assigneeId\":\"pe-alice\",\"helpers\":[],\"canHelp\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"},{\"id\":\"pe-yasmine\",\"name\":\"Yasmine\"}]",
+  )
+
+  // Karim helps: he shows on the Rework and on US-4 in Yasmine's hands (F64).
+  let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
+  let assert Ok(payload) = line.load(connection)
+  let text = json.to_string(payload)
+  assert string.contains(
+    text,
+    "\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}],\"canHelp\":[{\"id\":\"pe-yasmine\",\"name\":\"Yasmine\"}]",
+  )
+  assert string.contains(
+    text,
+    "\"piece\":\"US-4 · iOS\",\"demand\":\"Offline mode\",\"teamMember\":\"Yasmine\",\"teamMemberId\":\"pe-yasmine\",\"paused\":false,\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}]",
+  )
+}

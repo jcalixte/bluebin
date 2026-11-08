@@ -26,6 +26,8 @@ const {
   raiseRework,
   repairRework,
   assign,
+  helpTheRework,
+  stopHelping,
   raiseAndon,
   closeAndon,
 } = useLine()
@@ -264,6 +266,8 @@ const taktLabel = computed(() => {
                 @rework="(piece) => openRework(station, piece)"
                 @repair="(rework) => run(() => repairRework(rework))"
                 @assign="(kind, id, teamMember) => run(() => assign(kind, id, teamMember))"
+                @help="(rework, who) => run(() => helpTheRework(rework, who))"
+                @stop-helping="(who) => run(() => stopHelping(who))"
               />
             </div>
             <p v-if="column.stations.length > 1" class="text-xs italic opacity-70">

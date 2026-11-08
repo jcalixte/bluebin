@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
-import type { Andon, Bottleneck, WorkStation } from "../types"
+import type { Andon, Bottleneck, Rework, TeamMemberName, WorkStation } from "../types"
 
 const props = defineProps<{
   station: WorkStation
@@ -28,6 +28,8 @@ const emit = defineEmits<{
   rework: [piece: string]
   repair: [rework: string]
   assign: [kind: "piece" | "rework", id: string, teamMember: string]
+  help: [rework: string, teamMember: string]
+  stopHelping: [teamMember: string]
   andon: [teamMember: string | undefined]
   closeAndon: [teamMember: string]
 }>()
@@ -55,6 +57,19 @@ watch(defaultTeamMember, (id) => {
  * Piece or hand one over here.
  */
 const actsHere = computed(() => props.station.teamMembers.some((one) => props.canActAs(one.id)))
+
+/** Who looks may make these Team Members Helpers of the Rework (F61). */
+function helpersToAdd(rework: Rework) {
+  return rework.canHelp.filter((one) => props.canActAs(one.id))
+}
+
+function joinHelp(rework: string, event: Event) {
+  const select = event.target as HTMLSelectElement
+  if (select.value !== "") {
+    emit("help", rework, select.value)
+    select.value = ""
+  }
+}
 
 function handOver(kind: "piece" | "rework", id: string, event: Event) {
   const teamMember = (event.target as HTMLSelectElement).value
@@ -115,6 +130,10 @@ const binsFull = computed(
 const yieldPercent = computed(() =>
   props.station.firstPassYield === null ? null : Math.round(props.station.firstPassYield * 100),
 )
+
+function names(people: TeamMemberName[]) {
+  return people.map((one) => one.name).join(", ")
+}
 
 const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 10)
 </script>
@@ -294,6 +313,37 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                 {{ item.assignee ? `${item.assignee} repairs` : "nobody repairs it" }}
               </span>
               <span
+                v-for="helper in item.helpers"
+                :key="helper.id"
+                class="badge badge-sm badge-ghost gap-1"
+              >
+                {{ helper.name }} helps
+                <button
+                  v-if="canActAs(helper.id)"
+                  class="cursor-pointer opacity-70 hover:opacity-100"
+                  :disabled="busy"
+                  :aria-label="`${helper.name} stops helping`"
+                  :title="`${helper.name} stops helping`"
+                  @click="$emit('stopHelping', helper.id)"
+                >
+                  ✕
+                </button>
+              </span>
+              <select
+                v-if="helpersToAdd(item).length > 0"
+                class="select select-ghost select-xs w-auto"
+                value=""
+                :disabled="busy"
+                aria-label="Help the Rework"
+                title="Help the Rework: reproduce the defect, write the failing test, check the repair"
+                @change="joinHelp(item.id, $event)"
+              >
+                <option value="" disabled>+ Help…</option>
+                <option v-for="one in helpersToAdd(item)" :key="one.id" :value="one.id">
+                  {{ one.name }} helps
+                </option>
+              </select>
+              <span
                 v-if="stale.has(`rework:${item.id}`)"
                 class="badge badge-xs badge-warning"
                 title="No event for more than one working day: is it still in repair?"
@@ -346,10 +396,13 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               </option>
             </select>
             <span v-else class="opacity-70">{{ item.teamMember ?? "unassigned" }}</span>
+            <span v-if="item.helpers.length > 0" class="text-xs opacity-70">
+              with {{ names(item.helpers) }} helping
+            </span>
             <span
               v-if="item.paused"
               class="badge badge-xs badge-warning"
-              title="Paused: its Team Member finishes a Rework or a Piece nearer to Deployment first"
+              title="Paused: its Team Member repairs or helps a Rework, or finishes a Piece nearer to Deployment first"
             >
               paused
             </span>
