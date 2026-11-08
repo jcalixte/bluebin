@@ -287,6 +287,7 @@ _Avoid_: hidden Line, secret Line
 - A **Helper** stops when they choose, and at the latest when the cause ends: **Help the Rework** ends when the **Rework** closes, **Help Downstream** when the **Piece** goes into a **Blue Bin**; then their paused **Assignment** nearest to **Deployment** becomes active again
 - **Rework** pauses the **Piece** that the **Team Member** is transforming upstream
 - A **Piece** never moves backward: the **Work Station** that finds a defect raises **Rework** and names the **Work Station** that made it; a **Team Member** of that **Work Station** comes to repair the **Piece** where it is
+- When the **Work Station** that found a defect finishes the **Piece**, it accepts the repair: the **Rework** closes, as if repaired
 - When only one upstream **Work Station** can have made the defect, **Rework** names it by default
 - While **Rework** waits or runs, the downstream **Work Station** does not pull a new **Piece**; it does **Help the Rework**, **Help Downstream**, or waits
 - **Rework** is **Touch Time** of the **Piece**, and also **Rework Time** of the **Work Station** that made the defect
