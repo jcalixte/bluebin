@@ -6,6 +6,7 @@ import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
+import HeldForReleaseZone from "../components/HeldForReleaseZone.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLine } from "../composables/useLine"
@@ -21,6 +22,7 @@ const {
   pull,
   finish,
   deploy,
+  release,
   raiseRework,
   repairRework,
   assign,
@@ -254,7 +256,7 @@ const taktLabel = computed(() => {
                 @close-andon="(who) => run(() => closeAndon(station.id, who))"
                 @pull="(who) => run((why) => pull(station.id, who, why))"
                 @finish="(piece) => run((why) => finish(station.id, piece, why))"
-                @deploy="(piece) => run(() => deploy(piece))"
+                @deploy="(piece, hold) => run(() => deploy(piece, hold))"
                 @rework="(piece) => openRework(station, piece)"
                 @repair="(rework) => run(() => repairRework(rework))"
                 @assign="(kind, id, teamMember) => run(() => assign(kind, id, teamMember))"
@@ -264,6 +266,15 @@ const taktLabel = computed(() => {
               {{ column.stations.length }} Branches in parallel
             </p>
           </div>
+        </template>
+        <template v-if="line?.heldForRelease.length">
+          <div class="w-12 shrink-0" />
+          <HeldForReleaseZone
+            :held="line.heldForRelease"
+            :busy="busy"
+            :can-release="canActAs()"
+            @release="(pieces) => run(() => release(pieces))"
+          />
         </template>
         <FlowConnectors :container="lineEl" :columns="columns" />
       </div>

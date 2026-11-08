@@ -36,10 +36,11 @@ Pushes to `main` are picked up by Coolify at https://platform.apoena.dev and lan
 One image: the Gleam API serves the built SPA from `static/`. Coolify builds it
 with the Dockerfile build pack and does a rolling update: the new container
 starts, passes `/api/health`, takes the traffic, then the old one stops. For a
-few seconds both write to the SQLite file, so a migration must stay additive:
-the old code must still run on the new schema. The schema lives in one place,
-`schema` in `backend/src/bluebin/db.gleam`, at `schema_version`; a database
-file at any other version is refused, never read.
+few seconds both write to the SQLite file. There are no migrations: the schema
+lives in one place, `schema` in `backend/src/bluebin/db.gleam`, at
+`schema_version`, and a database file at any other version is refused, never
+read. Raising `schema_version` means deleting `/app/data/workspaces` at the
+deploy.
 
 ### Sign-in and Workspaces
 

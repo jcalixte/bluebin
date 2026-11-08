@@ -137,6 +137,15 @@ export type Bottleneck = {
   fullInFront: boolean
 }
 
+/** A deployed Piece that waits for its Release; `waitingHours` since its Deployment, in Calendar Time. */
+export type HeldForRelease = {
+  id: string
+  piece: string
+  demand: string
+  demandLabel: string
+  waitingHours: number
+}
+
 export type Line = {
   stations: WorkStation[]
   steps: Step[]
@@ -146,6 +155,7 @@ export type Line = {
   stale: StaleAssignment[]
   activeAssignments: number
   bottlenecks: Bottleneck[]
+  heldForRelease: HeldForRelease[]
 }
 
 /** `stations` is ordered nearest to Deployment first. */

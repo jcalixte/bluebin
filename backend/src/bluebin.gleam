@@ -779,6 +779,7 @@ fn route(
     _, ["api", "pull"] -> pull(request, database, act_as)
     _, ["api", "finish"] -> finish(request, database)
     _, ["api", "deploy"] -> deploy(request, database)
+    _, ["api", "release"] -> release(request, database)
     _, ["api", "rework"] -> raise_rework(request, database)
     _, ["api", "rework", "repair"] -> repair_rework(request, database)
     _, ["api", "andons"] -> andons(database)
@@ -1129,6 +1130,7 @@ fn line_view(database: String) -> wisp.Response {
   use #(stale, active) <- result.try(andon.stale(connection, calendar, now))
   let takt = demand.line_takt_hours(demands)
   use bottlenecks <- result.try(andon.bottlenecks(connection, takt))
+  use held <- result.try(flow.held_for_release(connection))
   Ok(
     json.object([
       #("stations", stations),
@@ -1139,6 +1141,7 @@ fn line_view(database: String) -> wisp.Response {
       #("stale", andon.stale_json(stale)),
       #("activeAssignments", json.int(active)),
       #("bottlenecks", andon.bottlenecks_json(bottlenecks)),
+      #("heldForRelease", flow.held_for_release_json(held)),
     ]),
   )
 }
@@ -1299,16 +1302,37 @@ fn finish(request: wisp.Request, database: String) -> wisp.Response {
 }
 
 fn deploy(request: wisp.Request, database: String) -> wisp.Response {
-  use piece <- require_body(
+  use #(piece, hold) <- require_body(
     request,
-    decode.field("piece", decode.string, decode.success),
-    or: "expected a body like {\"piece\": \"p-checkout-9\"}",
+    {
+      use piece <- decode.field("piece", decode.string)
+      use hold <- decode.optional_field("hold", False, decode.bool)
+      decode.success(#(piece, hold))
+    },
+    or: "expected a body like {\"piece\": \"p-checkout-9\", \"hold\": false}",
   )
   flow_response(
     db.with_connection_at(database, fn(connection) {
-      flow.deploy(connection, piece)
+      flow.deploy(connection, piece, hold:)
     }),
   )
+}
+
+fn release(request: wisp.Request, database: String) -> wisp.Response {
+  use pieces <- require_body(
+    request,
+    decode.field("pieces", decode.list(decode.string), decode.success),
+    or: "expected a body like {\"pieces\": [\"p-checkout-9\"]}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      flow.release(connection, pieces)
+    })
+  {
+    Ok(released) ->
+      json.object([#("released", json.int(released))]) |> send_json(200)
+    Error(failure) -> flow_failure(failure)
+  }
 }
 
 fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {

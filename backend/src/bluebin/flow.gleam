@@ -66,7 +66,7 @@ pub fn rule_warning(rule: Rule) -> String {
     PullDuringAndon ->
       "An Andon stops this Work Station until its Team Leader closes it. Pulling a new Piece now is a Deviation."
     ReorderHeijunkaSequence ->
-      "Releasing this Piece before its turn breaks the Heijunka Sequence and the levelled Product Mix. It is a Deviation."
+      "Moving this Piece to the top before its turn breaks the Heijunka Sequence and the levelled Product Mix. It is a Deviation."
   }
 }
 
@@ -211,9 +211,12 @@ pub fn finish(
   )
 }
 
+/// By default the Piece is released at its Deployment; with `hold` it waits,
+/// held for Release, until `release`. Either way it leaves the Line.
 pub fn deploy(
   connection: sqlight.Connection,
   piece_id: String,
+  hold hold: Bool,
 ) -> Result(Flowed, FlowError) {
   use <- in_transaction(connection)
   use last <- result.try(last_position(connection))
@@ -225,7 +228,6 @@ pub fn deploy(
       "update piece
         set state = 'deployed', station_id = null, assignee = null,
             deployed_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
-            released_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
             since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1",
       [sqlight.text(piece.id)],
@@ -241,14 +243,10 @@ pub fn deploy(
     json.object([#("station", json.string(piece.station_id))]),
   ))
 
-  use _ <- result.try(record_event(
-    connection,
-    "piece_released",
-    Some(piece.id),
-    json.object([]),
-  ))
-
-  use _ <- result.try(deliver_demand_when_complete(connection, piece.id))
+  use _ <- result.try(case hold {
+    True -> Ok(Nil)
+    False -> release_one(connection, piece.id)
+  })
 
   Ok(Flowed(
     piece: piece.reference,
@@ -256,6 +254,91 @@ pub fn deploy(
     deviations: [],
     kanbans_sent_to: sent,
   ))
+}
+
+/// Releases every Piece of `piece_ids`, or none of them when one is not held
+/// for Release.
+pub fn release(
+  connection: sqlight.Connection,
+  piece_ids: List(String),
+) -> Result(Int, FlowError) {
+  use <- in_transaction(connection)
+  use _ <- result.try(list.try_each(piece_ids, release_one(connection, _)))
+  Ok(list.length(piece_ids))
+}
+
+fn release_one(
+  connection: sqlight.Connection,
+  piece_id: String,
+) -> Result(Nil, FlowError) {
+  use released <- result.try(maybe_one(
+    connection,
+    "update piece set released_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+      where id = ?1 and state = 'deployed' and released_at is null
+     returning id",
+    [sqlight.text(piece_id)],
+    decode.at([0], decode.string),
+  ))
+  use <- bool.guard(released == None, Error(PieceNotHere))
+  use _ <- result.try(record_event(
+    connection,
+    "piece_released",
+    Some(piece_id),
+    json.object([]),
+  ))
+  deliver_demand_when_complete(connection, piece_id)
+}
+
+/// A Piece deployed and held for Release, with its wait since its Deployment
+/// in Calendar Time.
+pub type HeldForRelease {
+  HeldForRelease(
+    id: String,
+    reference: String,
+    demand: String,
+    demand_label: String,
+    waiting_hours: Float,
+  )
+}
+
+pub fn held_for_release(
+  connection: sqlight.Connection,
+) -> Result(List(HeldForRelease), sqlight.Error) {
+  sqlight.query(
+    "select p.id, p.reference, d.id, d.label,
+            round((julianday('now') - julianday(p.deployed_at)) * 24, 1)
+       from piece p join demand d on d.id = p.demand_id
+      where p.state = 'deployed' and p.released_at is null
+      order by p.deployed_at, p.id",
+    on: connection,
+    with: [],
+    expecting: {
+      use id <- decode.field(0, decode.string)
+      use reference <- decode.field(1, decode.string)
+      use demand <- decode.field(2, decode.string)
+      use demand_label <- decode.field(3, decode.string)
+      use waiting_hours <- decode.field(4, decode.float)
+      decode.success(HeldForRelease(
+        id:,
+        reference:,
+        demand:,
+        demand_label:,
+        waiting_hours:,
+      ))
+    },
+  )
+}
+
+pub fn held_for_release_json(held: List(HeldForRelease)) -> json.Json {
+  json.array(held, fn(one) {
+    json.object([
+      #("id", json.string(one.id)),
+      #("piece", json.string(one.reference)),
+      #("demand", json.string(one.demand)),
+      #("demandLabel", json.string(one.demand_label)),
+      #("waitingHours", json.float(one.waiting_hours)),
+    ])
+  })
 }
 
 fn deliver_demand_when_complete(

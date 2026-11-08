@@ -32,7 +32,9 @@ export function useLine() {
   const finish = (station: string, piece: string, reason?: string) =>
     act("/api/finish", { station, piece, reason })
 
-  const deploy = (piece: string) => act("/api/deploy", { piece })
+  const deploy = (piece: string, hold = false) => act("/api/deploy", { piece, hold })
+
+  const release = (pieces: string[]) => act("/api/release", { pieces })
 
   const raiseRework = (station: string, piece: string, madeBy: string, description: string) =>
     act("/api/rework", { station, piece, madeBy, description })
@@ -77,6 +79,7 @@ export function useLine() {
     pull,
     finish,
     deploy,
+    release,
     raiseRework,
     repairRework,
     assign,

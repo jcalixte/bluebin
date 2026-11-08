@@ -371,7 +371,7 @@ pub fn delivering_sends_a_kanban_back_to_the_last_work_station_test() {
      where id = 'p-billing-3'",
   )
 
-  let assert Ok(flowed) = flow.deploy(connection, "p-billing-3")
+  let assert Ok(flowed) = flow.deploy(connection, "p-billing-3", hold: False)
   assert flowed.kanbans_sent_to == ["ws-uat"]
   assert state_of(connection, "p-billing-3") == "deployed"
   assert kanbans_over_empty_blue_bins(connection) == 0
@@ -379,7 +379,8 @@ pub fn delivering_sends_a_kanban_back_to_the_last_work_station_test() {
 
 pub fn only_the_last_work_station_deploys_test() {
   use connection <- with_seeded_database()
-  assert flow.deploy(connection, "p-checkout-9") == Error(flow.PieceNotHere)
+  assert flow.deploy(connection, "p-checkout-9", hold: False)
+    == Error(flow.PieceNotHere)
 }
 
 pub fn every_action_writes_one_flow_event_test() {

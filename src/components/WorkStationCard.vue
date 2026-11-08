@@ -24,7 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   pull: [teamMember: string | undefined]
   finish: [piece: string]
-  deploy: [piece: string]
+  deploy: [piece: string, hold: boolean]
   rework: [piece: string]
   repair: [rework: string]
   assign: [kind: "piece" | "rework", id: string, teamMember: string]
@@ -404,14 +404,24 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               <span v-if="bin.pulledBy" class="truncate text-[0.6875rem] opacity-80">
                 {{ bin.pulledBy }} pulled
               </span>
-              <button
-                v-if="last && bin.id && canActAs()"
-                class="btn btn-xs"
-                :disabled="busy"
-                @click="$emit('deploy', bin.id)"
-              >
-                Deploy
-              </button>
+              <template v-if="last && bin.id && canActAs()">
+                <button
+                  class="btn btn-xs"
+                  :disabled="busy"
+                  title="Deploy and release it to the Client now"
+                  @click="$emit('deploy', bin.id, false)"
+                >
+                  Deploy
+                </button>
+                <button
+                  class="btn btn-ghost btn-xs text-primary-content"
+                  :disabled="busy"
+                  title="Deploy it, and hold its Release for later"
+                  @click="$emit('deploy', bin.id, true)"
+                >
+                  Deploy, hold
+                </button>
+              </template>
             </template>
             <span v-else class="sr-only">Empty Blue Bin</span>
           </li>
@@ -423,14 +433,24 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           >
             <span class="truncate font-medium">{{ extra.piece }}</span>
             <span class="text-[0.6875rem]">over the count</span>
-            <button
-              v-if="last && canActAs()"
-              class="btn btn-xs"
-              :disabled="busy"
-              @click="$emit('deploy', extra.id)"
-            >
-              Deploy
-            </button>
+            <template v-if="last && canActAs()">
+              <button
+                class="btn btn-xs"
+                :disabled="busy"
+                title="Deploy and release it to the Client now"
+                @click="$emit('deploy', extra.id, false)"
+              >
+                Deploy
+              </button>
+              <button
+                class="btn btn-ghost btn-xs text-warning-content"
+                :disabled="busy"
+                title="Deploy it, and hold its Release for later"
+                @click="$emit('deploy', extra.id, true)"
+              >
+                Deploy, hold
+              </button>
+            </template>
           </li>
         </ul>
         <p v-if="binsFull" class="mt-1.5 text-xs font-medium text-warning-ink">

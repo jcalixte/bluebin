@@ -129,12 +129,12 @@ pub fn the_last_deployed_piece_delivers_the_demand_test() {
     "select count(*) from flow_event where kind = 'demand_delivered'"
 
   put_in_last_blue_bin(connection, pieces <> "-1")
-  let assert Ok(_) = flow.deploy(connection, pieces <> "-1")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: False)
   assert text(connection, state) == "active"
   assert count(connection, delivered) == 0
 
   put_in_last_blue_bin(connection, pieces <> "-2")
-  let assert Ok(_) = flow.deploy(connection, pieces <> "-2")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-2", hold: False)
   assert text(connection, state) == "delivered"
   assert count(connection, delivered) == 1
   let assert Ok(active) = demand.list_active(connection)
@@ -144,7 +144,7 @@ pub fn the_last_deployed_piece_delivers_the_demand_test() {
 pub fn a_piece_of_an_unfinished_demand_does_not_deliver_it_test() {
   use connection <- with_seeded_database()
   put_in_last_blue_bin(connection, "p-billing-3")
-  let assert Ok(_) = flow.deploy(connection, "p-billing-3")
+  let assert Ok(_) = flow.deploy(connection, "p-billing-3", hold: False)
   assert text(connection, "select state from demand where id = 'd-billing'")
     == "active"
 }
@@ -152,7 +152,7 @@ pub fn a_piece_of_an_unfinished_demand_does_not_deliver_it_test() {
 pub fn deploying_a_piece_releases_it_at_the_same_moment_test() {
   use connection <- with_seeded_database()
   put_in_last_blue_bin(connection, "p-billing-3")
-  let assert Ok(_) = flow.deploy(connection, "p-billing-3")
+  let assert Ok(_) = flow.deploy(connection, "p-billing-3", hold: False)
   assert count(
       connection,
       "select count(*) from piece where id = 'p-billing-3'
@@ -167,19 +167,86 @@ pub fn deploying_a_piece_releases_it_at_the_same_moment_test() {
     == 1
 }
 
+pub fn a_piece_deployed_with_hold_waits_for_its_release_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(id) =
+    demand.create(connection, "Search", "Retail", today(connection), 1)
+  let piece = "p-" <> string.drop_start(id, 2) <> "-1"
+  put_in_last_blue_bin(connection, piece)
+  let assert Ok(flowed) = flow.deploy(connection, piece, hold: True)
+  // The Piece left the Line: its Blue Bin is free, so UAT gets a Kanban.
+  assert flowed.kanbans_sent_to == ["ws-uat"]
+  assert count(
+      connection,
+      "select count(*) from piece where id = '" <> piece <> "'
+         and state = 'deployed' and deployed_at is not null
+         and released_at is null",
+    )
+    == 1
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'piece_released'
+         and piece_id = '" <> piece <> "'",
+    )
+    == 0
+  assert text(connection, "select state from demand where id = '" <> id <> "'")
+    == "active"
+  let assert Ok([held]) = flow.held_for_release(connection)
+  assert held.id == piece
+  assert held.demand == id
+}
+
+pub fn releasing_the_held_pieces_delivers_the_demand_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(id) =
+    demand.create(connection, "Search", "Retail", today(connection), 2)
+  let pieces = "p-" <> string.drop_start(id, 2)
+  put_in_last_blue_bin(connection, pieces <> "-1")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: True)
+  put_in_last_blue_bin(connection, pieces <> "-2")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-2", hold: True)
+
+  let assert Ok(2) = flow.release(connection, [pieces <> "-1", pieces <> "-2"])
+  assert count(
+      connection,
+      "select count(*) from flow_event where kind = 'piece_released'
+         and piece_id like '" <> pieces <> "-%'",
+    )
+    == 2
+  assert text(connection, "select state from demand where id = '" <> id <> "'")
+    == "delivered"
+  assert flow.held_for_release(connection) == Ok([])
+}
+
+pub fn only_a_piece_held_for_release_can_be_released_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(id) =
+    demand.create(connection, "Search", "Retail", today(connection), 2)
+  let pieces = "p-" <> string.drop_start(id, 2)
+  put_in_last_blue_bin(connection, pieces <> "-1")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: True)
+  // The second Piece is still in the Backlog: the whole Release is refused.
+  assert flow.release(connection, [pieces <> "-1", pieces <> "-2"])
+    == Error(flow.PieceNotHere)
+  let assert Ok([_]) = flow.held_for_release(connection)
+  // A Piece already released cannot be released again.
+  let assert Ok(1) = flow.release(connection, [pieces <> "-1"])
+  assert flow.release(connection, [pieces <> "-1"]) == Error(flow.PieceNotHere)
+}
+
 pub fn a_demand_is_delivered_at_the_release_of_its_last_piece_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
     demand.create(connection, "Search", "Retail", today(connection), 2)
   let pieces = "p-" <> string.drop_start(id, 2)
   put_in_last_blue_bin(connection, pieces <> "-1")
-  let assert Ok(_) = flow.deploy(connection, pieces <> "-1")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: False)
   // The first Piece is held: deployed, not released yet.
   exec(connection, "update piece set released_at = null
      where id = '" <> pieces <> "-1'")
 
   put_in_last_blue_bin(connection, pieces <> "-2")
-  let assert Ok(_) = flow.deploy(connection, pieces <> "-2")
+  let assert Ok(_) = flow.deploy(connection, pieces <> "-2", hold: False)
   assert text(connection, "select state from demand where id = '" <> id <> "'")
     == "active"
   assert count(

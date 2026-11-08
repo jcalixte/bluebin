@@ -32,6 +32,7 @@ const routes = [
   #(http.Post, ["api", "pull"], access.Flow),
   #(http.Post, ["api", "finish"], access.Flow),
   #(http.Post, ["api", "deploy"], access.Flow),
+  #(http.Post, ["api", "release"], access.Flow),
   #(http.Post, ["api", "rework"], access.Flow),
   #(http.Post, ["api", "rework", "repair"], access.Flow),
   #(http.Post, ["api", "andon"], access.Flow),

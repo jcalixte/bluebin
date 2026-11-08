@@ -213,7 +213,7 @@ _Avoid_: hidden Line, secret Line
 - A **Piece** has no size; the team decides how big each **Piece** is. **Takt Time** counts **Pieces**, so a **Piece** much bigger than the others shows as a slow **Touch Time** against the **Takt Time** and a falling **Takt Gap**
 - A **Piece** waits in the **Backlog**, then flows alone through the **Line** (one-piece flow)
 - A **Piece** leaves the **Line** at its **Deployment**; its **Release** comes at the same time or later, and is not the work of a **Work Station**
-- By default a **Piece** is released at its **Deployment**; a **Team Member** can hold it for a later **Release** instead. A held **Piece** has already left the **Line**: it holds no **Blue Bin**, its **Kanban** is already sent, and holding it is not a **Deviation**
+- By default a **Piece** is released at its **Deployment**; a **Team Member** can hold it for a later **Release** instead. A **Piece** held for **Release** has already left the **Line**: it takes no **Blue Bin**, its **Kanban** is already sent, and holding it is not a **Deviation**
 - Several deployed **Pieces** can have one **Release** together, for example the web, iOS and Android **Pieces** of one **Demand**
 - Line measures count **Deployments**: **Takt Gap**, **Andon** and **Forecast** show if the **Line** keeps its pace. Client measures count **Releases**: **Lead Time** and **On-Time Delivery** show what the **Client** gets
 - The wait from **Deployment** to **Release** is **Stagnation Time** of the **Piece**, so a common **Release** date shows its cost in the **Lead Time**
@@ -316,6 +316,7 @@ _Avoid_: hidden Line, secret Line
 - "a standard size for a User Story" — resolved: no rule. Unlike cars of one model, **Pieces** differ in work content. Bluebin does not size or weight them; the team cuts its **Pieces** and sees the consequences in **Touch Time**, **Takt Gap** and **Andons**.
 - "production" — resolved: two separate events. **Deployment** is when a **Piece** runs in production; **Release** is when the **Client** can use it. A team can deploy behind a flag and release later, for example to release all platforms on one date.
 - "release" for a manual reorder of the **Backlog** — avoid: **Release** is the moment the **Client** can use a **Piece**. A manual reorder is a **Deviation** on the **Heijunka Sequence**.
+- "held" — resolved: say "held for **Release**" for a deployed **Piece** that waits for its **Release**. A **Piece** in a **Team Member**'s hands is in hand, not held for **Release**.
 - Pauses during **Touch Time** — resolved: a **Team Member** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to **Deployment**; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
 - Time measures and the working calendar — resolved: measures show **Calendar Time** by default and **Working Time** as a second view; **Takt Time** uses **Working Time** only.
 - **Takt Time** of a **Demand** vs of the **Line** — resolved: one term, two scopes. The **Takt Time** of the **Line** is computed from all active **Demands**.

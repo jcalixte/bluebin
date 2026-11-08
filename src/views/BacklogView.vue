@@ -140,7 +140,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                   class="btn btn-ghost btn-sm"
                   :disabled="busy"
                   :aria-label="`Make ${piece.reference} of ${piece.demandLabel} urgent`"
-                  title="Release this Piece before its turn. It is a Deviation."
+                  title="Move this Piece to the top of the Backlog, before its turn. It is a Deviation."
                   @click="urgent(piece.id)"
                 >
                   Make urgent
