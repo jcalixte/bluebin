@@ -58,6 +58,7 @@ pub type Rework {
     piece: String,
     description: String,
     found_by: String,
+    found_by_id: Option(String),
     assignee: Option(String),
     assignee_id: Option(String),
   )
@@ -252,6 +253,7 @@ fn rework_json(
     #("piece", json.string(item.piece)),
     #("description", json.string(item.description)),
     #("foundBy", json.string(item.found_by)),
+    #("foundById", json.nullable(item.found_by_id, json.string)),
     #("assignee", json.nullable(item.assignee, json.string)),
     #("assigneeId", json.nullable(item.assignee_id, json.string)),
     #("helpers", json.array(helpers, helper_json)),
@@ -480,12 +482,14 @@ fn query_rework(
     use found_by <- decode.field(4, decode.string)
     use assignee <- decode.field(5, decode.optional(decode.string))
     use assignee_id <- decode.field(6, decode.optional(decode.string))
+    use found_by_id <- decode.field(7, decode.optional(decode.string))
     decode.success(Rework(
       station_id:,
       id:,
       piece:,
       description:,
       found_by:,
+      found_by_id:,
       assignee:,
       assignee_id:,
     ))
@@ -495,7 +499,7 @@ fn query_rework(
             coalesce((select w.name from work_station w where w.id = r.raised_by),
                      'downstream'),
             (select pe.name from team_member pe where pe.id = r.assignee),
-            r.assignee
+            r.assignee, r.raised_by
      from rework r
      join piece p on p.id = r.piece_id
      where r.closed_at is null

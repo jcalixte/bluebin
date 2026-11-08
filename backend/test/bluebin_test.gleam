@@ -1613,6 +1613,11 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
   use connection <- with_seeded_database()
   // Alice repairs rw-1: Karim (iOS) and Yasmine (QA iOS) can help (F61).
   let assert Ok(payload) = line.load(connection)
+  // The warning of a pull at QA iOS finds its Reworks by this id (F14).
+  assert string.contains(
+    json.to_string(payload),
+    "\"foundBy\":\"QA iOS\",\"foundById\":\"ws-qa-ios\"",
+  )
   assert string.contains(
     json.to_string(payload),
     "\"assigneeId\":\"pe-alice\",\"helpers\":[],\"canHelp\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"},{\"id\":\"pe-yasmine\",\"name\":\"Yasmine\"}]",

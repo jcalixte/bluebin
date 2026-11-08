@@ -11,7 +11,7 @@ import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLine } from "../composables/useLine"
 import { useWorkspaces } from "../composables/useWorkspaces"
-import type { WorkStation } from "../types"
+import type { HelpOffer, WorkStation } from "../types"
 
 const {
   line,
@@ -67,6 +67,44 @@ async function rename(position: number, name: string) {
 }
 
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
+
+/** The last pull tried, so its warning can offer Help the Rework instead (F14). */
+const pullAt = ref<{ station: string; who?: string } | null>(null)
+
+function pullHere(station: string, who?: string) {
+  pullAt.value = { station, who }
+  void run((why) => pull(station, who, why))
+}
+
+/** The open Reworks found by the Work Station that tried to pull, first in its warning. */
+const helpOffers = computed<HelpOffer[]>(() => {
+  const at = pullAt.value
+  if (!at || !pending.value?.confirm.split(" ").includes("pull_with_an_open_rework")) return []
+  const who = at.who
+  return (line.value?.stations ?? []).flatMap((madeBy) =>
+    madeBy.rework
+      .filter((item) => item.foundById === at.station)
+      .map((item) => ({
+        rework: item.id,
+        label: item.assignee
+          ? `Help ${item.assignee} on ${item.piece}`
+          : `Help the Rework on ${item.piece}`,
+        blocked: !item.assignee
+          ? `Nobody of ${madeBy.name} repairs it yet: help once someone takes it.`
+          : !who
+            ? "Pick who takes the Piece in “Taken by”: that Team Member helps."
+            : item.canHelp.some((one) => one.id === who) && canActAs(who)
+              ? null
+              : "This Team Member cannot help it now: they repair it, or already help another Piece.",
+      })),
+  )
+})
+
+function helpInstead(rework: string) {
+  const who = pullAt.value?.who
+  pending.value = null
+  if (who) void run(() => helpTheRework(rework, who))
+}
 
 const raising = ref<{ station: WorkStation; piece: string; reference: string } | null>(null)
 const madeBy = ref("")
@@ -260,7 +298,7 @@ const taktLabel = computed(() => {
                 :own-team-member="current?.teamMember"
                 @andon="(who) => run(() => raiseAndon(station.id, who))"
                 @close-andon="(who) => run(() => closeAndon(station.id, who))"
-                @pull="(who) => run((why) => pull(station.id, who, why))"
+                @pull="(who) => pullHere(station.id, who)"
                 @finish="(piece) => run((why) => finish(station.id, piece, why))"
                 @deploy="(piece, hold) => run(() => deploy(piece, hold))"
                 @rework="(piece) => openRework(station, piece)"
@@ -329,7 +367,9 @@ const taktLabel = computed(() => {
       v-if="pending"
       :message="pending.message"
       :busy="busy"
+      :helps="helpOffers"
       @confirm="recordDeviation"
+      @help="helpInstead"
       @cancel="pending = null"
     />
   </section>

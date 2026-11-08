@@ -63,6 +63,7 @@ export type Rework = {
   description: string
   /** The Work Station that found the defect and holds the Piece. */
   foundBy: string
+  foundById: string | null
   assignee: string | null
   assigneeId: string | null
   helpers: TeamMemberName[]
@@ -97,6 +98,14 @@ export type ReorderEffect = {
   places: number
   hours: number
   taktGap: number
+}
+
+/** Help the Rework, offered in a pull warning before the Deviation (F14). */
+export type HelpOffer = {
+  rework: string
+  label: string
+  /** Why this help cannot start now, or null. */
+  blocked: string | null
 }
 
 export type FlowConfirm = {

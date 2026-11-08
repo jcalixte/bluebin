@@ -1,13 +1,22 @@
 <script setup lang="ts">
 import { ref } from "vue"
-import type { ReorderEffect } from "../types"
+import type { HelpOffer, ReorderEffect } from "../types"
 import AppModal from "./AppModal.vue"
 
-defineProps<{ message: string; effects?: ReorderEffect[]; busy?: boolean }>()
+const props = defineProps<{
+  message: string
+  effects?: ReorderEffect[]
+  busy?: boolean
+  /** Help the Rework, offered before the Deviation (F14). */
+  helps?: HelpOffer[]
+}>()
 
-const emit = defineEmits<{ confirm: [reason: string]; cancel: [] }>()
+const emit = defineEmits<{ confirm: [reason: string]; cancel: []; help: [rework: string] }>()
 
 const reason = ref("")
+
+/** With a help to offer, the reason opens only when the Team Member goes on anyway. */
+const goingOn = ref((props.helps ?? []).length === 0)
 
 function confirm() {
   if (reason.value.trim() !== "") {
@@ -41,7 +50,28 @@ function signed(value: number) {
         </li>
       </ul>
     </div>
-    <label class="form-control">
+    <div v-if="!goingOn" class="grid gap-2">
+      <template v-for="offer in helps" :key="offer.rework">
+        <button
+          class="btn btn-primary justify-start"
+          :disabled="busy || offer.blocked !== null"
+          :aria-describedby="offer.blocked ? `blocked-${offer.rework}` : undefined"
+          @click="emit('help', offer.rework)"
+        >
+          {{ offer.label }}
+        </button>
+        <p v-if="offer.blocked" :id="`blocked-${offer.rework}`" class="text-xs opacity-70">
+          {{ offer.blocked }}
+        </p>
+      </template>
+      <div class="modal-action mt-2 items-center justify-between">
+        <button class="btn btn-link btn-sm px-0" @click="goingOn = true">
+          Go on anyway (Deviation) ›
+        </button>
+        <button class="btn btn-ghost" @click="emit('cancel')">Cancel</button>
+      </div>
+    </div>
+    <label v-if="goingOn" class="form-control">
       <span class="label-text text-sm">Why do you go on? One line, seen by everyone.</span>
       <input
         v-model="reason"
@@ -51,7 +81,7 @@ function signed(value: number) {
         @keyup.enter="confirm"
       />
     </label>
-    <div class="modal-action">
+    <div v-if="goingOn" class="modal-action">
       <button class="btn btn-ghost" @click="emit('cancel')">Cancel</button>
       <button class="btn btn-warning" :disabled="busy || reason.trim() === ''" @click="confirm">
         Record the Deviation

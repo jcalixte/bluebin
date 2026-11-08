@@ -67,7 +67,7 @@ pub fn rule_warning(rule: Rule) -> String {
     SecondPieceInABlueBin ->
       "Every Blue Bin of this Work Station is full. Putting a second Piece in one is a Deviation."
     PullWithAnOpenRework ->
-      "This Work Station found a defect and its Rework is still open. Starting another Piece before it is repaired is a Deviation."
+      "This Work Station found a defect and its Rework is still open: a free Blue Bin or a Kanban does not change that. Starting another Piece before the repair is a Deviation."
     PullDuringAndon ->
       "An Andon stops this Work Station until its Team Leader closes it. Pulling a new Piece now is a Deviation."
     ReorderHeijunkaSequence ->
