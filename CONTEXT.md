@@ -243,7 +243,7 @@ _Avoid_: hidden Line, secret Line
 - **Lead Time** = **Touch Time** + **Stagnation Time**
 - **Lead Time** = the **Backlog** wait + the sum of the **Station Lead Times** + the wait from **Deployment** to **Release**
 - **Station Lead Time** = **Replenishment Time** + the wait in its **Blue Bin**; **Replenishment Time** = **Touch Time** at that **Work Station** + its pauses
-- **Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Calendar Time** by default, and in **Working Time** as a second view
+- **Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Working Time** by default, and in **Calendar Time** as a second view
 - **Touch Time** is net time, so it is the same in both views
 - **Takt Time** always uses **Working Time**
 - The **Takt Gap** of a **Demand** = its deployed **Pieces** − the elapsed **Working Time** ÷ its **Takt Time**
@@ -335,7 +335,7 @@ _Avoid_: hidden Line, secret Line
 - "release" for a manual reorder of the **Backlog** — avoid: **Release** is the moment the **Client** can use a **Piece**. A manual reorder is a **Deviation** on the **Heijunka Sequence**.
 - "held" — resolved: say "held for **Release**" for a deployed **Piece** that waits for its **Release**. A **Piece** in a **Team Member**'s hands is in hand, not held for **Release**.
 - Pauses during **Touch Time** — resolved: a **Team Member** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to **Deployment**; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
-- Time measures and the working calendar — resolved: measures show **Calendar Time** by default and **Working Time** as a second view; **Takt Time** uses **Working Time** only.
+- Time measures and the working calendar — resolved: measures show **Working Time** by default and **Calendar Time** as a second view; **Takt Time** uses **Working Time** only.
 - **Takt Time** of a **Demand** vs of the **Line** — resolved: one term, two scopes. The **Takt Time** of the **Line** is computed from all active **Demands**.
 - **Heijunka** order — resolved: computed as the **Heijunka Sequence**, released only on a **Kanban** (pull, not a timed pitch), with manual reorder allowed.
 - "Heijunka sequencer" — the part of the app that computes the **Heijunka Sequence**; a design name, not a domain term.

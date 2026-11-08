@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import CompareCell, { type Verdict } from "../components/CompareCell.vue"
+import VerdictPill from "../components/VerdictPill.vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
 import { useLabels } from "../composables/useLabels"
 import { isValidPeriod, useMeasures, type Period } from "../composables/useMeasures"
@@ -10,10 +12,10 @@ const { before, after, measures, error, loading, calendar, calendarError, saveCa
 
 const { labels } = useLabels()
 
-const view = ref<TimeView>("calendar")
+const view = ref<TimeView>("working")
 const timeViews = [
-  { id: "calendar", label: "Calendar Time" },
   { id: "working", label: "Working Time" },
+  { id: "calendar", label: "Calendar Time" },
 ] as const
 
 const periods = [
@@ -42,24 +44,42 @@ function hours(value: number | null) {
   return Math.abs(minutes) < 60 ? `${minutes} min` : `${value.toFixed(1)} h`
 }
 
-function sign(difference: number) {
-  return difference > 0 ? "+" : "−"
-}
-
-function hoursChange(a: number | null, b: number | null) {
-  if (a === null || b === null) return "—"
-  const difference = b - a
-  if (Math.round(difference * 60) === 0) return "0 min"
-  return `${sign(difference)}${hours(Math.abs(difference))}`
-}
-
-function countChange(a: number, b: number) {
-  const difference = b - a
-  return difference === 0 ? "0" : `${sign(difference)}${Math.abs(difference)}`
-}
-
 function percent(share: number | null | undefined) {
   return share === null || share === undefined ? "—" : `${Math.round(share * 100)} %`
+}
+
+type Kind = "hours" | "count" | "share"
+/** Which way is an improvement; null when neither way is better (Touch Time is work content). */
+type Better = "lower" | "higher" | null
+type Comparison = { before: string; after: string; change: string; verdict: Verdict }
+
+function format(value: number | null, kind: Kind) {
+  if (value === null) return "—"
+  if (kind === "hours") return hours(value)
+  if (kind === "share") return percent(value)
+  return String(value)
+}
+
+/** The change, rounded as it shows: a change under one displayed unit is no change. */
+function rounded(difference: number, kind: Kind) {
+  if (kind === "hours") return Math.round(difference * 60)
+  if (kind === "share") return Math.round(difference * 100)
+  return difference
+}
+
+function compare(a: number | null, b: number | null, kind: Kind, better: Better): Comparison {
+  const shown = { before: format(a, kind), after: format(b, kind) }
+  if (a === null || b === null) return { ...shown, change: "—", verdict: null }
+  const difference = b - a
+  const step = rounded(difference, kind)
+  if (step === 0) {
+    const zero = { hours: "0 min", share: "0 pt", count: "0" }[kind]
+    return { ...shown, change: zero, verdict: null }
+  }
+  const magnitude = kind === "share" ? `${Math.abs(step)} pt` : format(Math.abs(difference), kind)
+  const verdict =
+    better === null ? null : difference < 0 === (better === "lower") ? "better" : "worse"
+  return { ...shown, change: `${difference > 0 ? "+" : "−"}${magnitude}`, verdict }
 }
 
 function dayLabel(day: string) {
@@ -83,46 +103,59 @@ function atLabel(at: string) {
   })
 }
 
+const andons = (list: StationMeasures[]) => list.reduce((total, one) => total + one.andons, 0)
+
+const headline = computed(() => {
+  if (!measures.value) return null
+  const { before, after } = measures.value
+  return {
+    leadTime: compare(pick(before.pieces.leadTime), pick(after.pieces.leadTime), "hours", "lower"),
+    others: [
+      {
+        label: "Pieces released",
+        hint: "",
+        ...compare(before.pieces.count, after.pieces.count, "count", "higher"),
+      },
+      {
+        label: "Andon Time",
+        hint: "any Work Station stopped",
+        ...compare(pick(before.andonTime), pick(after.andonTime), "hours", "lower"),
+      },
+    ],
+  }
+})
+
 const summary = computed(() => {
   if (!measures.value) return []
-  const a = measures.value.before.pieces
-  const b = measures.value.after.pieces
-  const stationsA = measures.value.before.stations
-  const stationsB = measures.value.after.stations
-  const andonsA = stationsA.reduce((total, station) => total + station.andons, 0)
-  const andonsB = stationsB.reduce((total, station) => total + station.andons, 0)
-  const stoppedA = pick(measures.value.before.andonTime)
-  const stoppedB = pick(measures.value.after.andonTime)
+  const a = measures.value.before
+  const b = measures.value.after
   const durations = [
-    { label: "Lead Time", a: pick(a.leadTime), b: pick(b.leadTime) },
-    { label: "Touch Time", a: pick(a.touchTime), b: pick(b.touchTime) },
-    { label: "Stagnation Time", a: pick(a.stagnationTime), b: pick(b.stagnationTime) },
-    { label: "Backlog time", a: pick(a.backlogTime), b: pick(b.backlogTime) },
-  ]
+    { label: "Lead Time", a: a.pieces.leadTime, b: b.pieces.leadTime, better: "lower" },
+    { label: "Touch Time", a: a.pieces.touchTime, b: b.pieces.touchTime, better: null },
+    {
+      label: "Stagnation Time",
+      a: a.pieces.stagnationTime,
+      b: b.pieces.stagnationTime,
+      better: "lower",
+    },
+    { label: "Backlog time", a: a.pieces.backlogTime, b: b.pieces.backlogTime, better: "lower" },
+  ] as const
   return [
     {
       label: "Pieces released",
-      before: String(a.count),
-      after: String(b.count),
-      change: countChange(a.count, b.count),
+      ...compare(a.pieces.count, b.pieces.count, "count", "higher"),
     },
     ...durations.map((row) => ({
       label: `${row.label} (average per Piece)`,
-      before: hours(row.a),
-      after: hours(row.b),
-      change: hoursChange(row.a, row.b),
+      ...compare(pick(row.a), pick(row.b), "hours", row.better),
     })),
     {
       label: "Andons raised",
-      before: String(andonsA),
-      after: String(andonsB),
-      change: countChange(andonsA, andonsB),
+      ...compare(andons(a.stations), andons(b.stations), "count", "lower"),
     },
     {
       label: "Andon Time (any Work Station stopped)",
-      before: hours(stoppedA),
-      after: hours(stoppedB),
-      change: hoursChange(stoppedA, stoppedB),
+      ...compare(pick(a.andonTime), pick(b.andonTime), "hours", "lower"),
     },
   ]
 })
@@ -131,24 +164,25 @@ const summary = computed(() => {
 const onTimeTarget = 0.9
 
 const onTime = computed(() => {
-  if (!measures.value) return []
-  const { before, after } = measures.value
-  return [
-    { name: "Before", period: before },
-    { name: "After", period: after },
-  ].map(({ name, period }) => {
-    const { delivered, onTime: count } = period.onTime
-    const share = delivered === 0 ? null : count / delivered
+  if (!measures.value) return null
+  const [a, b] = [measures.value.before, measures.value.after].map(({ onTime }) => {
+    const share = onTime.delivered === 0 ? null : onTime.onTime / onTime.delivered
     return {
-      name,
-      period: periodLabel(period),
-      delivered,
-      onTime: count,
+      ...onTime,
       // Floor, so a share under the target never reads as the target.
       percent: share === null ? null : Math.floor(share * 100),
       met: share !== null && share >= onTimeTarget,
     }
   })
+  const shown = (one: typeof a) => (one.percent === null ? "—" : `${one.percent} %`)
+  const step = a.percent === null || b.percent === null ? null : b.percent - a.percent
+  return {
+    after: b,
+    before: shown(a),
+    change:
+      step === null ? "—" : step === 0 ? "0 pt" : `${step > 0 ? "+" : "−"}${Math.abs(step)} pt`,
+    verdict: (step === null || step === 0 ? null : step > 0 ? "better" : "worse") as Verdict,
+  }
 })
 
 type Paired<T> = { id: string; first: T; before?: T; after?: T }
@@ -164,6 +198,15 @@ function pair<T extends { id: string }>(a: T[], b: T[]): Paired<T>[] {
   return [...rows.values()]
 }
 
+type Column<T> = { label: string; cell: (before?: T, after?: T) => Comparison }
+
+function duration<T>(label: string, of: (one: T) => Duration | null, better: Better): Column<T> {
+  return {
+    label,
+    cell: (x, y) => compare(x ? pick(of(x)) : null, y ? pick(of(y)) : null, "hours", better),
+  }
+}
+
 const demands = computed<Paired<DemandMeasures>[]>(() =>
   measures.value ? pair(measures.value.before.demands, measures.value.after.demands) : [],
 )
@@ -173,6 +216,19 @@ const showDemandLeadTime = computed(() =>
     (row) => pick(row.before?.demandLeadTime) !== null || pick(row.after?.demandLeadTime) !== null,
   ),
 )
+
+const demandColumns = computed<Column<DemandMeasures>[]>(() => [
+  {
+    label: "Pieces",
+    cell: (x, y) => compare(x?.pieces ?? 0, y?.pieces ?? 0, "count", null),
+  },
+  duration("Lead Time", (one) => one.leadTime, "lower"),
+  duration("Touch Time", (one) => one.touchTime, null),
+  duration("Stagnation Time", (one) => one.stagnationTime, "lower"),
+  ...(showDemandLeadTime.value
+    ? [duration<DemandMeasures>("Demand Lead Time", (one) => one.demandLeadTime, "lower")]
+    : []),
+])
 
 const stations = computed<Paired<StationMeasures>[]>(() =>
   measures.value
@@ -184,6 +240,31 @@ const stations = computed<Paired<StationMeasures>[]>(() =>
     : [],
 )
 
+const stationColumns: Column<StationMeasures>[] = [
+  duration("Station Lead Time", (one) => one.stationLeadTime, "lower"),
+  duration("Replenishment Time", (one) => one.replenishmentTime, "lower"),
+  duration("Touch Time", (one) => one.touchTime, null),
+  {
+    label: "Touch share",
+    cell: (x, y) => compare(x?.touchShare ?? null, y?.touchShare ?? null, "share", "higher"),
+  },
+  duration("Starvation Time", (one) => one.starvationTime, "lower"),
+  duration("Andon Time", (one) => one.andonTime, "lower"),
+  {
+    label: "Andons raised",
+    cell: (x, y) => compare(x?.andons ?? null, y?.andons ?? null, "count", "lower"),
+  },
+  {
+    label: "Deviations / pulls",
+    cell: (x, y) => ({
+      before: x ? `${x.deviations} / ${x.pulls}` : "—",
+      after: y ? `${y.deviations} / ${y.pulls}` : "—",
+      change: "—",
+      verdict: null,
+    }),
+  },
+]
+
 const deviationCounts = computed(() => {
   if (!measures.value) return []
   const count = (list: { rule: string; count: number }[], rule: string) =>
@@ -194,8 +275,7 @@ const deviationCounts = computed(() => {
   for (const one of b) rules.add(one.rule)
   return [...rules].map((rule) => ({
     rule,
-    before: count(a, rule),
-    after: count(b, rule),
+    ...compare(count(a, rule), count(b, rule), "count", "lower"),
   }))
 })
 
@@ -234,28 +314,35 @@ const deviationList = computed(() =>
       </div>
     </header>
 
-    <div class="mb-6 grid gap-4 md:grid-cols-2">
-      <div
-        v-for="one in periods"
-        :key="one.name"
-        class="card border border-base-300 bg-base-100 shadow-sm"
-      >
-        <div class="card-body gap-3 p-5">
-          <h3 class="card-title text-base">{{ one.name }}</h3>
-          <div class="flex flex-wrap gap-4">
-            <label class="flex flex-col gap-1 text-sm">
-              <span class="font-medium">From</span>
-              <input v-model="one.period.from" type="date" class="input input-sm" />
-            </label>
-            <label class="flex flex-col gap-1 text-sm">
-              <span class="font-medium">To (included)</span>
-              <input v-model="one.period.to" type="date" class="input input-sm" />
-            </label>
-          </div>
-          <p v-if="!isValidPeriod(one.period)" class="text-sm opacity-70">
-            Pick a start date on or before the end date.
-          </p>
-        </div>
+    <div class="card mb-6 border border-base-300 bg-base-100 shadow-sm">
+      <div class="card-body flex-row flex-wrap items-start gap-x-8 gap-y-4 p-5">
+        <template v-for="(one, index) in periods" :key="one.name">
+          <span
+            v-if="index > 0"
+            class="hidden self-center pt-6 text-sm font-medium opacity-60 md:block"
+            aria-hidden="true"
+          >
+            compared with
+          </span>
+          <fieldset class="min-w-0">
+            <legend class="mb-2 text-sm font-semibold">{{ one.name }}</legend>
+            <div class="flex flex-wrap gap-3">
+              <label class="flex flex-col gap-1 text-sm">
+                <span class="opacity-70">From</span>
+                <input v-model="one.period.from" type="date" class="input w-auto" />
+              </label>
+              <label class="flex flex-col gap-1 text-sm">
+                <span class="opacity-70">To (included)</span>
+                <input v-model="one.period.to" type="date" class="input w-auto" />
+              </label>
+            </div>
+            <p aria-live="polite" class="mt-2 text-sm text-warning-ink empty:hidden">
+              <template v-if="!isValidPeriod(one.period)">
+                Pick a start date on or before the end date.
+              </template>
+            </p>
+          </fieldset>
+        </template>
       </div>
     </div>
 
@@ -268,7 +355,80 @@ const deviationList = computed(() =>
       <span>The API did not answer: {{ error }}</span>
     </div>
 
-    <div v-else-if="measures" class="flex flex-col gap-6">
+    <div v-else-if="measures && headline && onTime" class="flex flex-col gap-6">
+      <section aria-label="Key measures" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <article class="rounded-box bg-primary p-5 text-primary-content shadow-sm">
+          <h3 class="text-sm font-semibold">
+            Lead Time <span class="font-normal opacity-80">· average per Piece</span>
+          </h3>
+          <p class="mt-2 text-4xl font-semibold tabular-nums">{{ headline.leadTime.after }}</p>
+          <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums">
+            <span class="opacity-80">Before {{ headline.leadTime.before }}</span>
+            <span aria-hidden="true" class="opacity-50">·</span>
+            <span class="font-medium">{{ headline.leadTime.change }}</span>
+            <VerdictPill :verdict="headline.leadTime.verdict" plain />
+          </p>
+        </article>
+
+        <article class="rounded-box border border-base-300 bg-base-100 p-5 shadow-sm">
+          <h3 class="text-sm font-semibold">
+            On-time delivery
+            <span class="font-normal opacity-70">· target {{ onTimeTarget * 100 }} %</span>
+          </h3>
+          <p
+            v-if="onTime.after.percent === null"
+            class="mt-2 flex min-h-10 items-center opacity-70"
+          >
+            No {{ labels.demand }} delivered.
+          </p>
+          <p v-else class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span class="text-4xl font-semibold tabular-nums">{{ onTime.after.percent }} %</span>
+            <span
+              class="badge font-medium whitespace-nowrap"
+              :class="onTime.after.met ? 'badge-success' : 'badge-error'"
+            >
+              {{ onTime.after.met ? "On target" : "Below target" }}
+            </span>
+          </p>
+          <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums">
+            <span v-if="onTime.after.delivered > 0">
+              {{ onTime.after.onTime }} of {{ onTime.after.delivered }}
+              <span class="opacity-70">{{ labels.demands }}</span>
+            </span>
+            <span v-if="onTime.after.delivered > 0" aria-hidden="true" class="opacity-40">·</span>
+            <span class="opacity-70">Before {{ onTime.before }}</span>
+            <template v-if="onTime.change !== '—'">
+              <span aria-hidden="true" class="opacity-40">·</span>
+              <span class="font-medium">{{ onTime.change }}</span>
+            </template>
+            <VerdictPill :verdict="onTime.verdict" />
+          </p>
+        </article>
+
+        <article
+          v-for="one in headline.others"
+          :key="one.label"
+          class="rounded-box border border-base-300 bg-base-100 p-5 shadow-sm"
+        >
+          <h3 class="text-sm font-semibold">
+            {{ one.label }}
+            <span v-if="one.hint" class="font-normal opacity-70">· {{ one.hint }}</span>
+          </h3>
+          <p class="mt-2 text-4xl font-semibold tabular-nums">{{ one.after }}</p>
+          <p class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm tabular-nums">
+            <span class="opacity-70">Before {{ one.before }}</span>
+            <span aria-hidden="true" class="opacity-40">·</span>
+            <span class="font-medium">{{ one.change }}</span>
+            <VerdictPill :verdict="one.verdict" />
+          </p>
+        </article>
+      </section>
+      <p class="-mt-3 text-xs opacity-60">
+        After: {{ periodLabel(measures.after) }}, compared with Before:
+        {{ periodLabel(measures.before) }}. On-time delivery counts the {{ labels.demands }}
+        delivered in the period by their due date.
+      </p>
+
       <div class="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body gap-3 p-5">
@@ -286,9 +446,12 @@ const deviationList = computed(() =>
                 <tbody>
                   <tr v-for="row in summary" :key="row.label">
                     <th class="font-medium">{{ row.label }}</th>
-                    <td class="text-right tabular-nums">{{ row.before }}</td>
-                    <td class="text-right tabular-nums">{{ row.after }}</td>
-                    <td class="text-right tabular-nums">{{ row.change }}</td>
+                    <td class="text-right tabular-nums opacity-70">{{ row.before }}</td>
+                    <td class="text-right font-medium tabular-nums">{{ row.after }}</td>
+                    <td class="text-right whitespace-nowrap tabular-nums">
+                      {{ row.change }}
+                      <VerdictPill class="ml-1" :verdict="row.verdict" />
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -305,65 +468,22 @@ const deviationList = computed(() =>
 
       <div class="card border border-base-300 bg-base-100 shadow-sm">
         <div class="card-body gap-3 p-5">
-          <h3 class="card-title text-base">On-time delivery</h3>
-          <p class="text-sm opacity-70">
-            The share of {{ labels.demands }} delivered by their due date, among those delivered in
-            the period. Target: {{ onTimeTarget * 100 }} % or more.
-          </p>
-          <div class="grid gap-4 md:grid-cols-2">
-            <div v-for="row in onTime" :key="row.name" class="rounded-box bg-base-200 p-4">
-              <p class="text-xs font-semibold uppercase tracking-wide opacity-70">
-                {{ row.name }} · {{ row.period }}
-              </p>
-              <p v-if="row.percent === null" class="mt-2 opacity-70">
-                No {{ labels.demand }} delivered in this period.
-              </p>
-              <template v-else>
-                <p class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-                  <span class="text-3xl font-semibold tabular-nums">{{ row.percent }} %</span>
-                  <span
-                    class="badge font-medium whitespace-nowrap"
-                    :class="row.met ? 'badge-success' : 'badge-error'"
-                  >
-                    {{ row.met ? "On target" : "Below target" }}
-                  </span>
-                </p>
-                <p class="mt-1 text-sm tabular-nums">
-                  {{ row.onTime }} of {{ row.delivered }}
-                  <span class="opacity-70">{{ labels.demands }} on time</span>
-                </p>
-              </template>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card border border-base-300 bg-base-100 shadow-sm">
-        <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Demand</h3>
           <p class="text-sm opacity-70">Averages per Piece released.</p>
           <p class="text-xs opacity-60">
-            Before: {{ periodLabel(measures.before) }} · After: {{ periodLabel(measures.after) }}
+            Each cell: After ({{ periodLabel(measures.after) }}) on top, Before ({{
+              periodLabel(measures.before)
+            }}) below. Blue: better than before.
           </p>
           <p v-if="demands.length === 0" class="opacity-70">No Piece released.</p>
           <div v-else class="overflow-x-auto">
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th rowspan="2">Demand</th>
-                  <th colspan="2" class="text-center">Pieces</th>
-                  <th colspan="2" class="text-center">Lead Time</th>
-                  <th colspan="2" class="text-center">Touch Time</th>
-                  <th colspan="2" class="text-center">Stagnation Time</th>
-                  <th v-if="showDemandLeadTime" colspan="2" class="text-center">
-                    Demand Lead Time
+                  <th>Demand</th>
+                  <th v-for="column in demandColumns" :key="column.label" class="text-right">
+                    {{ column.label }}
                   </th>
-                </tr>
-                <tr>
-                  <template v-for="n in showDemandLeadTime ? 5 : 4" :key="n">
-                    <th class="text-right">Before</th>
-                    <th class="text-right">After</th>
-                  </template>
                 </tr>
               </thead>
               <tbody>
@@ -372,26 +492,11 @@ const deviationList = computed(() =>
                     {{ row.first.label }}
                     <span class="block text-xs font-normal opacity-60">{{ row.first.client }}</span>
                   </th>
-                  <td class="text-right tabular-nums">{{ row.before?.pieces ?? 0 }}</td>
-                  <td class="text-right tabular-nums">{{ row.after?.pieces ?? 0 }}</td>
-                  <td class="text-right tabular-nums">{{ hours(pick(row.before?.leadTime)) }}</td>
-                  <td class="text-right tabular-nums">{{ hours(pick(row.after?.leadTime)) }}</td>
-                  <td class="text-right tabular-nums">{{ hours(pick(row.before?.touchTime)) }}</td>
-                  <td class="text-right tabular-nums">{{ hours(pick(row.after?.touchTime)) }}</td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.before?.stagnationTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.after?.stagnationTime)) }}
-                  </td>
-                  <template v-if="showDemandLeadTime">
-                    <td class="text-right tabular-nums">
-                      {{ hours(pick(row.before?.demandLeadTime)) }}
-                    </td>
-                    <td class="text-right tabular-nums">
-                      {{ hours(pick(row.after?.demandLeadTime)) }}
-                    </td>
-                  </template>
+                  <CompareCell
+                    v-for="column in demandColumns"
+                    :key="column.label"
+                    v-bind="column.cell(row.before, row.after)"
+                  />
                 </tr>
               </tbody>
             </table>
@@ -412,27 +517,19 @@ const deviationList = computed(() =>
             Starvation Time and Andon Time are totals of the period.
           </p>
           <p class="text-xs opacity-60">
-            Before: {{ periodLabel(measures.before) }} · After: {{ periodLabel(measures.after) }}
+            Each cell: After ({{ periodLabel(measures.after) }}) on top, Before ({{
+              periodLabel(measures.before)
+            }}) below. Blue: better than before.
           </p>
           <p v-if="stations.length === 0" class="opacity-70">No Work Station.</p>
           <div v-else class="overflow-x-auto">
             <table class="table table-sm">
               <thead>
                 <tr>
-                  <th rowspan="2">Work Station</th>
-                  <th colspan="2" class="text-center">Station Lead Time</th>
-                  <th colspan="2" class="text-center">Replenishment Time</th>
-                  <th colspan="2" class="text-center">Touch Time</th>
-                  <th colspan="2" class="text-center">Touch share</th>
-                  <th colspan="2" class="text-center">Starvation Time</th>
-                  <th colspan="2" class="text-center">Andon Time</th>
-                  <th colspan="2" class="text-center">Deviations / pulls</th>
-                </tr>
-                <tr>
-                  <template v-for="n in 7" :key="n">
-                    <th class="text-right">Before</th>
-                    <th class="text-right">After</th>
-                  </template>
+                  <th>Work Station</th>
+                  <th v-for="column in stationColumns" :key="column.label" class="text-right">
+                    {{ column.label }}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -446,46 +543,11 @@ const deviationList = computed(() =>
                       Branch {{ row.first.branch }}
                     </span>
                   </th>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.before?.stationLeadTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.after?.stationLeadTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.before?.replenishmentTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.after?.replenishmentTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">{{ hours(pick(row.before?.touchTime)) }}</td>
-                  <td class="text-right tabular-nums">{{ hours(pick(row.after?.touchTime)) }}</td>
-                  <td class="text-right tabular-nums">{{ percent(row.before?.touchShare) }}</td>
-                  <td class="text-right tabular-nums">{{ percent(row.after?.touchShare) }}</td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.before?.starvationTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.after?.starvationTime)) }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.before?.andonTime)) }}
-                    <span v-if="row.before?.andons" class="block text-xs opacity-60">
-                      {{ row.before.andons }} raised
-                    </span>
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ hours(pick(row.after?.andonTime)) }}
-                    <span v-if="row.after?.andons" class="block text-xs opacity-60">
-                      {{ row.after.andons }} raised
-                    </span>
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ row.before ? `${row.before.deviations} / ${row.before.pulls}` : "—" }}
-                  </td>
-                  <td class="text-right tabular-nums">
-                    {{ row.after ? `${row.after.deviations} / ${row.after.pulls}` : "—" }}
-                  </td>
+                  <CompareCell
+                    v-for="column in stationColumns"
+                    :key="column.label"
+                    v-bind="column.cell(row.before, row.after)"
+                  />
                 </tr>
               </tbody>
             </table>
@@ -509,9 +571,12 @@ const deviationList = computed(() =>
               <tbody>
                 <tr v-for="row in deviationCounts" :key="row.rule">
                   <th class="font-medium">{{ ruleLabel(row.rule) }}</th>
-                  <td class="text-right tabular-nums">{{ row.before }}</td>
-                  <td class="text-right tabular-nums">{{ row.after }}</td>
-                  <td class="text-right tabular-nums">{{ countChange(row.before, row.after) }}</td>
+                  <td class="text-right tabular-nums opacity-70">{{ row.before }}</td>
+                  <td class="text-right font-medium tabular-nums">{{ row.after }}</td>
+                  <td class="text-right whitespace-nowrap tabular-nums">
+                    {{ row.change }}
+                    <VerdictPill class="ml-1" :verdict="row.verdict" />
+                  </td>
                 </tr>
               </tbody>
             </table>
