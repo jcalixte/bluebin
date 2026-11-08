@@ -201,6 +201,7 @@ _Avoid_: hidden Line, secret Line
 - A **Demand** has no **Forecast** until one of its **Pieces** reaches production; it is late when its **Forecast** falls after its due date
 - The **Takt Time** of the **Line** combines all active **Demands**: 1 ÷ (sum of 1 ÷ **Takt Time** of each active **Demand**); it changes when a **Demand** enters or ends
 - A **Work Station** compares its **Touch Time** per **Piece** with the **Takt Time** of the **Line**, not of one **Demand**
+- A **Piece** has no size; the team decides how big each **Piece** is. **Takt Time** counts **Pieces**, so a **Piece** much bigger than the others shows as a slow **Touch Time** against the **Takt Time** and a falling **Takt Gap**
 - A **Piece** waits in the **Backlog**, then flows alone through the **Line** (one-piece flow)
 - The **Heijunka Sequence** decides which **Piece** leaves the **Backlog**; a **Kanban** from the first **Work Station** decides when
 - In the **Heijunka Sequence**, each **Piece** has an ideal slot at a multiple of its **Demand**'s **Takt Time**; the earliest slot goes first, then the earliest due date, then first-in, first-out
@@ -297,6 +298,7 @@ _Avoid_: hidden Line, secret Line
 - Feature / User Story vs **Demand** / **Piece** / **Sub-Piece** — resolved: a Feature is a **Demand**, a User Story is a **Piece**, a platform part (web, iOS, Android) is a **Sub-Piece**. "Feature" and "User Story" are the software team's names, not domain terms.
 - "the Demand is one piece" — resolved: a **Demand** is decomposed into **Pieces**, so that **Heijunka** can mix **Pieces** of different **Demands**.
 - **Stagnation Time** between two **Work Stations** — resolved: the wait from "Kanban sent" to "pulled in" is the **Starvation Time** of the **Work Station**, not the **Stagnation Time** of the **Piece**. This stops the same wait being counted twice.
+- "a standard size for a User Story" — resolved: no rule. Unlike cars of one model, **Pieces** differ in work content. Bluebin does not size or weight them; the team cuts its **Pieces** and sees the consequences in **Touch Time**, **Takt Gap** and **Andons**.
 - Pauses during **Touch Time** — resolved: a **Team Member** transforms one **Piece** at a time, so a new **Piece** pauses the current one only when it is nearer to production; otherwise the new **Piece** starts paused. **Touch Time** is net time; the paused time is **Stagnation Time**.
 - Time measures and the working calendar — resolved: measures show **Calendar Time** by default and **Working Time** as a second view; **Takt Time** uses **Working Time** only.
 - **Takt Time** of a **Demand** vs of the **Line** — resolved: one term, two scopes. The **Takt Time** of the **Line** is computed from all active **Demands**.
