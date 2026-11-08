@@ -105,7 +105,8 @@ async function submit() {
     <form class="card-body gap-4 p-5" @submit.prevent="submit">
       <h3 class="card-title text-base">Working Calendar</h3>
       <p class="text-sm opacity-70">
-        Every measure and the Takt Time are recomputed from the flow log with the new calendar.
+        Saved on its own, with the Save button below. Every measure and the Takt Time are recomputed
+        from the flow log with the new calendar.
       </p>
 
       <fieldset>
