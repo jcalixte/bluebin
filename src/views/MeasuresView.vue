@@ -512,8 +512,8 @@ const deviationList = computed(() =>
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Work Station</h3>
           <p class="text-sm opacity-70">
-            Station Lead Time and Touch Time are averages per pass; Replenishment Time is the 85th
-            percentile of the passes, from the pull in to the Blue Bin (5 passes or more);
+            Station Lead Time and Touch Time are averages per pass. Replenishment Time is the 85th
+            percentile of the passes, from the pull in to the Blue Bin, and shows from 5 passes.
             Starvation Time and Andon Time are totals of the period.
           </p>
           <p class="text-xs opacity-60">
