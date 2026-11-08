@@ -41,6 +41,28 @@
      so light text uses the dark warning-content (9.2:1); dark keeps the
      warning itself (9.0:1 on base-100). */
   --color-warning-ink: light-dark(var(--color-warning-content), var(--color-warning));
+
+  /* A step or Work Station just added in the Design: it grows in place and
+     its primary outline fades, so the eye finds where it arrived. */
+  --animate-glow: glow 1.6s ease-out;
+  --animate-arrive: arrive 300ms ease-out, glow 1.6s ease-out;
+
+  @keyframes arrive {
+    from {
+      opacity: 0;
+      transform: scale(0.94);
+    }
+  }
+
+  @keyframes glow {
+    0%,
+    50% {
+      outline-color: var(--color-primary);
+    }
+    100% {
+      outline-color: transparent;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {

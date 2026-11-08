@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { nextTick, ref } from "vue"
 import AddStepSlot from "../components/AddStepSlot.vue"
 import DesignTeamMembersCard from "../components/DesignTeamMembersCard.vue"
 import DesignStationCard from "../components/DesignStationCard.vue"
@@ -76,6 +77,34 @@ function stepName(index: number) {
   return draft.value?.steps[index]?.name.trim() || `step ${index + 1}`
 }
 
+/** Keys of the steps and Work Stations just added: they show where they arrive. */
+const arrived = ref(new Set<string>())
+const arrivalMs = 1600
+
+async function showArrival(key: string | null) {
+  if (key === null) return
+  arrived.value.add(key)
+  setTimeout(() => arrived.value.delete(key), arrivalMs)
+  await nextTick()
+  const element = document.querySelector<HTMLElement>(`[data-design-key="${key}"]`)
+  if (!element) return
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  element.scrollIntoView({
+    behavior: reduce ? "auto" : "smooth",
+    block: "nearest",
+    inline: "center",
+  })
+  const name = element.querySelector<HTMLInputElement>("input[type=text]")
+  name?.focus({ preventScroll: true })
+  name?.select()
+}
+
+function arrivalClass(key: string) {
+  return arrived.value.has(key)
+    ? "rounded-box outline-2 outline-offset-4 outline-transparent animate-glow motion-safe:animate-arrive"
+    : ""
+}
+
 function confirmDiscard() {
   if (confirm("Discard all the changes that are not saved?")) {
     void discard()
@@ -124,7 +153,7 @@ function confirmDiscard() {
       >
         <p class="font-semibold">Before you save</p>
         <ul class="mt-1 list-disc pl-5">
-          <li v-for="problem in problems" :key="problem">{{ problem }}</li>
+          <li v-for="(problem, problemIndex) in problems" :key="problemIndex">{{ problem }}</li>
         </ul>
       </div>
 
@@ -144,7 +173,11 @@ function confirmDiscard() {
               Backlog
             </div>
 
-            <ol class="flex w-full flex-col items-center lg:w-auto lg:flex-row lg:items-start">
+            <TransitionGroup
+              tag="ol"
+              move-class="transition-transform duration-300 ease-out motion-reduce:transition-none"
+              class="flex w-full flex-col items-center lg:w-auto lg:flex-row lg:items-start"
+            >
               <li
                 v-for="(step, index) in draft.steps"
                 :key="step.key"
@@ -154,10 +187,14 @@ function confirmDiscard() {
                   :label="
                     index === 0 ? 'Add a step first' : `Add a step after ${stepName(index - 1)}`
                   "
-                  @add="addStepAfter(index - 1)"
+                  @add="showArrival(addStepAfter(index - 1))"
                 />
 
-                <div class="flex w-full max-w-md flex-col gap-3 lg:w-80 lg:shrink-0">
+                <div
+                  class="flex w-full max-w-md flex-col gap-3 lg:w-80 lg:shrink-0"
+                  :class="arrivalClass(step.key)"
+                  :data-design-key="step.key"
+                >
                   <div class="flex h-10 items-center gap-3">
                     <span
                       class="font-mono text-3xl leading-none text-primary tabular-nums"
@@ -241,7 +278,7 @@ function confirmDiscard() {
                           ? undefined
                           : 'A Work Station with work in it keeps its Branch'
                       "
-                      @click="splitStep(index)"
+                      @click="showArrival(splitStep(index))"
                     >
                       {{ splitLabel(step) }}
                     </button>
@@ -259,6 +296,8 @@ function confirmDiscard() {
                     v-for="(station, stationIndex) in step.stations"
                     :key="station.key"
                     v-model="step.stations[stationIndex]"
+                    :class="arrivalClass(station.key)"
+                    :data-design-key="station.key"
                     :team-members="draft.teamMembers"
                     :takt-hours="draft.taktTimeHours"
                     @remove="removeStation(index, stationIndex)"
@@ -275,7 +314,7 @@ function confirmDiscard() {
                   </p>
                 </div>
               </li>
-            </ol>
+            </TransitionGroup>
 
             <AddStepSlot
               :label="
@@ -283,7 +322,7 @@ function confirmDiscard() {
                   ? 'Add a step'
                   : `Add a step after ${stepName(draft.steps.length - 1)}`
               "
-              @add="addStepAfter(draft.steps.length - 1)"
+              @add="showArrival(addStepAfter(draft.steps.length - 1))"
             />
           </div>
         </div>
@@ -340,6 +379,7 @@ function confirmDiscard() {
         >
           <p class="text-sm">
             <span class="font-semibold">Changes not saved.</span>
+            {{ " " }}
             <span v-if="problems.length > 0" class="text-warning-ink">
               {{ problems.length }} {{ problems.length === 1 ? "thing" : "things" }} to fix before
               you save.

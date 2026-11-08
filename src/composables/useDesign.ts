@@ -88,11 +88,20 @@ function toPayload(design: DesignShape): DesignInput {
   }
 }
 
-export function newStation(branch: string | null): DraftStation {
+/** The base name, or the base name with the first free number: "New step 2". */
+export function freshName(base: string, taken: string[]) {
+  const names = new Set(taken.map((name) => name.trim()))
+  if (!names.has(base)) return base
+  let n = 2
+  while (names.has(`${base} ${n}`)) n++
+  return `${base} ${n}`
+}
+
+function newStation(name: string, branch: string | null): DraftStation {
   return {
     key: newKey(),
     id: null,
-    name: "New Work Station",
+    name,
     branch,
     blueBins: 1,
     teamLeader: "",
@@ -290,8 +299,29 @@ export function useDesign() {
     return draft.value?.steps ?? []
   }
 
+  function stationNames() {
+    return steps().flatMap((step) => step.stations.map((station) => station.name))
+  }
+
+  function addStation(step: DraftStep, branch: string | null) {
+    const station = newStation(freshName("New Work Station", stationNames()), branch)
+    step.stations.push(station)
+    return station.key
+  }
+
+  /** Gives the key of the new step. */
   function addStepAfter(index: number) {
-    steps().splice(index + 1, 0, { key: newKey(), name: "New step", stations: [newStation(null)] })
+    const step: DraftStep = {
+      key: newKey(),
+      name: freshName(
+        "New step",
+        steps().map((one) => one.name),
+      ),
+      stations: [],
+    }
+    addStation(step, null)
+    steps().splice(index + 1, 0, step)
+    return step.key
   }
 
   function removeStep(index: number) {
@@ -324,19 +354,17 @@ export function useDesign() {
   /**
    * An empty step gets one Work Station. A trunk step splits into 2 Branches,
    * or into the Branches of the Branch step next to it. A Branch step gets
-   * one more Branch.
+   * one more Branch. Gives the key of the first new Work Station.
    */
-  function splitStep(index: number) {
+  function splitStep(index: number): string | null {
     const list = steps()
     const step = list[index]
-    if (!step || !canSplit(step)) return
+    if (!step || !canSplit(step)) return null
     if (step.stations.length === 0) {
-      step.stations.push(newStation(null))
-      return
+      return addStation(step, null)
     }
     if (isBranchStep(step)) {
-      step.stations.push(newStation(freshBranch(branchSet(step))))
-      return
+      return addStation(step, freshBranch(branchSet(step)))
     }
     const neighbour = [list[index - 1], list[index + 1]].find(
       (one) => one !== undefined && isBranchStep(one) && one.stations.length > 1,
@@ -344,11 +372,9 @@ export function useDesign() {
     const names = neighbour ? branchSet(neighbour) : []
     const [first] = step.stations
     first.branch = names[0] ?? (first.name.trim() || "Branch 1")
-    if (names.length > 1) {
-      for (const name of names.slice(1)) step.stations.push(newStation(name))
-    } else {
-      step.stations.push(newStation(freshBranch(branchSet(step))))
-    }
+    const branches = names.length > 1 ? names.slice(1) : [freshBranch(branchSet(step))]
+    const keys = branches.map((branch) => addStation(step, branch))
+    return keys[0]
   }
 
   /** The last Branch left in a step becomes its one Work Station, unless it is locked. */
