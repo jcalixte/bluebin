@@ -1,6 +1,6 @@
 /* The font @import must precede @import "tailwindcss": Tailwind inlines into
    real CSS rules, and browsers silently drop an @import that follows a rule. */
-@import url("https://api.fonts.coollabs.io/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Cutive+Mono&display=swap");
+@import url("https://api.fonts.coollabs.io/css2?family=Work+Sans:wght@400;500;600;700&family=Cutive+Mono&display=swap");
 @import "tailwindcss";
 @plugin "daisyui";
 
@@ -31,7 +31,7 @@
 }
 
 @theme {
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Work Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Cutive Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   /* Exact brand hex for marks that carry no small text: Andon lamps, dots,
      strokes, the favicon. Filled controls use --color-error, one step darker,
