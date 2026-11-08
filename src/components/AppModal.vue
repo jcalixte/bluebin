@@ -13,5 +13,8 @@ onMounted(() => dialog.value?.showModal())
     <div class="modal-box text-base-content">
       <slot />
     </div>
+    <form method="dialog" class="modal-backdrop">
+      <button>Close</button>
+    </form>
   </dialog>
 </template>
