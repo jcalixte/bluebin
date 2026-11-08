@@ -79,7 +79,7 @@ function stepName(index: number) {
 
 /** Keys of the steps and Work Stations just added: they show where they arrive. */
 const arrived = ref(new Set<string>())
-const arrivalMs = 1600
+const arrivalMs = 1200
 
 async function showArrival(key: string | null) {
   if (key === null) return
@@ -101,9 +101,12 @@ async function showArrival(key: string | null) {
 
 function arrivalClass(key: string) {
   return arrived.value.has(key)
-    ? "rounded-box outline-2 outline-offset-4 outline-transparent animate-glow motion-safe:animate-arrive"
+    ? "relative motion-safe:animate-arrive after:pointer-events-none after:absolute after:-inset-1.5 after:rounded-box after:border-2 after:border-primary after:opacity-0 after:animate-glow"
     : ""
 }
+
+/** The list of things to fix opens from the save bar, so it never pushes the Line down. */
+const showProblems = ref(false)
 
 function confirmDiscard() {
   if (confirm("Discard all the changes that are not saved?")) {
@@ -146,17 +149,6 @@ function confirmDiscard() {
     </div>
 
     <div v-else class="flex flex-col gap-10">
-      <div
-        v-if="dirty && problems.length > 0"
-        class="rounded-r-box border-l-4 border-warning bg-warning/10 px-4 py-3 text-sm"
-        role="status"
-      >
-        <p class="font-semibold">Before you save</p>
-        <ul class="mt-1 list-disc pl-5">
-          <li v-for="(problem, problemIndex) in problems" :key="problemIndex">{{ problem }}</li>
-        </ul>
-      </div>
-
       <section aria-labelledby="design-line">
         <div class="mb-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
           <h3 id="design-line" class="text-lg font-semibold">The Line</h3>
@@ -375,29 +367,58 @@ function confirmDiscard() {
       >
         <div
           v-if="dirty"
-          class="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-box border border-base-300 bg-base-100 px-4 py-3 shadow-lg"
+          class="sticky bottom-4 z-10 rounded-box border border-base-300 bg-base-100 px-4 py-3 shadow-lg"
         >
-          <p class="text-sm">
-            <span class="font-semibold">Changes not saved.</span>
-            {{ " " }}
-            <span v-if="problems.length > 0" class="text-warning-ink">
-              {{ problems.length }} {{ problems.length === 1 ? "thing" : "things" }} to fix before
-              you save.
-            </span>
-          </p>
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="btn btn-ghost btn-sm"
-              :disabled="saving"
-              @click="confirmDiscard"
-            >
-              Discard
-            </button>
-            <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="save">
-              <span v-if="saving" class="loading loading-spinner loading-xs" />
-              Save changes
-            </button>
+          <ul
+            v-if="showProblems && problems.length > 0"
+            id="design-problems"
+            class="mb-3 max-h-40 list-disc overflow-y-auto border-b border-base-300 pb-3 pl-5 text-sm"
+          >
+            <li v-for="(problem, problemIndex) in problems" :key="problemIndex">{{ problem }}</li>
+          </ul>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <p class="text-sm">
+              <span class="font-semibold">Changes not saved.</span>
+              {{ " " }}
+              <button
+                v-if="problems.length > 0"
+                type="button"
+                class="inline-flex min-h-6 items-center gap-1 text-warning-ink underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                aria-controls="design-problems"
+                :aria-expanded="showProblems"
+                @click="showProblems = !showProblems"
+              >
+                {{ problems.length }} {{ problems.length === 1 ? "thing" : "things" }} to fix before
+                you save
+                <svg
+                  class="size-4 transition-transform duration-150 motion-reduce:transition-none"
+                  :class="showProblems ? 'rotate-180' : ''"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M6 15l6 -6l6 6" />
+                </svg>
+              </button>
+            </p>
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="btn btn-ghost btn-sm"
+                :disabled="saving"
+                @click="confirmDiscard"
+              >
+                Discard
+              </button>
+              <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="save">
+                <span v-if="saving" class="loading loading-spinner loading-xs" />
+                Save changes
+              </button>
+            </div>
           </div>
         </div>
       </Transition>

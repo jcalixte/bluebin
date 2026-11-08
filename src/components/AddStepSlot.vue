@@ -8,7 +8,7 @@ defineEmits<{ add: [] }>()
     <span class="h-3 w-px bg-base-content/30 lg:h-px lg:w-3" aria-hidden="true" />
     <button
       type="button"
-      class="btn btn-circle btn-ghost btn-sm border border-dashed border-base-content/40 hover:border-primary hover:text-primary"
+      class="btn btn-circle btn-ghost btn-sm relative border border-dashed after:absolute after:-inset-1.5 border-base-content/40 hover:border-primary hover:text-primary"
       :title="label"
       :aria-label="label"
       @click="$emit('add')"
