@@ -106,13 +106,17 @@ const lastPosition = computed(() =>
   (line.value?.stations ?? []).reduce((last, station) => Math.max(last, station.position), 0),
 )
 
-/** The Piece each Team Member transforms now, with the position of its Work Station. */
+/** The Piece each Team Member transforms now, with its Work Station. */
 const activePieces = computed(() => {
-  const active = new Map<string, { piece: string; position: number }>()
+  const active = new Map<string, { piece: string; station: string; position: number }>()
   for (const station of line.value?.stations ?? []) {
     for (const item of station.inProgress) {
       if (item.teamMemberId && !item.paused) {
-        active.set(item.teamMemberId, { piece: item.piece, position: station.position })
+        active.set(item.teamMemberId, {
+          piece: item.piece,
+          station: station.id,
+          position: station.position,
+        })
       }
     }
   }

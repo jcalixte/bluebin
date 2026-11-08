@@ -5,7 +5,7 @@ import type { Andon, Bottleneck, WorkStation } from "../types"
 const props = defineProps<{
   station: WorkStation
   /** The Piece each Team Member transforms now, by Team Member id. */
-  activePieces: Map<string, { piece: string; position: number }>
+  activePieces: Map<string, { piece: string; station: string; position: number }>
   last?: boolean
   busy?: boolean
   /** The Work Station after the Branches pulls by Assembly. */
@@ -68,7 +68,9 @@ const keptFirst = computed(() => {
   const active = props.activePieces.get(teamMember.value)
   if (!active || active.position < props.station.position) return null
   const name = props.station.teamMembers.find((one) => one.id === teamMember.value)?.name
-  return `${name} finishes ${active.piece} first: the new Piece starts paused`
+  return active.station === props.station.id
+    ? `${name} already has ${active.piece} in hand here: the new Piece starts paused`
+    : `${name} finishes ${active.piece} first, at another Work Station: the new Piece starts paused`
 })
 
 const hasRework = computed(() => props.station.rework.length > 0)
