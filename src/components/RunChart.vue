@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, onBeforeUnmount, onMounted, ref } from "vue"
 import type { LineChange, TimeView, WeekMeasures } from "../types"
 
 const props = defineProps<{
@@ -10,14 +10,32 @@ const props = defineProps<{
   chosenAt: string | null
 }>()
 
-const width = 720
+/** The chart draws at its real pixel width, so text and strokes keep their size. */
+const frame = ref<HTMLElement | null>(null)
+const width = ref(720)
 const height = 260
-const margin = { top: 20, right: 92, bottom: 28, left: 56 }
-const plotWidth = width - margin.left - margin.right
-const plotHeight = height - margin.top - margin.bottom
+/** Below this width, the limit labels get short to leave room for the weeks. */
+const compactBelow = 480
+const compact = computed(() => width.value < compactBelow)
+const margin = computed(() => ({ top: 24, right: compact.value ? 52 : 84, bottom: 28, left: 52 }))
+const plotWidth = computed(() => width.value - margin.value.left - margin.value.right)
+const plotHeight = computed(() => height - margin.value.top - margin.value.bottom)
+/** Space for one week label on the x axis. */
+const labelSpace = 64
+/** Least space between two limit labels, so they do not overlap. */
+const labelGap = 14
 /** Below this, the natural limits are noise themselves. */
 const minimumWeeks = 5
 const dayMs = 86_400_000
+
+let observer: ResizeObserver | null = null
+onMounted(() => {
+  observer = new ResizeObserver(([entry]) => {
+    if (entry) width.value = Math.max(240, Math.round(entry.contentRect.width))
+  })
+  if (frame.value) observer.observe(frame.value)
+})
+onBeforeUnmount(() => observer?.disconnect())
 
 const today = new Date().toISOString().slice(0, 10)
 const changeDay = computed(() => props.chosenAt?.slice(0, 10) ?? null)
@@ -25,6 +43,11 @@ const changeDay = computed(() => props.chosenAt?.slice(0, 10) ?? null)
 function hours(value: number) {
   const minutes = Math.round(value * 60)
   return Math.abs(minutes) < 60 ? `${minutes} min` : `${value.toFixed(1)} h`
+}
+
+function tickLabel(tick: number) {
+  if (tick === 0) return "0"
+  return tick < 1 ? `${Math.round(tick * 60)} min` : `${tick} h`
 }
 
 function dayLabel(day: string) {
@@ -44,21 +67,28 @@ const points = computed(() =>
   })),
 )
 
+/** The full weeks the limits come from: before the chosen change, or all with custom dates. */
+const baseline = computed(() =>
+  points.value.filter(
+    (one) =>
+      !one.partial &&
+      one.value !== null &&
+      (changeDay.value === null || one.week.to < changeDay.value),
+  ),
+)
+
 /**
  * XmR natural process limits (Wheeler): average ± 2.66 × the average moving range, from
- * the full weeks before the chosen Line change, or from all full weeks with custom dates.
+ * the baseline weeks.
  */
 const limits = computed(() => {
-  const baseline = points.value
-    .filter((one) => !one.partial && (changeDay.value === null || one.week.to < changeDay.value))
-    .map((one) => one.value)
-    .filter((value): value is number => value !== null)
-  if (baseline.length < minimumWeeks) return null
-  const average = baseline.reduce((total, value) => total + value, 0) / baseline.length
-  const ranges = baseline.slice(1).map((value, index) => Math.abs(value - baseline[index]!))
+  const values = baseline.value.map((one) => one.value!)
+  if (values.length < minimumWeeks) return null
+  const average = values.reduce((total, value) => total + value, 0) / values.length
+  const ranges = values.slice(1).map((value, index) => Math.abs(value - values[index]!))
   const range = ranges.reduce((total, value) => total + value, 0) / ranges.length
   return {
-    weeks: baseline.length,
+    weeks: values.length,
     average,
     upper: average + 2.66 * range,
     lower: Math.max(0, average - 2.66 * range),
@@ -114,8 +144,10 @@ const signalsAfter = computed(() => {
   }
 })
 
-const step = computed(() => plotWidth / Math.max(1, points.value.length))
-const x = (index: number) => margin.left + (index + 0.5) * step.value
+const hasPartial = computed(() => points.value.some((one) => one.partial && one.value !== null))
+
+const step = computed(() => plotWidth.value / Math.max(1, points.value.length))
+const x = (index: number) => margin.value.left + (index + 0.5) * step.value
 
 const scale = computed(() => {
   const values = points.value.map((one) => one.value).filter((value) => value !== null)
@@ -126,7 +158,8 @@ const scale = computed(() => {
   const ticks = Array.from({ length: Math.round(max / tick) + 1 }, (_, index) => index * tick)
   return { max, ticks }
 })
-const y = (value: number) => margin.top + plotHeight - (value / scale.value.max) * plotHeight
+const y = (value: number) =>
+  margin.value.top + plotHeight.value - (value / scale.value.max) * plotHeight.value
 
 /** One path piece for each run of weeks with a value: a week with no Piece is a gap. */
 const path = computed(() =>
@@ -140,24 +173,64 @@ const path = computed(() =>
     .join(" "),
 )
 
+/** The baseline weeks behind a light band, only when they are the weeks before a change. */
+const baselineBand = computed(() => {
+  if (!limits.value || changeDay.value === null) return null
+  const first = baseline.value[0]
+  const last = baseline.value.at(-1)
+  if (!first || !last) return null
+  const from = x(first.index) - step.value / 2
+  return { x: from, width: x(last.index) + step.value / 2 - from }
+})
+
+/**
+ * The limit lines with their labels at the right. Limits are dashed, as thresholds; the
+ * average is solid. Labels move apart when lines are too close to read them.
+ */
+const limitLines = computed(() => {
+  const found = limits.value
+  if (!found) return []
+  const lines = [
+    { key: "upper", value: found.upper, label: compact.value ? "Upper" : "Upper limit" },
+    { key: "average", value: found.average, label: compact.value ? "Avg" : "Average" },
+    { key: "lower", value: found.lower, label: compact.value ? "Lower" : "Lower limit" },
+  ].map((line) => ({ ...line, y: y(line.value), labelY: y(line.value) }))
+  for (let index = 1; index < lines.length; index++) {
+    lines[index]!.labelY = Math.max(lines[index]!.labelY, lines[index - 1]!.labelY + labelGap)
+  }
+  const bottom = margin.value.top + plotHeight.value
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const below = index === lines.length - 1 ? bottom + labelGap : lines[index + 1]!.labelY
+    lines[index]!.labelY = Math.min(lines[index]!.labelY, below - labelGap)
+  }
+  return lines
+})
+
 const markers = computed(() => {
   const first = points.value[0]?.week.from
   if (!first) return []
   const start = Date.parse(`${first}T00:00:00Z`)
+  const left = margin.value.left
+  const right = left + plotWidth.value
   return props.changes
     .map((change) => {
       const days = (Date.parse(`${change.at.slice(0, 10)}T00:00:00Z`) - start) / dayMs
+      const at = left + (days / 7) * step.value
       return {
         at: change.at,
-        x: margin.left + (days / 7) * step.value,
+        x: at,
         chosen: change.at === props.chosenAt,
-        label: dayLabel(change.at.slice(0, 10)),
+        label: `Change · ${dayLabel(change.at.slice(0, 10))}`,
+        /** Near the right end, the label goes to the left of its line so it stays in view. */
+        flip: at > left + plotWidth.value * 0.6,
       }
     })
-    .filter((one) => one.x >= margin.left && one.x <= margin.left + plotWidth)
+    .filter((one) => one.x >= left && one.x <= right)
 })
 
-const labelEvery = computed(() => Math.ceil(points.value.length / 8))
+const labelEvery = computed(() =>
+  Math.ceil(points.value.length / Math.max(1, Math.floor(plotWidth.value / labelSpace))),
+)
 
 const hovered = ref<number | null>(null)
 const hoveredPoint = computed(() =>
@@ -166,8 +239,8 @@ const hoveredPoint = computed(() =>
 
 function pointAt(event: PointerEvent) {
   const box = (event.currentTarget as SVGElement).getBoundingClientRect()
-  const svgX = ((event.clientX - box.left) / box.width) * width
-  const index = Math.floor((svgX - margin.left) / step.value)
+  const svgX = ((event.clientX - box.left) / box.width) * width.value
+  const index = Math.floor((svgX - margin.value.left) / step.value)
   hovered.value = Math.min(points.value.length - 1, Math.max(0, index))
 }
 
@@ -179,10 +252,12 @@ function move(by: number) {
 
 <template>
   <div>
-    <div class="relative">
+    <div ref="frame" class="relative">
       <svg
         :viewBox="`0 0 ${width} ${height}`"
-        class="h-auto w-full touch-none outline-none select-none focus-visible:ring-2 focus-visible:ring-primary"
+        :width="width"
+        :height="height"
+        class="block max-w-full touch-none rounded-box outline-none select-none focus-visible:ring-2 focus-visible:ring-primary"
         role="img"
         tabindex="0"
         aria-label="Lead Time, average per Piece, for each week. Arrow keys read each week."
@@ -193,7 +268,16 @@ function move(by: number) {
         @keydown.left.prevent="move(-1)"
         @keydown.right.prevent="move(1)"
       >
-        <g class="text-[11px]">
+        <rect
+          v-if="baselineBand"
+          :x="baselineBand.x"
+          :y="margin.top"
+          :width="baselineBand.width"
+          :height="plotHeight"
+          class="fill-base-content opacity-[0.04]"
+        />
+
+        <g class="text-xs tabular-nums">
           <template v-for="tick in scale.ticks" :key="tick">
             <line
               :x1="margin.left"
@@ -208,9 +292,9 @@ function move(by: number) {
               :y="y(tick)"
               text-anchor="end"
               dominant-baseline="middle"
-              class="fill-base-content opacity-60"
+              class="fill-base-content opacity-70"
             >
-              {{ tick === 0 ? "0" : tick < 1 ? `${Math.round(tick * 60)} min` : `${tick} h` }}
+              {{ tickLabel(tick) }}
             </text>
           </template>
           <template v-for="one in points" :key="one.week.from">
@@ -219,7 +303,7 @@ function move(by: number) {
               :x="x(one.index)"
               :y="height - 8"
               text-anchor="middle"
-              class="fill-base-content opacity-60"
+              class="fill-base-content opacity-70"
             >
               {{ dayLabel(one.week.from) }}
             </text>
@@ -237,42 +321,35 @@ function move(by: number) {
             />
             <text
               v-if="marker.chosen"
-              :x="marker.x + 4"
-              :y="margin.top - 6"
+              :x="marker.flip ? marker.x - 4 : marker.x + 4"
+              :y="margin.top - 8"
+              :text-anchor="marker.flip ? 'end' : 'start'"
               class="fill-base-content font-medium"
             >
-              Change · {{ marker.label }}
+              {{ marker.label }}
             </text>
           </g>
 
-          <template v-if="limits">
-            <g
-              v-for="line in [
-                { key: 'upper', value: limits.upper, label: 'Upper limit' },
-                { key: 'average', value: limits.average, label: 'Average' },
-                { key: 'lower', value: limits.lower, label: 'Lower limit' },
-              ]"
-              :key="line.key"
+          <g v-for="line in limitLines" :key="line.key">
+            <line
+              :x1="margin.left"
+              :x2="margin.left + plotWidth"
+              :y1="line.y"
+              :y2="line.y"
+              class="stroke-base-content"
+              :class="line.key === 'average' ? 'opacity-40' : 'opacity-60'"
+              :stroke-dasharray="line.key === 'average' ? undefined : '4 3'"
+              stroke-width="1"
+            />
+            <text
+              :x="margin.left + plotWidth + 6"
+              :y="line.labelY"
+              dominant-baseline="middle"
+              class="fill-base-content opacity-70"
             >
-              <line
-                :x1="margin.left"
-                :x2="margin.left + plotWidth"
-                :y1="y(line.value)"
-                :y2="y(line.value)"
-                class="stroke-base-content"
-                :class="line.key === 'average' ? 'opacity-40' : 'opacity-60'"
-                stroke-width="1"
-              />
-              <text
-                :x="margin.left + plotWidth + 6"
-                :y="y(line.value)"
-                dominant-baseline="middle"
-                class="fill-base-content opacity-70"
-              >
-                {{ line.label }}
-              </text>
-            </g>
-          </template>
+              {{ line.label }}
+            </text>
+          </g>
         </g>
 
         <line
@@ -319,10 +396,10 @@ function move(by: number) {
         v-if="hoveredPoint"
         class="pointer-events-none absolute top-2 z-10 rounded-box border border-base-300 bg-base-100 px-3 py-2 text-sm shadow-md"
         :class="hoveredPoint.index > points.length / 2 ? '-translate-x-full' : ''"
-        :style="{ left: `${(x(hoveredPoint.index) / width) * 100}%` }"
+        :style="{ left: `${x(hoveredPoint.index)}px` }"
         aria-live="polite"
       >
-        <p class="text-base font-semibold tabular-nums">
+        <p class="text-base font-semibold">
           {{ hoveredPoint.value === null ? "No Piece released" : hours(hoveredPoint.value) }}
         </p>
         <p class="opacity-70">
@@ -351,14 +428,15 @@ function move(by: number) {
           {{ signalsAfter.weeks === 1 ? "week signals" : "weeks signal" }} a lower Lead Time,
           {{ signalsAfter.above }} a higher one.
         </span>
-        <span class="opacity-70">{{ rule }}</span>
       </template>
-      <template v-else>
-        <span class="opacity-70">
-          Limits from {{ limits.weeks }} full weeks{{ changeDay ? " before the change" : "" }}.
-          {{ rule }}
-        </span>
-      </template>
+      <span v-if="limits" class="opacity-70">
+        Limits from {{ limits.weeks }} full weeks{{
+          changeDay ? " before the change, shaded" : ""
+        }}: {{ hours(limits.lower) }} to {{ hours(limits.upper) }}, average
+        {{ hours(limits.average) }}.
+        {{ rule }}
+      </span>
+      <span v-if="hasPartial" class="opacity-70"> Hollow dot: this week so far.</span>
     </p>
 
     <details class="mt-2 text-sm">
