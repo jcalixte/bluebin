@@ -63,6 +63,8 @@ entries:
     identifiers:
       name: bluebin
     attrs:
+      # The serializer asks for an internal host unless the mode says forward auth.
+      mode: forward_single
       authentication_flow: !KeyOf flow
 
   - model: authentik_core.application

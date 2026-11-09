@@ -28,6 +28,10 @@ entries:
     identifiers:
       name: default-authentication-identification
     attrs:
+      # The serializer refuses an update with no user fields and no sources.
+      user_fields:
+        - email
+        - username
       webauthn_stage: !KeyOf passkey-validation
 
   # Autofill shows only discoverable credentials (resident keys).
