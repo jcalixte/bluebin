@@ -1,5 +1,7 @@
 import bluebin/calendar
 import bluebin/demand.{type Demand}
+import bluebin/wire
+import bluebin/wire_json
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/float
@@ -171,13 +173,14 @@ fn next_place(sequence: List(Placed), demand_id: String) -> Int {
 
 pub fn effects_json(effects: List(Effect)) -> json.Json {
   json.array(effects, fn(effect) {
-    json.object([
-      #("demand", json.string(effect.demand.id)),
-      #("label", json.string(effect.demand.label)),
-      #("places", json.int(effect.places)),
-      #("hours", json.float(effect.hours)),
-      #("taktGap", json.float(effect.takt_gap)),
-    ])
+    wire.ReorderEffect(
+      demand: effect.demand.id,
+      label: effect.demand.label,
+      places: effect.places,
+      hours: effect.hours,
+      takt_gap: effect.takt_gap,
+    )
+    |> wire_json.reorder_effect
   })
 }
 
@@ -282,54 +285,41 @@ pub fn total(cells: List(MixCell)) -> MixCell {
 
 pub fn to_json(backlog: Backlog, mix: List(MixRow)) -> json.Json {
   let urgent_ok = can_be_urgent(backlog.sequence)
-  json.object([
-    #("taktTimeHours", json.float(demand.line_takt_hours(backlog.demands))),
-    #(
-      "sequence",
-      json.array(backlog.sequence, fn(placed) {
-        json.object([
-          #("id", json.string(placed.piece.id)),
-          #("reference", json.string(placed.piece.reference)),
-          #("demand", json.string(placed.demand.id)),
-          #("demandLabel", json.string(placed.demand.label)),
-          #("client", json.string(placed.demand.client)),
-          #("dueOn", json.string(placed.demand.due_on)),
-          #("slotHours", json.float(demand.round_to_tenth(placed.slot_hours))),
-          #("urgent", json.bool(placed.piece.urgent != None)),
-          #("canBeUrgent", json.bool(list.contains(urgent_ok, placed.piece.id))),
-        ])
-      }),
-    ),
-    #(
-      "mix",
-      json.array(mix, fn(row) {
-        json.object([
-          #("demand", json.string(row.demand.id)),
-          #("label", json.string(row.demand.label)),
-          #(
-            "cells",
-            json.array(row.cells, fn(cell) {
-              json.object([
-                #("day", json.string(cell.day)),
-                #("planned", json.float(cell.planned)),
-                #("real", json.int(cell.real)),
-                #("onPlan", json.bool(on_plan(cell))),
-              ])
-            }),
-          ),
-          #(
-            "total",
-            json.object({
-              let sum = total(row.cells)
-              [
-                #("planned", json.float(sum.planned)),
-                #("real", json.int(sum.real)),
-                #("onPlan", json.bool(on_plan(sum))),
-              ]
-            }),
-          ),
-        ])
-      }),
-    ),
-  ])
+  wire.Backlog(
+    takt_time_hours: demand.line_takt_hours(backlog.demands),
+    sequence: list.map(backlog.sequence, fn(placed) {
+      wire.BacklogPiece(
+        id: placed.piece.id,
+        reference: placed.piece.reference,
+        demand: placed.demand.id,
+        demand_label: placed.demand.label,
+        client: placed.demand.client,
+        due_on: placed.demand.due_on,
+        slot_hours: demand.round_to_tenth(placed.slot_hours),
+        urgent: placed.piece.urgent != None,
+        can_be_urgent: list.contains(urgent_ok, placed.piece.id),
+      )
+    }),
+    mix: list.map(mix, fn(row) {
+      let sum = total(row.cells)
+      wire.MixRow(
+        demand: row.demand.id,
+        label: row.demand.label,
+        cells: list.map(row.cells, fn(cell) {
+          wire.MixCell(
+            day: cell.day,
+            planned: cell.planned,
+            real: cell.real,
+            on_plan: on_plan(cell),
+          )
+        }),
+        total: wire.MixTotal(
+          planned: sum.planned,
+          real: sum.real,
+          on_plan: on_plan(sum),
+        ),
+      )
+    }),
+  )
+  |> wire_json.backlog
 }

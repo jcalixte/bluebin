@@ -158,3 +158,61 @@ pub fn measures(value: wire.Measures) -> json.Json {
     #("deviations", deviation_measures(value.deviations)),
   ])
 }
+
+pub fn reorder_effect(value: wire.ReorderEffect) -> json.Json {
+  json.object([
+    #("demand", json.string(value.demand)),
+    #("label", json.string(value.label)),
+    #("places", json.int(value.places)),
+    #("hours", json.float(value.hours)),
+    #("taktGap", json.float(value.takt_gap)),
+  ])
+}
+
+pub fn backlog_piece(value: wire.BacklogPiece) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("reference", json.string(value.reference)),
+    #("demand", json.string(value.demand)),
+    #("demandLabel", json.string(value.demand_label)),
+    #("client", json.string(value.client)),
+    #("dueOn", json.string(value.due_on)),
+    #("slotHours", json.float(value.slot_hours)),
+    #("urgent", json.bool(value.urgent)),
+    #("canBeUrgent", json.bool(value.can_be_urgent)),
+  ])
+}
+
+pub fn mix_cell(value: wire.MixCell) -> json.Json {
+  json.object([
+    #("day", json.string(value.day)),
+    #("planned", json.float(value.planned)),
+    #("real", json.int(value.real)),
+    #("onPlan", json.bool(value.on_plan)),
+  ])
+}
+
+pub fn mix_total(value: wire.MixTotal) -> json.Json {
+  json.object([
+    #("planned", json.float(value.planned)),
+    #("real", json.int(value.real)),
+    #("onPlan", json.bool(value.on_plan)),
+  ])
+}
+
+pub fn mix_row(value: wire.MixRow) -> json.Json {
+  json.object([
+    #("demand", json.string(value.demand)),
+    #("label", json.string(value.label)),
+    #("cells", json.array(value.cells, mix_cell)),
+    #("total", mix_total(value.total)),
+  ])
+}
+
+pub fn backlog(value: wire.Backlog) -> json.Json {
+  json.object([
+    #("taktTimeHours", json.float(value.takt_time_hours)),
+    #("sequence", json.array(value.sequence, backlog_piece)),
+    #("mix", json.array(value.mix, mix_row)),
+  ])
+}

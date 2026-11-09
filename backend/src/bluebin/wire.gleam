@@ -174,3 +174,56 @@ pub type Measures {
     deviations: DeviationMeasures,
   )
 }
+
+/// What a reorder of the Heijunka Sequence costs one Demand.
+pub type ReorderEffect {
+  ReorderEffect(
+    demand: String,
+    label: String,
+    /// Places its next Piece moves: positive is later.
+    places: Int,
+    hours: Float,
+    takt_gap: Float,
+  )
+}
+
+pub type BacklogPiece {
+  BacklogPiece(
+    id: String,
+    reference: String,
+    demand: String,
+    demand_label: String,
+    client: String,
+    due_on: String,
+    slot_hours: Float,
+    urgent: Bool,
+    can_be_urgent: Bool,
+  )
+}
+
+pub type MixCell {
+  MixCell(day: String, planned: Float, real: Int, on_plan: Bool)
+}
+
+pub type MixTotal {
+  MixTotal(planned: Float, real: Int, on_plan: Bool)
+}
+
+pub type MixRow {
+  MixRow(
+    demand: String,
+    label: String,
+    cells: List(MixCell),
+    /// The days shown, added up.
+    total: MixTotal,
+  )
+}
+
+/// `sequence` is the Heijunka Sequence: its first Piece leaves the Backlog next.
+pub type Backlog {
+  Backlog(
+    takt_time_hours: Float,
+    sequence: List(BacklogPiece),
+    mix: List(MixRow),
+  )
+}

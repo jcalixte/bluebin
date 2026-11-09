@@ -1,7 +1,9 @@
 // Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
-import type { Duration } from "./wire"
+import type { Duration, ReorderEffect } from "./wire"
 
 export type {
+  Backlog,
+  BacklogPiece,
   Demand,
   DemandMeasures,
   Duration,
@@ -9,8 +11,11 @@ export type {
   LineEntry,
   LineRole,
   Measures,
+  MixCell,
+  MixRow,
   PieceMeasures,
   RecordedDeviation,
+  ReorderEffect,
   StationMeasures,
   WorkingCalendar,
   Workspace,
@@ -90,16 +95,6 @@ export type WorkStation = {
   reworkHours: number
   deviations: Deviation[]
   kanbans: number
-}
-
-/** What a reorder of the Heijunka Sequence costs one Demand. */
-export type ReorderEffect = {
-  demand: string
-  label: string
-  /** Places its next Piece moves: positive is later. */
-  places: number
-  hours: number
-  taktGap: number
 }
 
 /** Help the Rework, offered in a pull warning before the Deviation (F14). */
@@ -238,40 +233,6 @@ export type TeamMemberView = {
   next: NextThing
   assignments: Assignment[]
   priorityLists: PriorityList[]
-}
-
-export type BacklogPiece = {
-  id: string
-  reference: string
-  demand: string
-  demandLabel: string
-  client: string
-  dueOn: string
-  slotHours: number
-  urgent: boolean
-  canBeUrgent: boolean
-}
-
-export type MixCell = {
-  day: string
-  planned: number
-  real: number
-  onPlan: boolean
-}
-
-export type MixRow = {
-  demand: string
-  label: string
-  cells: MixCell[]
-  /** The days shown, added up. Absent from a backend older than this field. */
-  total?: Omit<MixCell, "day">
-}
-
-/** `sequence` is the Heijunka Sequence: its first Piece leaves the Backlog next. */
-export type Backlog = {
-  taktTimeHours: number
-  sequence: BacklogPiece[]
-  mix: MixRow[]
 }
 
 export type TimeView = keyof Duration
