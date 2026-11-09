@@ -12,6 +12,7 @@ import {
   takenFromHost,
   teamMembers as seated,
 } from "../simulation/share"
+import { seatOf } from "../simulation/seats"
 import { actingAs, guest, onSimulatedChange } from "../simulation/state"
 import type { TeamMember } from "../types"
 
@@ -46,6 +47,16 @@ const takenName = computed(() => {
   if (takenFromHost.value === null) return null
   return seated.value.find((one) => one.id === takenFromHost.value)?.name || "Unnamed Team Member"
 })
+
+/** Host: the Team Members Guests play, and how many Guests still pick one. */
+const roster = computed(() =>
+  seated.value
+    .filter((one) => one.id in seats.value)
+    .map((one) => ({ id: one.id, name: one.name || "Unnamed Team Member" })),
+)
+const stillPicking = computed(
+  () => guests.value.filter((peer) => seatOf(seats.value, peer) === null).length,
+)
 
 const inviting = ref(false)
 const inviteError = ref<string | null>(null)
@@ -153,57 +164,91 @@ async function pickAgain() {
     </template>
 
     <AppModal v-if="inviting" @close="inviting = false">
-      <h3 class="text-lg font-semibold">Play this Simulation together</h3>
+      <h3 class="text-lg font-semibold">Invite Guests</h3>
       <p class="py-2 text-sm opacity-80">
-        Send this link. Each Guest picks one Team Member. You stay the owner of the Line and play
-        each Team Member that no Guest picks.
+        Send this link. Each Guest opens it and picks one Team Member. You stay the owner of the
+        Line and play each Team Member that no Guest picks.
       </p>
+
       <p v-if="inviteError" role="alert" class="alert alert-error">{{ inviteError }}</p>
-      <div v-else-if="inviteLink" class="join w-full">
-        <input
-          :value="inviteLink"
-          readonly
-          aria-label="Link to join this Simulation"
-          class="input join-item w-full"
-          @focus="($event.target as HTMLInputElement).select()"
-        />
-        <button type="button" class="btn btn-primary join-item" @click="copyLink">
-          {{ copied ? "Copied" : "Copy" }}
-        </button>
-      </div>
-      <p v-if="copyFailed" role="alert" class="pt-2 text-sm">
-        This browser did not copy the link. Select it and copy it yourself.
-      </p>
-      <p v-else class="flex items-center gap-2 text-sm" role="status">
+      <p v-else-if="!inviteLink" class="flex items-center gap-2 py-3 text-sm" role="status">
         <span class="loading loading-spinner loading-xs" aria-hidden="true" />
         Opening the room…
       </p>
-      <p class="pt-3 text-sm opacity-80">
-        {{ guests.length === 1 ? "1 Guest is here." : `${guests.length} Guests are here.` }}
+      <template v-else>
+        <div class="grid gap-2 pt-2">
+          <label class="text-sm font-medium" for="simulation-link">Link to join</label>
+          <div class="join w-full">
+            <input
+              id="simulation-link"
+              :value="inviteLink"
+              readonly
+              class="input join-item w-full font-mono text-xs"
+              @focus="($event.target as HTMLInputElement).select()"
+            />
+            <button type="button" class="btn btn-primary join-item" @click="copyLink">
+              {{ copied ? "Copied" : "Copy" }}
+            </button>
+          </div>
+          <p v-if="copyFailed" role="alert" class="text-sm">
+            This browser did not copy the link. Select it and copy it yourself.
+          </p>
+        </div>
+
+        <section class="mt-5" aria-labelledby="simulation-room">
+          <h4 id="simulation-room" class="text-sm font-medium">In the room</h4>
+          <ul class="mt-2 divide-y divide-base-300 rounded-box border border-base-300 text-sm">
+            <li class="flex items-baseline justify-between gap-3 px-3 py-2">
+              <span>You</span>
+              <span class="text-right opacity-70">The owner, and each Team Member left</span>
+            </li>
+            <li
+              v-for="one in roster"
+              :key="one.id"
+              class="flex items-baseline justify-between gap-3 px-3 py-2"
+            >
+              <span>A Guest</span>
+              <span class="text-right">{{ one.name }}</span>
+            </li>
+            <li v-if="stillPicking" class="flex items-center gap-2 px-3 py-2" role="status">
+              <span class="loading loading-dots loading-xs" aria-hidden="true" />
+              {{
+                stillPicking === 1
+                  ? "1 Guest picks a Team Member"
+                  : `${stillPicking} Guests pick a Team Member`
+              }}
+            </li>
+          </ul>
+          <p v-if="guests.length === 0" class="pt-2 text-sm opacity-80">
+            No Guest yet. Each Guest shows here when they open the link.
+          </p>
+        </section>
+      </template>
+
+      <p class="pt-4 text-sm opacity-80">
         The Line lives in this page: when you close or reload it, the Simulation ends for every
         Guest. The browsers connect directly; some company networks block this.
       </p>
-      <div v-if="inviteLink" class="mt-4 rounded-box border border-base-300 p-4">
-        <template v-if="confirmingEnd">
-          <p class="text-sm">
-            Every Guest leaves the Simulation, and this link stops working. Your Line stays in this
-            page.
-          </p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button type="button" class="btn btn-sm btn-primary" @click="endForAll">
-              End it for every Guest
-            </button>
-            <button type="button" class="btn btn-sm btn-ghost" @click="confirmingEnd = false">
-              Keep playing
-            </button>
-          </div>
-        </template>
-        <button v-else type="button" class="btn btn-sm" @click="confirmingEnd = true">
-          End the shared Simulation…
-        </button>
+
+      <div v-if="confirmingEnd" class="mt-4 rounded-box bg-base-200 p-4" role="group">
+        <p class="text-sm">
+          Every Guest leaves the Simulation, and this link stops working. Your Line stays in this
+          page.
+        </p>
+        <div class="mt-3 flex flex-wrap justify-end gap-2">
+          <button type="button" class="btn btn-ghost" @click="confirmingEnd = false">
+            Keep playing
+          </button>
+          <button type="button" class="btn btn-primary" @click="endForAll">
+            End it for every Guest
+          </button>
+        </div>
       </div>
-      <div class="modal-action">
-        <button type="button" class="btn btn-ghost" @click="inviting = false">Close</button>
+      <div v-else class="modal-action justify-between">
+        <button v-if="inviteLink" type="button" class="btn btn-ghost" @click="confirmingEnd = true">
+          End for every Guest…
+        </button>
+        <button type="button" class="btn ml-auto" @click="inviting = false">Close</button>
       </div>
     </AppModal>
   </div>
