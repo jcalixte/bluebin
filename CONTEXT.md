@@ -142,6 +142,10 @@ _Avoid_: business time, office time
 The time from entering the Backlog to Release, measured for each Piece and for each Demand (until its last Piece).
 _Avoid_: cycle time, delivery time
 
+**Line Lead Time**:
+The time from the first Work Station pulling a Piece out of the Backlog to its Deployment: the part of the Lead Time that the Line itself makes.
+_Avoid_: production lead time, flow time, cycle time, build time
+
 **Touch Time**:
 The time Team Members actually spend transforming a Piece at a Work Station, between pulling it in and putting it in a Blue Bin, without pauses.
 _Avoid_: processing time, work time, cycle time
@@ -254,12 +258,17 @@ _Avoid_: hidden Line, secret Line
 - Each **Piece** is deployed as soon as it is complete, at the pace of its **Demand**'s **Takt Time**
 - **Lead Time** = **Touch Time** + **Stagnation Time**
 - **Lead Time** = the **Backlog** wait + the sum of the **Station Lead Times** + the wait from **Deployment** to **Release**
+- **Lead Time** = the **Backlog** wait + **Line Lead Time** + the wait from **Deployment** to **Release**; the **Line** makes only its **Line Lead Time**: **Heijunka** and the **Demands** set the **Backlog** wait, and the **Client** sets the wait for **Release**
+- Across a **Split**, the **Line Lead Time** of a **Piece** is set by its slowest **Sub-Piece**, as its **Lead Time** is
+- A **Piece** counts in a period by its **Deployment** for **Line Lead Time** and the output of the **Line**, and by its **Release** for **Lead Time** and on-time delivery: the **Line**'s work shows in the week it is done, the **Client**'s view in the week it can use it
 - **Station Lead Time** = **Replenishment Time** + the wait in its **Blue Bin**; **Replenishment Time** = **Touch Time** at that **Work Station** + its pauses
-- **Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Working Time** by default, and in **Calendar Time** as a second view
+- **Lead Time**, **Line Lead Time**, **Station Lead Time**, **Stagnation Time**, **Starvation Time** and **Andon Time** are shown in **Working Time** by default, and in **Calendar Time** as a second view
 - **Touch Time** is net time, so it is the same in both views
 - **Takt Time** always uses **Working Time**
 - The **Takt Gap** of a **Demand** = its deployed **Pieces** − the elapsed **Working Time** ÷ its **Takt Time**
 - A **Demand** with a **Takt Gap** of −1 or less raises an **Andon**
+- In a period, the **Takt Time** of each active **Demand** asks for its **Working Time** in the period ÷ its **Takt Time** in **Pieces**; the **Line** is on takt when its deployed **Pieces** reach the sum, and behind takt below it
+- More deployed **Pieces** than the **Takt Time** asks for is spare capacity, not a better result: making faster than the **Takt Time** is overproduction, so the **Line** can do with fewer **Kanbans** or take more **Demands**
 - A **Rework** that waits one hour of **Working Time** with no active **Assignment** raises an **Andon** on the **Work Station** that made the defect
 - Any **Team Member** can raise an **Andon** on their **Work Station**; it stops that **Work Station** until its **Team Leader** closes it
 - While an **Andon** stops a **Work Station**, its **Team Members** pull a new **Piece** only as a **Deviation**; pull spreads the stop upstream and downstream by itself
@@ -344,6 +353,8 @@ _Avoid_: hidden Line, secret Line
 - **Stagnation Time** between two **Work Stations** — resolved: the wait from "Kanban sent" to "pulled in" is the **Starvation Time** of the **Work Station**, not the **Stagnation Time** of the **Piece**. This stops the same wait being counted twice.
 - "US" as the start of every Piece name (US-3) — resolved: replaced by the **Demand Code** (CHK-3). "US" came from the **Piece** label of the **Line**, the same for every **Piece**, so it told nothing; and the numbers started again for each **Demand**, so US-3 named several **Pieces** at once. The **Piece Reference** now shows the **Demand**, which matters for the **Product Mix**.
 - "a standard size for a User Story" — resolved: no rule. Unlike cars of one model, **Pieces** differ in work content. Bluebin does not size or weight them; the team cuts its **Pieces** and sees the consequences in **Touch Time**, **Takt Gap** and **Andons**.
+- "production lead time" (the TPS term for the time a product spends in production) — resolved: **Line Lead Time**. In Bluebin "production" is where a deployed **Piece** runs, so "production lead time" would read as the time after **Deployment**. It ends at **Deployment**, where the **Line** ends, not at **Release**: a **Piece** held for **Release** waits on the **Client**, not on the **Line**.
+- "more Pieces is better" — resolved: no. The output of the **Line** is judged against its **Takt Time**: on takt or behind takt. Above it is spare capacity, not an improvement.
 - "production" — resolved: two separate events. **Deployment** is when a **Piece** runs in production; **Release** is when the **Client** can use it. A team can deploy behind a flag and release later, for example to release all platforms on one date.
 - "release" for a manual reorder of the **Backlog** — avoid: **Release** is the moment the **Client** can use a **Piece**. A manual reorder is a **Deviation** on the **Heijunka Sequence**.
 - "held" — resolved: say "held for **Release**" for a deployed **Piece** that waits for its **Release**. A **Piece** in a **Team Member**'s hands is in hand, not held for **Release**.
