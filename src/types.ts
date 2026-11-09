@@ -1,13 +1,19 @@
 // Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
-import type { Duration, ReorderEffect } from "./wire"
+import type { Duration, Labels, ReorderEffect } from "./wire"
 
 export type {
   Backlog,
   BacklogPiece,
+  BlueBinSuggestion,
   Demand,
   DemandMeasures,
+  Design,
+  DesignStation,
+  DesignStep,
+  DesignTeamMember,
   Duration,
   Holiday,
+  Labels,
   LineEntry,
   LineRole,
   Measures,
@@ -236,68 +242,6 @@ export type TeamMemberView = {
 }
 
 export type TimeView = keyof Duration
-
-/** The names a Line gives to its Demands and Pieces (F41). */
-export type Labels = {
-  demand: string
-  demands: string
-  piece: string
-  pieces: string
-}
-
-/**
- * `email` links the Team Member to the Account that has it; `account` stays
- * null until that Account signs in ("not linked yet"). Both are empty while
- * nobody is signed in.
- */
-export type DesignTeamMember = {
-  id: string
-  name: string
-  email: string
-  account: { firstName: string; lastName: string } | null
-}
-
-/**
- * Suggested Blue Bins (DESIGN.md F55): the last `passes` (at most 20) that went
- * in the Blue Bin. `replenishmentHours` is their 85th percentile in Working
- * Time, without the pauses while the Team Member held another Piece; null
- * under 5 passes. `blueBins` is null without it or without a Takt Time.
- */
-export type BlueBinSuggestion = {
-  passes: number
-  replenishmentHours: number | null
-  blueBins: number | null
-}
-
-/**
- * `locked`: the Work Station holds a Piece, an open Rework or an open Andon.
- * `minBlueBins`: max(1, Pieces in its Blue Bins).
- */
-export type DesignStation = {
-  id: string
-  name: string
-  branch: string | null
-  blueBins: number
-  teamLeader: string
-  teamMembers: string[]
-  locked: boolean
-  minBlueBins: number
-  suggestion: BlueBinSuggestion
-}
-
-/** Steps are in flow order: the first step pulls from the Backlog. */
-export type DesignStep = {
-  name: string
-  stations: DesignStation[]
-}
-
-export type Design = {
-  labels: Labels
-  /** The Takt Time of the Line, in hours of Working Time; 0 with no active Demand. */
-  taktTimeHours: number
-  teamMembers: DesignTeamMember[]
-  steps: DesignStep[]
-}
 
 /** `id` is null for a new Work Station. */
 export type DesignStationInput = {

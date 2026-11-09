@@ -5,6 +5,8 @@ import bluebin/db
 import bluebin/line
 import bluebin/measures
 import bluebin/text
+import bluebin/wire
+import bluebin/wire_json
 import gleam/bool
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
@@ -1052,12 +1054,16 @@ fn station_payload(
 }
 
 pub fn labels_json(labels: Labels) -> Json {
-  json.object([
-    #("demand", json.string(labels.demand)),
-    #("demands", json.string(labels.demands)),
-    #("piece", json.string(labels.piece)),
-    #("pieces", json.string(labels.pieces)),
-  ])
+  wire_labels(labels) |> wire_json.labels
+}
+
+fn wire_labels(labels: Labels) -> wire.Labels {
+  wire.Labels(
+    demand: labels.demand,
+    demands: labels.demands,
+    piece: labels.piece,
+    pieces: labels.pieces,
+  )
 }
 
 pub fn to_json(
@@ -1067,107 +1073,81 @@ pub fn to_json(
   takt_hours: Float,
   suggestions: Dict(String, measures.Suggestion),
 ) -> Json {
-  json.object([
-    #("labels", labels_json(design.labels)),
-    #("taktTimeHours", json.float(takt_hours)),
-    #(
-      "teamMembers",
-      json.array(design.team_members, team_member_json(_, links)),
-    ),
-    #(
-      "steps",
-      json.array(design.steps, fn(step) {
-        json.object([
-          #("name", json.string(step.name)),
-          #(
-            "stations",
-            json.array(step.stations, station_json(
-              _,
-              held,
-              takt_hours,
-              suggestions,
-            )),
-          ),
-        ])
-      }),
-    ),
-  ])
+  wire.Design(
+    labels: wire_labels(design.labels),
+    takt_time_hours: takt_hours,
+    team_members: list.map(design.team_members, wire_team_member(_, links)),
+    steps: list.map(design.steps, fn(step) {
+      wire.DesignStep(
+        name: step.name,
+        stations: list.map(step.stations, wire_station(
+          _,
+          held,
+          takt_hours,
+          suggestions,
+        )),
+      )
+    }),
+  )
+  |> wire_json.design
 }
 
-fn team_member_json(
+fn wire_team_member(
   team_member: TeamMember,
   links: List(accounts.Link),
-) -> Json {
+) -> wire.DesignTeamMember {
   let link = list.find(links, fn(link) { link.team_member == team_member.id })
-  json.object([
-    #("id", json.string(team_member.id)),
-    #("name", json.string(team_member.name)),
-    #(
-      "email",
-      json.string(
-        result.map(link, fn(link) { link.email }) |> result.unwrap(""),
-      ),
-    ),
-    #(
-      "account",
-      json.nullable(
-        result.try(link, fn(link) { option.to_result(link.account, Nil) })
-          |> option.from_result,
-        fn(account) {
-          json.object([
-            #("firstName", json.string(account.first_name)),
-            #("lastName", json.string(account.last_name)),
-          ])
-        },
-      ),
-    ),
-  ])
+  wire.DesignTeamMember(
+    id: team_member.id,
+    name: team_member.name,
+    email: result.map(link, fn(link) { link.email }) |> result.unwrap(""),
+    account: result.try(link, fn(link) { option.to_result(link.account, Nil) })
+      |> option.from_result
+      |> option.map(fn(account) {
+        wire.AccountName(
+          first_name: account.first_name,
+          last_name: account.last_name,
+        )
+      }),
+  )
 }
 
-fn station_json(
+fn wire_station(
   station: Station,
   held: Dict(String, Held),
   takt_hours: Float,
   suggestions: Dict(String, measures.Suggestion),
-) -> Json {
+) -> wire.DesignStation {
   let found = id_of(station) |> result.try(dict.get(held, _))
-  json.object([
-    #("id", json.nullable(station.id, json.string)),
-    #("name", json.string(station.name)),
-    #("branch", json.nullable(station.branch, json.string)),
-    #("blueBins", json.int(station.blue_bins)),
-    #("teamLeader", json.string(station.team_leader)),
-    #("teamMembers", json.array(station.team_members, json.string)),
-    #("locked", json.bool(result.map(found, fn(h) { h.locked }) == Ok(True))),
-    #(
-      "minBlueBins",
-      json.int(int.max(
-        1,
-        result.map(found, fn(h) { h.in_bins }) |> result.unwrap(0),
-      )),
+  wire.DesignStation(
+    // `load` gives every Work Station its id; only a new one in a body has none.
+    id: option.unwrap(station.id, ""),
+    name: station.name,
+    branch: station.branch,
+    blue_bins: station.blue_bins,
+    team_leader: station.team_leader,
+    team_members: station.team_members,
+    locked: result.map(found, fn(h) { h.locked }) == Ok(True),
+    min_blue_bins: int.max(
+      1,
+      result.map(found, fn(h) { h.in_bins }) |> result.unwrap(0),
     ),
-    #(
-      "suggestion",
-      suggestion_json(
-        id_of(station)
-        |> result.try(dict.get(suggestions, _))
-        |> result.unwrap(measures.suggest([], takt_hours)),
-      ),
+    suggestion: wire_suggestion(
+      id_of(station)
+      |> result.try(dict.get(suggestions, _))
+      |> result.unwrap(measures.suggest([], takt_hours)),
     ),
-  ])
+  )
 }
 
-fn suggestion_json(suggestion: measures.Suggestion) -> Json {
-  json.object([
-    #("passes", json.int(suggestion.passes)),
-    #(
-      "replenishmentHours",
-      json.nullable(suggestion.replenishment, fn(seconds) {
-        json.float(int.to_float({ seconds * 10 + 1800 } / 3600) /. 10.0)
-      }),
-    ),
-    #("blueBins", json.nullable(suggestion.blue_bins, json.int)),
-  ])
+fn wire_suggestion(suggestion: measures.Suggestion) -> wire.BlueBinSuggestion {
+  wire.BlueBinSuggestion(
+    passes: suggestion.passes,
+    replenishment_hours: option.map(suggestion.replenishment, fn(seconds) {
+      int.to_float({ seconds * 10 + 1800 } / 3600) /. 10.0
+    }),
+    blue_bins: suggestion.blue_bins,
+  )
 }
 
 pub fn decoder() -> decode.Decoder(Design) {

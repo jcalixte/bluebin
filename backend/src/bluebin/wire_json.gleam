@@ -216,3 +216,69 @@ pub fn backlog(value: wire.Backlog) -> json.Json {
     #("mix", json.array(value.mix, mix_row)),
   ])
 }
+
+pub fn labels(value: wire.Labels) -> json.Json {
+  json.object([
+    #("demand", json.string(value.demand)),
+    #("demands", json.string(value.demands)),
+    #("piece", json.string(value.piece)),
+    #("pieces", json.string(value.pieces)),
+  ])
+}
+
+pub fn account_name(value: wire.AccountName) -> json.Json {
+  json.object([
+    #("firstName", json.string(value.first_name)),
+    #("lastName", json.string(value.last_name)),
+  ])
+}
+
+pub fn design_team_member(value: wire.DesignTeamMember) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("email", json.string(value.email)),
+    #("account", json.nullable(value.account, account_name)),
+  ])
+}
+
+pub fn blue_bin_suggestion(value: wire.BlueBinSuggestion) -> json.Json {
+  json.object([
+    #("passes", json.int(value.passes)),
+    #(
+      "replenishmentHours",
+      json.nullable(value.replenishment_hours, json.float),
+    ),
+    #("blueBins", json.nullable(value.blue_bins, json.int)),
+  ])
+}
+
+pub fn design_station(value: wire.DesignStation) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("branch", json.nullable(value.branch, json.string)),
+    #("blueBins", json.int(value.blue_bins)),
+    #("teamLeader", json.string(value.team_leader)),
+    #("teamMembers", json.array(value.team_members, json.string)),
+    #("locked", json.bool(value.locked)),
+    #("minBlueBins", json.int(value.min_blue_bins)),
+    #("suggestion", blue_bin_suggestion(value.suggestion)),
+  ])
+}
+
+pub fn design_step(value: wire.DesignStep) -> json.Json {
+  json.object([
+    #("name", json.string(value.name)),
+    #("stations", json.array(value.stations, design_station)),
+  ])
+}
+
+pub fn design(value: wire.Design) -> json.Json {
+  json.object([
+    #("labels", labels(value.labels)),
+    #("taktTimeHours", json.float(value.takt_time_hours)),
+    #("teamMembers", json.array(value.team_members, design_team_member)),
+    #("steps", json.array(value.steps, design_step)),
+  ])
+}

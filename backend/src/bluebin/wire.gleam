@@ -227,3 +227,67 @@ pub type Backlog {
     mix: List(MixRow),
   )
 }
+
+/// The names a Line gives to its Demands and Pieces (F41).
+pub type Labels {
+  Labels(demand: String, demands: String, piece: String, pieces: String)
+}
+
+pub type AccountName {
+  AccountName(first_name: String, last_name: String)
+}
+
+/// `email` links the Team Member to the Account that has it; `account` stays
+/// null until that Account signs in ("not linked yet"). Both are empty while
+/// nobody is signed in.
+pub type DesignTeamMember {
+  DesignTeamMember(
+    id: String,
+    name: String,
+    email: String,
+    account: Option(AccountName),
+  )
+}
+
+/// Suggested Blue Bins (DESIGN.md F55): the last `passes` (at most 20) that went
+/// in the Blue Bin. `replenishmentHours` is their 85th percentile in Working
+/// Time, without the pauses while the Team Member held another Piece; null
+/// under 5 passes. `blueBins` is null without it or without a Takt Time.
+pub type BlueBinSuggestion {
+  BlueBinSuggestion(
+    passes: Int,
+    replenishment_hours: Option(Float),
+    blue_bins: Option(Int),
+  )
+}
+
+/// `locked`: the Work Station holds a Piece, an open Rework or an open Andon.
+/// `minBlueBins`: max(1, Pieces in its Blue Bins).
+pub type DesignStation {
+  DesignStation(
+    id: String,
+    name: String,
+    branch: Option(String),
+    blue_bins: Int,
+    team_leader: String,
+    team_members: List(String),
+    locked: Bool,
+    min_blue_bins: Int,
+    suggestion: BlueBinSuggestion,
+  )
+}
+
+/// Steps are in flow order: the first step pulls from the Backlog.
+pub type DesignStep {
+  DesignStep(name: String, stations: List(DesignStation))
+}
+
+pub type Design {
+  Design(
+    labels: Labels,
+    /// The Takt Time of the Line, in hours of Working Time; 0 with no active Demand.
+    takt_time_hours: Float,
+    team_members: List(DesignTeamMember),
+    steps: List(DesignStep),
+  )
+}
