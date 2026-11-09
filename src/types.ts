@@ -24,6 +24,7 @@ export type {
   Holiday,
   InProgressPiece,
   Labels,
+  LineChange,
   Line,
   LineEntry,
   LineRole,

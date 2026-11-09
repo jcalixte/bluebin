@@ -811,6 +811,7 @@ fn route(
       next_thing(team_member, database)
     _, ["api", "steps", position] -> rename_step(request, position, database)
     _, ["api", "measures"] -> measures_of(request, database)
+    _, ["api", "line-changes"] -> line_changes(database)
     http.Put, ["api", "calendar"] -> save_calendar(request, database)
     _, ["api", "calendar"] -> working_calendar(database)
     _, _ -> wisp.not_found()
@@ -1024,6 +1025,12 @@ fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
     Error(design.Invalid(reason)) -> wisp.bad_request(reason)
     Error(design.StoreFailed) -> wisp.internal_server_error()
   }
+}
+
+fn line_changes(database: String) -> wisp.Response {
+  use connection <- read(database)
+  design.line_changes(connection)
+  |> result.map(json.array(_, wire_json.line_change))
 }
 
 fn labels(database: String) -> wisp.Response {

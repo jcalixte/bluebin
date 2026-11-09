@@ -297,6 +297,16 @@ pub type Design {
   )
 }
 
+/// One save of the Design that changes the flow: the pivot of a before/after comparison (F38).
+pub type LineChange {
+  LineChange(
+    /// When the Design was saved, `YYYY-MM-DDTHH:MM:SSZ` (UTC).
+    at: String,
+    /// What changed, one sentence for each Work Station or Team Member.
+    items: List(String),
+  )
+}
+
 pub type BlueBin {
   BlueBin(
     slot: Int,

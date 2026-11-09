@@ -259,6 +259,14 @@ export type Design = {
   steps: DesignStep[]
 }
 
+/** One save of the Design that changes the flow: the pivot of a before/after comparison (F38). */
+export type LineChange = {
+  /** When the Design was saved, `YYYY-MM-DDTHH:MM:SSZ` (UTC). */
+  at: string
+  /** What changed, one sentence for each Work Station or Team Member. */
+  items: string[]
+}
+
 export type BlueBin = {
   slot: number
   id: string | null

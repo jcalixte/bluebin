@@ -16,7 +16,7 @@ pub fn every_read_of_the_demo_line_answers_test() {
   [
     "/api/demands", "/api/andons", "/api/line", "/api/backlog",
     "/api/team-members", "/api/team-members/pe-ines/next", "/api/design",
-    "/api/labels", "/api/calendar", "/api/measures",
+    "/api/labels", "/api/calendar", "/api/measures", "/api/line-changes",
   ]
   |> list.each(fn(path) {
     assert simulation.call("GET", path, "", "pe-ines").0 == 200

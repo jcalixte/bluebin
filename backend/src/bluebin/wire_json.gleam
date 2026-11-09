@@ -293,6 +293,13 @@ pub fn design(value: wire.Design) -> json.Json {
   ])
 }
 
+pub fn line_change(value: wire.LineChange) -> json.Json {
+  json.object([
+    #("at", json.string(value.at)),
+    #("items", json.array(value.items, json.string)),
+  ])
+}
+
 pub fn blue_bin(value: wire.BlueBin) -> json.Json {
   json.object([
     #("slot", json.int(value.slot)),

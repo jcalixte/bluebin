@@ -2,6 +2,7 @@ import bluebin/db
 import bluebin/design.{
   type Design, type Station, type Step, Design, Invalid, Station, Step,
 }
+import bluebin/wire
 import gleam/dict
 import gleam/dynamic/decode
 import gleam/json
@@ -446,4 +447,86 @@ pub fn a_team_member_with_work_in_hand_cannot_go_test() {
   use connection <- with_seeded_database()
   let wanted = current(connection) |> without_team_member("pe-marc")
   assert refused(design.save(connection, wanted), "work in hand")
+}
+
+fn line_changed(connection: sqlight.Connection, at: String, payload: String) {
+  let assert Ok(_) =
+    sqlight.query(
+      "insert into flow_event (kind, at, payload) values ('line_changed', ?1, ?2)",
+      on: connection,
+      with: [sqlight.text(at), sqlight.text(payload)],
+      expecting: decode.success(Nil),
+    )
+  Nil
+}
+
+pub fn line_changes_say_what_changed_newest_first_test() {
+  use connection <- with_seeded_database()
+  let station = fn(change, bins, members) {
+    "{\"change\": \""
+    <> change
+    <> "\", \"station\": \"ws-x\", \"name\": \"Review\", \"position\": 2,
+    \"branch\": null, \"blueBins\": "
+    <> bins
+    <> ", \"teamLeader\": \"pe-a\", \"teamMembers\": "
+    <> members
+    <> "}"
+  }
+  line_changed(
+    connection,
+    "2026-11-02T09:00:00Z",
+    station("station_added", "2", "[\"pe-a\"]"),
+  )
+  line_changed(
+    connection,
+    "2026-11-03T14:00:00Z",
+    station("station_changed", "3", "[\"pe-a\", \"pe-b\"]"),
+  )
+  line_changed(
+    connection,
+    "2026-11-03T14:00:01Z",
+    "{\"change\": \"team_member_added\", \"teamMember\": \"pe-b\", \"name\": \"Bob\"}",
+  )
+  line_changed(
+    connection,
+    "2026-11-04T08:00:00Z",
+    "{\"change\": \"step_renamed\", \"position\": 1, \"name\": \"Code\"}",
+  )
+  line_changed(
+    connection,
+    "2026-11-05T08:00:00Z",
+    station("station_changed", "3", "[\"pe-b\", \"pe-a\"]"),
+  )
+  line_changed(
+    connection,
+    "2026-11-06T08:00:00Z",
+    "{\"change\": \"station_removed\", \"station\": \"ws-x\", \"name\": \"Review\"}",
+  )
+
+  let assert Ok(changes) = design.line_changes(connection)
+  assert changes
+    == [
+      wire.LineChange(at: "2026-11-06T08:00:00Z", items: ["Review removed"]),
+      wire.LineChange(at: "2026-11-03T14:00:00Z", items: [
+        "Review: Blue Bins 2 → 3, Team Members 1 → 2",
+        "Team Member Bob added",
+      ]),
+      wire.LineChange(at: "2026-11-02T09:00:00Z", items: [
+        "Review added: 2 Blue Bins, 1 Team Member",
+      ]),
+    ]
+}
+
+pub fn a_saved_design_is_a_line_change_test() {
+  use connection <- with_seeded_database()
+  let assert Ok([]) = design.line_changes(connection)
+  let assert Ok(_) =
+    design.save(
+      connection,
+      current(connection)
+        |> change_station("ws-uat", fn(s) { Station(..s, blue_bins: 3) }),
+    )
+  let assert Ok([wire.LineChange(items: [item], ..)]) =
+    design.line_changes(connection)
+  assert string.contains(item, "3 Blue Bins")
 }

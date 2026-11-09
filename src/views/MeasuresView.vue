@@ -4,11 +4,23 @@ import CompareCell, { type Verdict } from "../components/CompareCell.vue"
 import VerdictPill from "../components/VerdictPill.vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
 import { useLabels } from "../composables/useLabels"
-import { isValidPeriod, useMeasures, type Period } from "../composables/useMeasures"
+import { isValidPeriod, periodDays, useMeasures, type Period } from "../composables/useMeasures"
 import type { DemandMeasures, Duration, StationMeasures, TimeView } from "../types"
 
-const { before, after, measures, error, loading, calendar, calendarError, saveCalendar } =
-  useMeasures()
+const {
+  before,
+  after,
+  changes,
+  mode,
+  changeAt,
+  days,
+  measures,
+  error,
+  loading,
+  calendar,
+  calendarError,
+  saveCalendar,
+} = useMeasures()
 
 const { labels } = useLabels()
 
@@ -22,6 +34,25 @@ const periods = [
   { name: "Before", period: before },
   { name: "After", period: after },
 ] as const
+
+const compareModes = [
+  { id: "change", label: "Around a Line change" },
+  { id: "custom", label: "Custom dates" },
+] as const
+
+const dayOptions = [7, 14, 28]
+
+const chosenChange = computed(() => changes.value.find((one) => one.at === changeAt.value))
+
+/** Other Line changes inside the two periods: their effect mixes in. */
+const otherChanges = computed(() =>
+  changes.value.filter((one) => {
+    const day = one.at.slice(0, 10)
+    return one.at !== changeAt.value && day >= before.from && day <= after.to
+  }),
+)
+
+const lengths = computed(() => [periodDays(before), periodDays(after)])
 
 const ruleLabels: Record<string, string> = {
   pull_without_kanban: "Pull without a Kanban",
@@ -315,33 +346,113 @@ const deviationList = computed(() =>
     </header>
 
     <div class="card mb-6 border border-base-300 bg-base-100 shadow-sm">
-      <div class="card-body flex-row flex-wrap items-start gap-x-8 gap-y-4 p-5">
-        <template v-for="(one, index) in periods" :key="one.name">
-          <span
-            v-if="index > 0"
-            class="hidden self-center pt-6 text-sm font-medium opacity-60 md:block"
-            aria-hidden="true"
+      <div class="card-body gap-4 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <h3 class="text-sm font-semibold">Compare two periods</h3>
+          <div
+            v-if="changes.length > 0"
+            class="tabs tabs-box tabs-sm"
+            role="group"
+            aria-label="How to pick the periods"
           >
-            compared with
-          </span>
-          <fieldset class="min-w-0">
-            <legend class="mb-2 text-sm font-semibold">{{ one.name }}</legend>
-            <div class="flex flex-wrap gap-3">
-              <label class="flex flex-col gap-1 text-sm">
-                <span class="opacity-70">From</span>
-                <input v-model="one.period.from" type="date" class="input w-auto" />
-              </label>
-              <label class="flex flex-col gap-1 text-sm">
-                <span class="opacity-70">To (included)</span>
-                <input v-model="one.period.to" type="date" class="input w-auto" />
-              </label>
-            </div>
-            <p aria-live="polite" class="mt-2 text-sm text-warning-ink empty:hidden">
-              <template v-if="!isValidPeriod(one.period)">
-                Pick a start date on or before the end date.
-              </template>
-            </p>
-          </fieldset>
+            <button
+              v-for="option in compareModes"
+              :key="option.id"
+              type="button"
+              class="tab"
+              :class="mode === option.id ? 'tab-active font-medium' : 'opacity-70'"
+              :aria-pressed="mode === option.id"
+              @click="mode = option.id"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+          <p v-else class="text-sm opacity-70">
+            No Line change saved yet: pick the two periods by hand.
+          </p>
+        </div>
+
+        <template v-if="mode === 'change' && chosenChange">
+          <div class="flex flex-wrap items-end gap-3">
+            <label class="flex min-w-0 flex-col gap-1 text-sm">
+              <span class="opacity-70">Line change</span>
+              <select v-model="changeAt" class="select w-auto max-w-full">
+                <option v-for="one in changes" :key="one.at" :value="one.at">
+                  {{ atLabel(one.at) }} · {{ one.items[0]
+                  }}{{ one.items.length > 1 ? ` (+${one.items.length - 1})` : "" }}
+                </option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-sm">
+              <span class="opacity-70">Days on each side</span>
+              <select v-model="days" class="select w-auto">
+                <option v-for="count in dayOptions" :key="count" :value="count">
+                  {{ count }} days
+                </option>
+              </select>
+            </label>
+          </div>
+          <ul class="list-inside list-disc text-sm">
+            <li v-for="item in chosenChange.items" :key="item">{{ item }}</li>
+          </ul>
+          <p class="text-sm tabular-nums">
+            <span class="font-medium">Before</span> {{ periodLabel(before) }}
+            <span class="opacity-60">compared with</span>
+            <span class="font-medium">After</span> {{ periodLabel(after) }}
+            <span class="opacity-70"
+              >· {{ lengths[1] }} {{ lengths[1] === 1 ? "day" : "days" }} each</span
+            >
+          </p>
+          <p aria-live="polite" class="text-sm text-warning-ink empty:hidden">
+            <template v-if="lengths[1] < days">
+              The change is {{ lengths[1] }} {{ lengths[1] === 1 ? "day" : "days" }} old: each
+              period has {{ lengths[1] }} {{ lengths[1] === 1 ? "day" : "days" }} so far.
+            </template>
+            <template v-if="otherChanges.length > 0">
+              Another Line change falls in these periods ({{
+                otherChanges.map((one) => atLabel(one.at)).join(", ")
+              }}): its effect mixes in.
+            </template>
+          </p>
+        </template>
+
+        <template v-else>
+          <div class="flex flex-row flex-wrap items-start gap-x-8 gap-y-4">
+            <template v-for="(one, index) in periods" :key="one.name">
+              <span
+                v-if="index > 0"
+                class="hidden self-center pt-6 text-sm font-medium opacity-60 md:block"
+                aria-hidden="true"
+              >
+                compared with
+              </span>
+              <fieldset class="min-w-0">
+                <legend class="mb-2 text-sm font-semibold">{{ one.name }}</legend>
+                <div class="flex flex-wrap gap-3">
+                  <label class="flex flex-col gap-1 text-sm">
+                    <span class="opacity-70">From</span>
+                    <input v-model="one.period.from" type="date" class="input w-auto" />
+                  </label>
+                  <label class="flex flex-col gap-1 text-sm">
+                    <span class="opacity-70">To (included)</span>
+                    <input v-model="one.period.to" type="date" class="input w-auto" />
+                  </label>
+                </div>
+                <p aria-live="polite" class="mt-2 text-sm text-warning-ink empty:hidden">
+                  <template v-if="!isValidPeriod(one.period)">
+                    Pick a start date on or before the end date.
+                  </template>
+                </p>
+              </fieldset>
+            </template>
+          </div>
+          <p
+            v-if="isValidPeriod(before) && isValidPeriod(after) && lengths[0] !== lengths[1]"
+            class="text-sm text-warning-ink"
+          >
+            The periods have different lengths ({{ lengths[0] }} and {{ lengths[1] }} days): the
+            counts and totals do not compare, the averages do.
+          </p>
         </template>
       </div>
     </div>

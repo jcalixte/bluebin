@@ -1035,6 +1035,188 @@ fn changed(
   )
 }
 
+type LineEvent {
+  LineEvent(
+    change: String,
+    name: String,
+    station: Option(String),
+    state: StationState,
+  )
+}
+
+type StationState {
+  StationState(
+    name: String,
+    blue_bins: Int,
+    team_members: List(String),
+    team_leader: String,
+    position: Int,
+    branch: Option(String),
+  )
+}
+
+/// The saves of the Design that change the flow, newest first (F38). Events of
+/// one save, a few seconds apart at most, make one change. Renames and labels
+/// change no flow, so they are not listed.
+pub fn line_changes(
+  connection: sqlight.Connection,
+) -> Result(List(wire.LineChange), Nil) {
+  use events <- result.try(
+    query(
+      connection,
+      "select cast(strftime('%s', at) as integer), at, payload from flow_event
+    where kind = 'line_changed' order by id",
+      [],
+      {
+        use second <- decode.field(0, decode.int)
+        use at <- decode.field(1, decode.string)
+        use payload <- decode.field(2, decode.string)
+        decode.success(#(second, at, payload))
+      },
+    ),
+  )
+  let #(_, items) =
+    list.fold(events, #(dict.new(), []), fn(acc, row) {
+      let #(states, items) = acc
+      let #(second, at, payload) = row
+      case json.parse(payload, line_event_decoder()) {
+        Error(_) -> acc
+        Ok(event) -> {
+          let before = case event.station {
+            Some(id) -> dict.get(states, id) |> option.from_result
+            None -> None
+          }
+          let states = case event.station, event.change {
+            Some(id), "station_removed" -> dict.delete(states, id)
+            Some(id), _ -> dict.insert(states, id, event.state)
+            None, _ -> states
+          }
+          case describe(event, before) {
+            Some(text) -> #(states, [#(second, at, text), ..items])
+            None -> #(states, items)
+          }
+        }
+      }
+    })
+  // Oldest first in, newest first out: a change keeps the time of its first event.
+  list.reverse(items)
+  |> list.fold([], fn(changes, item) {
+    let #(second, at, text) = item
+    case changes {
+      [#(last, opened_at, texts), ..rest] if second - last <= 2 -> [
+        #(second, opened_at, [text, ..texts]),
+        ..rest
+      ]
+      _ -> [#(second, at, [text]), ..changes]
+    }
+  })
+  |> list.map(fn(change) {
+    let #(_, at, texts) = change
+    wire.LineChange(at:, items: list.reverse(texts))
+  })
+  |> Ok
+}
+
+fn line_event_decoder() -> decode.Decoder(LineEvent) {
+  use change <- decode.field("change", decode.string)
+  use name <- decode.optional_field("name", "", decode.string)
+  use station <- decode.optional_field(
+    "station",
+    None,
+    decode.optional(decode.string),
+  )
+  use blue_bins <- decode.optional_field("blueBins", 0, decode.int)
+  use team_members <- decode.optional_field(
+    "teamMembers",
+    [],
+    decode.list(decode.string),
+  )
+  use team_leader <- decode.optional_field("teamLeader", "", decode.string)
+  use position <- decode.optional_field("position", 0, decode.int)
+  use branch <- decode.optional_field(
+    "branch",
+    None,
+    decode.optional(decode.string),
+  )
+  decode.success(LineEvent(
+    change:,
+    name:,
+    station:,
+    state: StationState(
+      name:,
+      blue_bins:,
+      team_members: list.sort(team_members, string.compare),
+      team_leader:,
+      position:,
+      branch:,
+    ),
+  ))
+}
+
+fn describe(event: LineEvent, before: Option(StationState)) -> Option(String) {
+  let now = event.state
+  let size = fn(state: StationState) {
+    plural(state.blue_bins, "Blue Bin")
+    <> ", "
+    <> plural(list.length(state.team_members), "Team Member")
+  }
+  case event.change, before {
+    "station_added", _ -> Some(now.name <> " added: " <> size(now))
+    "station_removed", _ -> Some(event.name <> " removed")
+    "team_member_added", _ -> Some("Team Member " <> event.name <> " added")
+    "team_member_removed", _ -> Some("Team Member " <> event.name <> " removed")
+    "station_changed", None -> Some(now.name <> ": " <> size(now))
+    "station_changed", Some(old) ->
+      [
+        #(old.name != now.name, "renamed from " <> old.name),
+        #(
+          old.blue_bins != now.blue_bins,
+          "Blue Bins "
+            <> int.to_string(old.blue_bins)
+            <> " → "
+            <> int.to_string(now.blue_bins),
+        ),
+        #(
+          list.length(old.team_members) != list.length(now.team_members),
+          "Team Members "
+            <> int.to_string(list.length(old.team_members))
+            <> " → "
+            <> int.to_string(list.length(now.team_members)),
+        ),
+        #(
+          list.length(old.team_members) == list.length(now.team_members)
+            && old.team_members != now.team_members,
+          "other Team Members",
+        ),
+        #(old.team_leader != now.team_leader, "new Team Leader"),
+        #(old.position != now.position || old.branch != now.branch, "moved"),
+      ]
+      |> list.filter_map(fn(part) {
+        case part.0 {
+          True -> Ok(part.1)
+          False -> Error(Nil)
+        }
+      })
+      |> fn(parts) {
+        case parts {
+          [] -> None
+          _ -> Some(now.name <> ": " <> string.join(parts, ", "))
+        }
+      }
+    _, _ -> None
+  }
+}
+
+fn plural(count: Int, noun: String) -> String {
+  int.to_string(count)
+  <> " "
+  <> noun
+  <> case count {
+    1 -> ""
+    _ -> "s"
+  }
+}
+
 fn station_payload(
   change: String,
   id: String,
