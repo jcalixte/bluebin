@@ -4,6 +4,7 @@ import { lineFetch } from "../api"
 import { useLabels } from "../composables/useLabels"
 import { codePattern } from "../demandCode"
 import type { Demand } from "../types"
+import type { DemandCodeInput } from "../wire"
 
 const props = defineProps<{ demand: Demand; canChangeCode: boolean }>()
 const emit = defineEmits<{ changed: [] }>()
@@ -33,7 +34,7 @@ async function changeCode() {
     const response = await lineFetch(`/api/demands/${encodeURIComponent(props.demand.id)}/code`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code } satisfies DemandCodeInput),
     })
     if (!response.ok) {
       throw new Error((await response.text()) || `API answered ${response.status}`)

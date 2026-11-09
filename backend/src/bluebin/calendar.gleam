@@ -5,6 +5,7 @@ import gleam/dynamic/decode
 import gleam/int
 import gleam/json
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/set.{type Set}
 import gleam/string
@@ -317,27 +318,21 @@ fn format_time(minutes: Int) -> String {
   pad(minutes / 60) <> ":" <> pad(minutes % 60)
 }
 
-pub fn decoder() -> decode.Decoder(Calendar) {
-  let time = {
-    use text <- decode.then(decode.string)
-    case parse_time(text) {
-      Ok(minutes) -> decode.success(minutes)
-      Error(Nil) -> decode.failure(0, "a time like 09:00")
-    }
-  }
-  use days <- decode.field("days", decode.list(decode.int))
-  use start <- decode.field("start", time)
-  use end <- decode.field("end", time)
-  use holidays <- decode.optional_field(
-    "holidays",
-    [],
-    decode.list({
-      use day <- decode.field("day", decode.string)
-      use label <- decode.optional_field("label", "", decode.string)
-      decode.success(Holiday(day:, label:, index: 0))
-    }),
-  )
-  decode.success(Calendar(days:, start:, end:, holidays:))
+/// The Calendar of a `PUT /api/calendar` body, or `Error` for a time that is
+/// not "HH:MM".
+pub fn from_input(input: wire.WorkingCalendarInput) -> Result(Calendar, Nil) {
+  use start <- result.try(parse_time(input.start))
+  use end <- result.try(parse_time(input.end))
+  let holidays =
+    option.unwrap(input.holidays, [])
+    |> list.map(fn(holiday) {
+      Holiday(
+        day: holiday.day,
+        label: option.unwrap(holiday.label, ""),
+        index: 0,
+      )
+    })
+  Ok(Calendar(days: input.days, start:, end:, holidays:))
 }
 
 pub fn to_json(calendar: Calendar) -> json.Json {

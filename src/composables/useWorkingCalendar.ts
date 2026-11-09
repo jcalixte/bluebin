@@ -1,6 +1,7 @@
 import { onMounted, ref } from "vue"
 import { lineFetch } from "../api"
 import type { WorkingCalendar } from "../types"
+import type { WorkingCalendarInput } from "../wire"
 
 export function useWorkingCalendar(afterSave?: () => Promise<unknown>) {
   const calendar = ref<WorkingCalendar | null>(null)
@@ -23,7 +24,7 @@ export function useWorkingCalendar(afterSave?: () => Promise<unknown>) {
     const response = await lineFetch("/api/calendar", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(next),
+      body: JSON.stringify(next satisfies WorkingCalendarInput),
     })
     if (!response.ok) {
       throw new Error((await response.text()) || `API answered ${response.status}`)

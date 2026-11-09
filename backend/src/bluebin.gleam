@@ -449,9 +449,9 @@ fn share_line(
       |> wisp.string_body("A Line is shared only with sign-in on.")
     NoEmail -> wisp.response(401)
     SignedIn(..) -> {
-      use shared <- require_body(
+      use wire.ShareInput(shared:) <- require_body(
         request,
-        decode.field("shared", decode.bool, decode.success),
+        wire_json.share_input_decoder(),
         or: "expected a body like {\"shared\": true}",
       )
       case accounts.share(context.accounts, workspace, line, shared) {
@@ -534,14 +534,9 @@ fn save_account(
     SignedOut -> wisp.response(403)
     NoEmail -> wisp.response(401)
     SignedIn(uid:, email:) -> {
-      let decoder = {
-        use first_name <- decode.field("firstName", decode.string)
-        use last_name <- decode.field("lastName", decode.string)
-        decode.success(#(first_name, last_name))
-      }
-      use #(first_name, last_name) <- require_body(
+      use wire.AccountInput(first_name:, last_name:) <- require_body(
         request,
-        decoder,
+        wire_json.account_input_decoder(),
         or: "expected a body like {\"firstName\": \"Ada\", \"lastName\": \"Lovelace\"}",
       )
       case accounts.save(context.accounts, uid, email, first_name, last_name) {
@@ -721,12 +716,12 @@ fn require_line_name(
   request: wisp.Request,
   next: fn(String) -> wisp.Response,
 ) -> wisp.Response {
-  require_body(
+  use wire.NameInput(name:) <- require_body(
     request,
-    decode.field("name", decode.string, decode.success),
+    wire_json.name_input_decoder(),
     or: "expected a body like {\"name\": \"Mobile\"}",
-    then: next,
   )
+  next(name)
 }
 
 fn line_response(
@@ -877,11 +872,14 @@ fn working_calendar(database: String) -> wisp.Response {
 }
 
 fn save_calendar(request: wisp.Request, database: String) -> wisp.Response {
-  use wanted <- require_body(
+  let bad_body =
+    "expected a body like {\"days\": [1, 2, 3, 4, 5], \"start\": \"09:00\", \"end\": \"16:00\", \"holidays\": [{\"day\": \"2026-12-25\", \"label\": \"Christmas\"}]}"
+  use input <- require_body(
     request,
-    calendar.decoder(),
-    or: "expected a body like {\"days\": [1, 2, 3, 4, 5], \"start\": \"09:00\", \"end\": \"16:00\", \"holidays\": [{\"day\": \"2026-12-25\", \"label\": \"Christmas\"}]}",
+    wire_json.working_calendar_input_decoder(),
+    or: bad_body,
   )
+  use wanted <- or_bad_request(calendar.from_input(input), bad_body)
   case
     db.with_connection_at(database, fn(connection) {
       use _ <- result.try(calendar.save(connection, wanted))
@@ -931,16 +929,13 @@ fn save_design(
   database: String,
   linking: Option(Linking),
 ) -> wisp.Response {
-  let decoder = {
-    use wanted <- decode.then(design.decoder())
-    use emails <- decode.then(accounts.emails_decoder())
-    decode.success(#(wanted, emails))
-  }
-  use #(wanted, emails) <- require_body(
+  use input <- require_body(
     request,
-    decoder,
+    wire_json.design_input_decoder(),
     or: "expected the body of GET /api/design: {\"labels\", \"teamMembers\", \"steps\"}",
   )
+  let wanted = design.from_input(input)
+  let emails = design.emails_of(input)
   case accounts.check_emails(emails) {
     Error(reason) -> wisp.bad_request(reason)
     Ok(emails) -> save_design_and_links(database, linking, wanted, emails)
@@ -1012,9 +1007,9 @@ fn linked_names(links: List(accounts.Link)) -> List(#(String, String)) {
 }
 
 fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
-  use name <- require_body(
+  use wire.NameInput(name:) <- require_body(
     request,
-    decode.field("name", decode.string, decode.success),
+    wire_json.name_input_decoder(),
     or: "expected a body like {\"name\": \"Inès\"}",
   )
   case
@@ -1073,21 +1068,9 @@ fn demands(database: String) -> wisp.Response {
 }
 
 fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
-  let decoder = {
-    use label <- decode.field("label", decode.string)
-    use client <- decode.field("client", decode.string)
-    use due_on <- decode.field("dueOn", decode.string)
-    use pieces <- decode.field("pieces", decode.int)
-    use code <- decode.optional_field(
-      "code",
-      None,
-      decode.optional(decode.string),
-    )
-    decode.success(#(label, client, due_on, pieces, code))
-  }
-  use #(label, client, due_on, pieces, code) <- require_body(
+  use wire.DemandInput(label:, client:, due_on:, pieces:, code:) <- require_body(
     request,
-    decoder,
+    wire_json.demand_input_decoder(),
     or: "expected a body like {\"label\": \"Checkout redesign\", \"client\": \"Retail\", \"dueOn\": \"2026-12-31\", \"pieces\": 8}",
   )
   case
@@ -1106,9 +1089,9 @@ fn change_code(
   database: String,
   id: String,
 ) -> wisp.Response {
-  use code <- require_body(
+  use wire.DemandCodeInput(code:) <- require_body(
     request,
-    decode.at(["code"], decode.string),
+    wire_json.demand_code_input_decoder(),
     or: "expected a body like {\"code\": \"CHK\"}",
   )
   case
@@ -1159,18 +1142,9 @@ fn raise_andon(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  let decoder = {
-    use station <- decode.field("station", decode.string)
-    use team_member <- decode.optional_field(
-      "teamMember",
-      None,
-      decode.optional(decode.string),
-    )
-    decode.success(#(station, team_member))
-  }
-  use #(station, team_member) <- require_body(
+  use wire.AndonInput(station:, team_member:) <- require_body(
     request,
-    decoder,
+    wire_json.andon_input_decoder(),
     or: "expected a body like {\"station\": \"ws-web\"}",
   )
   case act_as(team_member) {
@@ -1189,14 +1163,9 @@ fn close_andon(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  let decoder = {
-    use station <- decode.field("station", decode.string)
-    use team_member <- decode.field("teamMember", decode.string)
-    decode.success(#(station, team_member))
-  }
-  use #(station, team_member) <- require_body(
+  use wire.AndonCloseInput(station:, team_member:) <- require_body(
     request,
-    decoder,
+    wire_json.andon_close_input_decoder(),
     or: "expected a body like {\"station\": \"ws-web\", \"teamMember\": \"pe-bob\"}",
   )
   case act_as(Some(team_member)) {
@@ -1225,18 +1194,9 @@ fn backlog(database: String) -> wisp.Response {
 }
 
 fn make_urgent(request: wisp.Request, database: String) -> wisp.Response {
-  let decoder = {
-    use piece <- decode.field("piece", decode.string)
-    use reason <- decode.optional_field(
-      "reason",
-      None,
-      decode.optional(decode.string),
-    )
-    decode.success(#(piece, reason))
-  }
-  use #(piece, reason) <- require_body(
+  use wire.UrgentInput(piece:, reason:) <- require_body(
     request,
-    decoder,
+    wire_json.urgent_input_decoder(),
     or: "expected a body like {\"piece\": \"p-billing-3\"}",
   )
   flow_response(
@@ -1251,23 +1211,9 @@ fn pull(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  let decoder = {
-    use station <- decode.field("station", decode.string)
-    use team_member <- decode.optional_field(
-      "teamMember",
-      None,
-      decode.optional(decode.string),
-    )
-    use reason <- decode.optional_field(
-      "reason",
-      None,
-      decode.optional(decode.string),
-    )
-    decode.success(#(station, team_member, reason))
-  }
-  use #(station, team_member, reason) <- require_body(
+  use wire.PullInput(station:, team_member:, reason:) <- require_body(
     request,
-    decoder,
+    wire_json.pull_input_decoder(),
     or: "expected a body like {\"station\": \"ws-web\"}",
   )
   case act_as(team_member) {
@@ -1282,19 +1228,9 @@ fn pull(
 }
 
 fn finish(request: wisp.Request, database: String) -> wisp.Response {
-  let decoder = {
-    use station <- decode.field("station", decode.string)
-    use piece <- decode.field("piece", decode.string)
-    use reason <- decode.optional_field(
-      "reason",
-      None,
-      decode.optional(decode.string),
-    )
-    decode.success(#(station, piece, reason))
-  }
-  use #(station, piece, reason) <- require_body(
+  use wire.FinishInput(station:, piece:, reason:) <- require_body(
     request,
-    decoder,
+    wire_json.finish_input_decoder(),
     or: "expected a body like {\"station\": \"ws-web\", \"piece\": \"p-checkout-8\"}",
   )
   flow_response(
@@ -1305,15 +1241,12 @@ fn finish(request: wisp.Request, database: String) -> wisp.Response {
 }
 
 fn deploy(request: wisp.Request, database: String) -> wisp.Response {
-  use #(piece, hold) <- require_body(
+  use wire.DeployInput(piece:, hold:) <- require_body(
     request,
-    {
-      use piece <- decode.field("piece", decode.string)
-      use hold <- decode.optional_field("hold", False, decode.bool)
-      decode.success(#(piece, hold))
-    },
+    wire_json.deploy_input_decoder(),
     or: "expected a body like {\"piece\": \"p-checkout-9\", \"hold\": false}",
   )
+  let hold = option.unwrap(hold, False)
   flow_response(
     db.with_connection_at(database, fn(connection) {
       flow.deploy(connection, piece, hold:)
@@ -1322,9 +1255,9 @@ fn deploy(request: wisp.Request, database: String) -> wisp.Response {
 }
 
 fn release(request: wisp.Request, database: String) -> wisp.Response {
-  use pieces <- require_body(
+  use wire.ReleaseInput(pieces:) <- require_body(
     request,
-    decode.field("pieces", decode.list(decode.string), decode.success),
+    wire_json.release_input_decoder(),
     or: "expected a body like {\"pieces\": [\"p-checkout-9\"]}",
   )
   case
@@ -1454,16 +1387,9 @@ fn conflict(code: String, message: String) -> wisp.Response {
 }
 
 fn raise_rework(request: wisp.Request, database: String) -> wisp.Response {
-  let decoder = {
-    use station <- decode.field("station", decode.string)
-    use piece <- decode.field("piece", decode.string)
-    use made_by <- decode.field("madeBy", decode.string)
-    use description <- decode.field("description", decode.string)
-    decode.success(#(station, piece, made_by, description))
-  }
-  use #(station, piece, made_by, description) <- require_body(
+  use wire.ReworkInput(station:, piece:, made_by:, description:) <- require_body(
     request,
-    decoder,
+    wire_json.rework_input_decoder(),
     or: "expected a body like {\"station\": \"ws-qa-ios\", \"piece\": \"p-offline-4-ios\", \"madeBy\": \"ws-ios\", \"description\": \"…\"}",
   )
   case
@@ -1485,9 +1411,9 @@ fn raise_rework(request: wisp.Request, database: String) -> wisp.Response {
 }
 
 fn repair_rework(request: wisp.Request, database: String) -> wisp.Response {
-  use rework <- require_body(
+  use wire.RepairInput(rework:) <- require_body(
     request,
-    decode.field("rework", decode.string, decode.success),
+    wire_json.repair_input_decoder(),
     or: "expected a body like {\"rework\": \"rw-1\"}",
   )
   case
@@ -1510,18 +1436,9 @@ fn help_the_rework(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  let decoder = {
-    use rework <- decode.field("rework", decode.string)
-    use team_member <- decode.optional_field(
-      "teamMember",
-      None,
-      decode.optional(decode.string),
-    )
-    decode.success(#(rework, team_member))
-  }
-  use #(rework, team_member) <- require_body(
+  use wire.HelpInput(rework:, team_member:) <- require_body(
     request,
-    decoder,
+    wire_json.help_input_decoder(),
     or: "expected a body like {\"rework\": \"rw-1\", \"teamMember\": \"pe-yasmine\"}",
   )
   use team_member <- acting(act_as, team_member)
@@ -1546,14 +1463,9 @@ fn stop_helping(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  use team_member <- require_body(
+  use wire.StopHelpingInput(team_member:) <- require_body(
     request,
-    decode.optional_field(
-      "teamMember",
-      None,
-      decode.optional(decode.string),
-      decode.success,
-    ),
+    wire_json.stop_helping_input_decoder(),
     or: "expected a body like {\"teamMember\": \"pe-yasmine\"}",
   )
   use team_member <- acting(act_as, team_member)
@@ -1618,21 +1530,15 @@ fn assign(
   database: String,
   act_as: ActAs,
 ) -> wisp.Response {
-  let decoder = {
-    use kind <- decode.field("kind", decode.string)
-    use id <- decode.field("id", decode.string)
-    use team_member <- decode.field("teamMember", decode.string)
-    case kind {
-      "piece" -> decode.success(#(flow.PieceAssignment, id, team_member))
-      "rework" -> decode.success(#(flow.ReworkAssignment, id, team_member))
-      _ -> decode.failure(#(flow.PieceAssignment, id, team_member), "kind")
-    }
-  }
-  use #(kind, id, team_member) <- require_body(
+  use wire.AssignInput(kind:, id:, team_member:) <- require_body(
     request,
-    decoder,
+    wire_json.assign_input_decoder(),
     or: "expected a body like {\"kind\": \"piece\", \"id\": \"p-checkout-8-web\", \"teamMember\": \"pe-lila\"}",
   )
+  let kind = case kind {
+    wire.PieceKind -> flow.PieceAssignment
+    wire.ReworkKind -> flow.ReworkAssignment
+  }
   case act_as(Some(team_member)) {
     Ok(Some(team_member)) -> reassign(database, kind, id, team_member)
     _ -> not_yours()
@@ -1665,18 +1571,13 @@ fn rename_step(
   position: String,
   database: String,
 ) -> wisp.Response {
-  let decoder = {
-    use name <- decode.field("name", decode.string)
-    case int.parse(position) {
-      Ok(position) -> decode.success(#(position, name))
-      Error(Nil) -> decode.failure(#(0, name), "position")
-    }
-  }
-  use #(position, name) <- require_body(
+  let bad_body = "expected a body like {\"name\": \"Build\"}"
+  use wire.NameInput(name:) <- require_body(
     request,
-    decoder,
-    or: "expected a body like {\"name\": \"Build\"}",
+    wire_json.name_input_decoder(),
+    or: bad_body,
   )
+  use position <- or_bad_request(int.parse(position), bad_body)
   case
     db.with_connection_at(database, fn(connection) {
       line.rename_step(connection, position, name)
@@ -1706,6 +1607,18 @@ fn require_body(
   case decode.run(body, decoder) {
     Ok(decoded) -> next(decoded)
     Error(_) -> wisp.bad_request(message)
+  }
+}
+
+/// A domain step after `require_body`: `400` with the same `message`.
+fn or_bad_request(
+  result: Result(a, Nil),
+  message: String,
+  next: fn(a) -> wisp.Response,
+) -> wisp.Response {
+  case result {
+    Ok(value) -> next(value)
+    Error(Nil) -> wisp.bad_request(message)
   }
 }
 

@@ -518,3 +518,146 @@ export type TeamMemberView = {
   assignments: Assignment[]
   priorityLists: PriorityList[]
 }
+
+/** `PUT /api/account`. */
+export type AccountInput = {
+  firstName: string
+  lastName: string
+}
+
+/** The name of a new or renamed Line, Team Member or step. */
+export type NameInput = {
+  name: string
+}
+
+/** `PUT /api/lines/<id>/sharing`. */
+export type ShareInput = {
+  shared: boolean
+}
+
+/** `label` is "" when absent. */
+export type HolidayInput = {
+  day: string
+  label?: string | null
+}
+
+/** `PUT /api/calendar`; `start` and `end` are "HH:MM"; no `holidays` is none. */
+export type WorkingCalendarInput = {
+  days: number[]
+  start: string
+  end: string
+  holidays?: HolidayInput[] | null
+}
+
+/**
+ * A Team Member with no `email`, sent by an SPA older than the links, keeps
+ * its link.
+ */
+export type DesignTeamMemberInput = {
+  id: string
+  name: string
+  email?: string | null
+}
+
+/** `id` is null for a new Work Station. */
+export type DesignStationInput = {
+  id?: string | null
+  name: string
+  branch?: string | null
+  blueBins: number
+  teamLeader: string
+  teamMembers: string[]
+}
+
+export type DesignStepInput = {
+  name: string
+  stations: DesignStationInput[]
+}
+
+/**
+ * `PUT /api/design`: the body of `GET /api/design`, without what the server
+ * computes.
+ */
+export type DesignInput = {
+  labels: Labels
+  teamMembers: DesignTeamMemberInput[]
+  steps: DesignStepInput[]
+}
+
+/** `POST /api/demands`. */
+export type DemandInput = {
+  label: string
+  client: string
+  dueOn: string
+  pieces: number
+  code?: string | null
+}
+
+/** `PUT /api/demands/<id>/code`. */
+export type DemandCodeInput = {
+  code: string
+}
+
+export type UrgentInput = {
+  piece: string
+  reason?: string | null
+}
+
+/** `reason` confirms a pull that breaks a rule. */
+export type PullInput = {
+  station: string
+  teamMember?: string | null
+  reason?: string | null
+}
+
+export type FinishInput = {
+  station: string
+  piece: string
+  reason?: string | null
+}
+
+/** `hold` is false when absent. */
+export type DeployInput = {
+  piece: string
+  hold?: boolean | null
+}
+
+export type ReleaseInput = {
+  pieces: string[]
+}
+
+export type ReworkInput = {
+  station: string
+  piece: string
+  madeBy: string
+  description: string
+}
+
+export type RepairInput = {
+  rework: string
+}
+
+export type HelpInput = {
+  rework: string
+  teamMember?: string | null
+}
+
+export type StopHelpingInput = {
+  teamMember?: string | null
+}
+
+export type AndonInput = {
+  station: string
+  teamMember?: string | null
+}
+
+export type AndonCloseInput = {
+  station: string
+  teamMember: string
+}
+
+export type AssignInput = {
+  kind: AssignmentKind
+  id: string
+  teamMember: string
+}

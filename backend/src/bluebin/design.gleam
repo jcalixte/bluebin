@@ -1150,48 +1150,39 @@ fn wire_suggestion(suggestion: measures.Suggestion) -> wire.BlueBinSuggestion {
   )
 }
 
-pub fn decoder() -> decode.Decoder(Design) {
-  let labels = {
-    use demand <- decode.field("demand", decode.string)
-    use demands <- decode.field("demands", decode.string)
-    use piece <- decode.field("piece", decode.string)
-    use pieces <- decode.field("pieces", decode.string)
-    decode.success(Labels(demand:, demands:, piece:, pieces:))
-  }
-  let team_member = {
-    use id <- decode.field("id", decode.string)
-    use name <- decode.field("name", decode.string)
-    decode.success(TeamMember(id:, name:))
-  }
-  let station = {
-    use id <- decode.optional_field("id", None, decode.optional(decode.string))
-    use name <- decode.field("name", decode.string)
-    use branch <- decode.optional_field(
-      "branch",
-      None,
-      decode.optional(decode.string),
-    )
-    use blue_bins <- decode.field("blueBins", decode.int)
-    use team_leader <- decode.field("teamLeader", decode.string)
-    use team_members <- decode.field("teamMembers", decode.list(decode.string))
-    decode.success(Station(
-      id:,
-      name:,
-      branch:,
-      blue_bins:,
-      team_leader:,
-      team_members:,
-    ))
-  }
-  let step = {
-    use name <- decode.field("name", decode.string)
-    use stations <- decode.field("stations", decode.list(station))
-    decode.success(Step(name:, stations:))
-  }
-  use labels <- decode.field("labels", labels)
-  use team_members <- decode.field("teamMembers", decode.list(team_member))
-  use steps <- decode.field("steps", decode.list(step))
-  decode.success(Design(labels:, team_members:, steps:))
+/// The Design of a `PUT /api/design` body.
+pub fn from_input(input: wire.DesignInput) -> Design {
+  let wire.Labels(demand:, demands:, piece:, pieces:) = input.labels
+  Design(
+    labels: Labels(demand:, demands:, piece:, pieces:),
+    team_members: list.map(input.team_members, fn(team_member) {
+      TeamMember(id: team_member.id, name: team_member.name)
+    }),
+    steps: list.map(input.steps, fn(step) {
+      Step(
+        name: step.name,
+        stations: list.map(step.stations, fn(station) {
+          Station(
+            id: station.id,
+            name: station.name,
+            branch: station.branch,
+            blue_bins: station.blue_bins,
+            team_leader: station.team_leader,
+            team_members: station.team_members,
+          )
+        }),
+      )
+    }),
+  )
+}
+
+/// The email of each Team Member in a Design body; one with no `email`, sent
+/// by an SPA older than the links, keeps its link.
+pub fn emails_of(input: wire.DesignInput) -> List(#(String, String)) {
+  list.filter_map(input.team_members, fn(team_member) {
+    option.to_result(team_member.email, Nil)
+    |> result.map(fn(email) { #(team_member.id, email) })
+  })
 }
 
 fn placed(steps: List(Step)) -> List(#(Int, Station)) {

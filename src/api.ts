@@ -1,5 +1,19 @@
 import { simulatedFetch, simulation } from "./simulation/state"
 import type { FlowConfirm } from "./types"
+import type {
+  AndonCloseInput,
+  AndonInput,
+  AssignInput,
+  DeployInput,
+  FinishInput,
+  HelpInput,
+  PullInput,
+  ReleaseInput,
+  RepairInput,
+  ReworkInput,
+  StopHelpingInput,
+  UrgentInput,
+} from "./wire"
 
 /** The Line every account has; see `bluebin/lines` in the backend. */
 export const firstLine = "main"
@@ -87,9 +101,25 @@ export function lineFetch(path: string, init?: RequestInit): Promise<Response> {
   return simulation ? simulatedFetch(path, init) : fetch(api(path), init)
 }
 
-export async function postAction(
-  path: string,
-  body: Record<string, unknown>,
+/** The body of each flow action, as the server decodes it. */
+export type ActionBodies = {
+  "/api/pull": PullInput
+  "/api/finish": FinishInput
+  "/api/deploy": DeployInput
+  "/api/release": ReleaseInput
+  "/api/rework": ReworkInput
+  "/api/rework/repair": RepairInput
+  "/api/help": HelpInput
+  "/api/help/stop": StopHelpingInput
+  "/api/andon": AndonInput
+  "/api/andon/close": AndonCloseInput
+  "/api/assign": AssignInput
+  "/api/backlog/urgent": UrgentInput
+}
+
+export async function postAction<P extends keyof ActionBodies>(
+  path: P,
+  body: ActionBodies[P],
 ): Promise<FlowConfirm | null> {
   const response = await lineFetch(path, {
     method: "POST",

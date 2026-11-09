@@ -8,13 +8,15 @@ import type {
   DesignStationInput,
   Labels,
 } from "../types"
+import type { NameInput } from "../wire"
 import { useLabels } from "./useLabels"
 import { useLiveUpdates } from "./useLiveUpdates"
 
 /** Must match max_name_length in backend/src/bluebin/line.gleam. */
 export const maxNameLength = 40
 
-export type DraftStation = DesignStationInput & {
+/** A draft holds every field, `id` and `branch` included. */
+export type DraftStation = Required<DesignStationInput> & {
   key: string
   locked: boolean
   minBlueBins: number
@@ -38,7 +40,7 @@ export type DesignDraft = {
 type DesignShape = {
   labels: Labels
   teamMembers: DesignTeamMember[]
-  steps: { name: string; stations: DesignStationInput[] }[]
+  steps: { name: string; stations: Required<DesignStationInput>[] }[]
 }
 
 let nextKey = 0
@@ -267,7 +269,7 @@ export function useDesign() {
       const response = await lineFetch("/api/team-members", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name } satisfies NameInput),
       })
       if (!response.ok) {
         throw new Error((await response.text()) || `API answered ${response.status}`)

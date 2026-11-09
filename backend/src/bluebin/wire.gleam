@@ -1,6 +1,7 @@
-//// The JSON shapes the API sends, one custom type per shape. `gleam dev`
-//// reads this file and writes the encoders (`bluebin/wire_json.gleam`) and
-//// the TypeScript types (`src/wire.ts`), so the two sides cannot drift.
+//// The JSON shapes the API sends and reads, one custom type per shape.
+//// `gleam dev` reads this file and writes the encoders and decoders
+//// (`bluebin/wire_json.gleam`) and the TypeScript types (`src/wire.ts`), so
+//// the two sides cannot drift.
 ////
 //// - A type with one variant and labelled fields is a JSON object. Field
 ////   types: `String`, `Int`, `Float`, `Bool`, `Option(t)`, `List(t)` and the
@@ -13,6 +14,10 @@
 //// A kind drops the last word of its type name from the end of the variant
 //// name, so two types can share a kind: `ReworkItem` of `PriorityItem` is
 //// `"rework"`. The `///` comment of a type or a field becomes its JSDoc.
+////
+//// A type whose name ends in `Input` is a request body: it gets a decoder
+//// (`pull_input_decoder()`) and no encoder, and each type it reaches gets a
+//// decoder too. An `Option` field of a request body may be absent or null.
 
 import gleam/option.{type Option}
 
@@ -531,4 +536,143 @@ pub type TeamMemberView {
     assignments: List(Assignment),
     priority_lists: List(PriorityList),
   )
+}
+
+// Request bodies ---------------------------------------------------------------
+
+/// `PUT /api/account`.
+pub type AccountInput {
+  AccountInput(first_name: String, last_name: String)
+}
+
+/// The name of a new or renamed Line, Team Member or step.
+pub type NameInput {
+  NameInput(name: String)
+}
+
+/// `PUT /api/lines/<id>/sharing`.
+pub type ShareInput {
+  ShareInput(shared: Bool)
+}
+
+/// `label` is "" when absent.
+pub type HolidayInput {
+  HolidayInput(day: String, label: Option(String))
+}
+
+/// `PUT /api/calendar`; `start` and `end` are "HH:MM"; no `holidays` is none.
+pub type WorkingCalendarInput {
+  WorkingCalendarInput(
+    days: List(Int),
+    start: String,
+    end: String,
+    holidays: Option(List(HolidayInput)),
+  )
+}
+
+/// A Team Member with no `email`, sent by an SPA older than the links, keeps
+/// its link.
+pub type DesignTeamMemberInput {
+  DesignTeamMemberInput(id: String, name: String, email: Option(String))
+}
+
+/// `id` is null for a new Work Station.
+pub type DesignStationInput {
+  DesignStationInput(
+    id: Option(String),
+    name: String,
+    branch: Option(String),
+    blue_bins: Int,
+    team_leader: String,
+    team_members: List(String),
+  )
+}
+
+pub type DesignStepInput {
+  DesignStepInput(name: String, stations: List(DesignStationInput))
+}
+
+/// `PUT /api/design`: the body of `GET /api/design`, without what the server
+/// computes.
+pub type DesignInput {
+  DesignInput(
+    labels: Labels,
+    team_members: List(DesignTeamMemberInput),
+    steps: List(DesignStepInput),
+  )
+}
+
+/// `POST /api/demands`.
+pub type DemandInput {
+  DemandInput(
+    label: String,
+    client: String,
+    due_on: String,
+    pieces: Int,
+    code: Option(String),
+  )
+}
+
+/// `PUT /api/demands/<id>/code`.
+pub type DemandCodeInput {
+  DemandCodeInput(code: String)
+}
+
+pub type UrgentInput {
+  UrgentInput(piece: String, reason: Option(String))
+}
+
+/// `reason` confirms a pull that breaks a rule.
+pub type PullInput {
+  PullInput(
+    station: String,
+    team_member: Option(String),
+    reason: Option(String),
+  )
+}
+
+pub type FinishInput {
+  FinishInput(station: String, piece: String, reason: Option(String))
+}
+
+/// `hold` is false when absent.
+pub type DeployInput {
+  DeployInput(piece: String, hold: Option(Bool))
+}
+
+pub type ReleaseInput {
+  ReleaseInput(pieces: List(String))
+}
+
+pub type ReworkInput {
+  ReworkInput(
+    station: String,
+    piece: String,
+    made_by: String,
+    description: String,
+  )
+}
+
+pub type RepairInput {
+  RepairInput(rework: String)
+}
+
+pub type HelpInput {
+  HelpInput(rework: String, team_member: Option(String))
+}
+
+pub type StopHelpingInput {
+  StopHelpingInput(team_member: Option(String))
+}
+
+pub type AndonInput {
+  AndonInput(station: String, team_member: Option(String))
+}
+
+pub type AndonCloseInput {
+  AndonCloseInput(station: String, team_member: String)
+}
+
+pub type AssignInput {
+  AssignInput(kind: AssignmentKind, id: String, team_member: String)
 }

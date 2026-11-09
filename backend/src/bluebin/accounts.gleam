@@ -355,27 +355,6 @@ fn first_duplicate(emails: List(String)) -> Option(String) {
   }
 }
 
-/// The email of each Team Member in a Design body; one with no `email`
-/// field, sent by an SPA older than the links, keeps its link.
-pub fn emails_decoder() -> decode.Decoder(List(#(String, String))) {
-  use team_members <- decode.field(
-    "teamMembers",
-    decode.list({
-      use id <- decode.field("id", decode.string)
-      use email <- decode.optional_field(
-        "email",
-        None,
-        decode.map(decode.string, Some),
-      )
-      decode.success(#(id, email))
-    }),
-  )
-  list.filter_map(team_members, fn(pair) {
-    option.to_result(pair.1, Nil) |> result.map(fn(email) { #(pair.0, email) })
-  })
-  |> decode.success
-}
-
 /// Each (Team Member, email) pair with its email made normal, or the reason
 /// to show the owner: an email that is none, or one given twice.
 pub fn check_emails(

@@ -1,5 +1,5 @@
 import { onMounted, ref, watch, type Ref } from "vue"
-import { lineFetch, postAction } from "../api"
+import { lineFetch, postAction, type ActionBodies } from "../api"
 import type { FlowConfirm, TeamMember, TeamMemberView } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
@@ -35,7 +35,10 @@ export function useNextThing(teamMemberId: Ref<string>) {
     (value) => (view.value = value),
   )
 
-  async function act(path: string, body: Record<string, unknown>): Promise<FlowConfirm | null> {
+  async function act<P extends keyof ActionBodies>(
+    path: P,
+    body: ActionBodies[P],
+  ): Promise<FlowConfirm | null> {
     const confirm = await postAction(path, body)
     if (!confirm) {
       await load()

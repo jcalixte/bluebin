@@ -1,6 +1,7 @@
 import { onMounted, ref } from "vue"
-import { lineFetch, postAction } from "../api"
+import { lineFetch, postAction, type ActionBodies } from "../api"
 import type { FlowConfirm, Line } from "../types"
+import type { NameInput } from "../wire"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
 
@@ -18,7 +19,10 @@ export function useLine() {
     (value) => (line.value = value),
   )
 
-  async function act(path: string, body: Record<string, unknown>): Promise<FlowConfirm | null> {
+  async function act<P extends keyof ActionBodies>(
+    path: P,
+    body: ActionBodies[P],
+  ): Promise<FlowConfirm | null> {
     const confirm = await postAction(path, body)
     if (!confirm) {
       await load()
@@ -60,7 +64,7 @@ export function useLine() {
     const response = await lineFetch(`/api/steps/${position}`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name } satisfies NameInput),
     })
     if (!response.ok) {
       throw new Error((await response.text()) || `API answered ${response.status}`)

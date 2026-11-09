@@ -4,6 +4,7 @@ import { firstLine, lineApi, lineId, lookOnly, pageUrl, rememberLine, workspaceO
 import { useAccount } from "../composables/useAccount"
 import { useWorkspaces } from "../composables/useWorkspaces"
 import type { LineEntry, Workspace } from "../types"
+import type { NameInput, ShareInput } from "../wire"
 import AppModal from "./AppModal.vue"
 import ErrorToast from "./ErrorToast.vue"
 import { simulationUrl } from "../simulation/state"
@@ -99,7 +100,7 @@ async function share(path: string, shared: boolean): Promise<boolean> {
     await fetch(`${path}/sharing`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ shared }),
+      body: JSON.stringify({ shared } satisfies ShareInput),
     }),
   )) as { shared: boolean }
   return answer.shared
@@ -115,7 +116,7 @@ async function saveName() {
     const response = await fetch(creating ? "/api/lines" : lineApi, {
       method: creating ? "POST" : "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: wanted }),
+      body: JSON.stringify({ name: wanted } satisfies NameInput),
     })
     const saved = (await answerOf(response)) as { id: string; name: string }
     if (creating) {

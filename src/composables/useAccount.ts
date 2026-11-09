@@ -2,6 +2,7 @@ import { ref } from "vue"
 import { lookOnly } from "../api"
 import { simulation } from "../simulation/state"
 import type { Account } from "../types"
+import type { AccountInput } from "../wire"
 
 const account = ref<Account | null>(null)
 const checked = ref(false)
@@ -35,7 +36,7 @@ export function useAccount() {
     const response = await fetch("/api/account", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ firstName, lastName }),
+      body: JSON.stringify({ firstName, lastName } satisfies AccountInput),
     })
     if (!response.ok) {
       throw new Error((await response.text()) || `API answered ${response.status}`)

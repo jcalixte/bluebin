@@ -1,5 +1,5 @@
 // Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
-import type { Duration, Labels, ReorderEffect } from "./wire"
+import type { Duration, ReorderEffect } from "./wire"
 
 export type {
   Andon,
@@ -12,7 +12,9 @@ export type {
   Demand,
   DemandMeasures,
   Design,
+  DesignInput,
   DesignStation,
+  DesignStationInput,
   DesignStep,
   DesignTeamMember,
   Deviation,
@@ -62,22 +64,6 @@ export type FlowConfirm = {
 }
 
 export type TimeView = keyof Duration
-
-/** `id` is null for a new Work Station. */
-export type DesignStationInput = {
-  id: string | null
-  name: string
-  branch: string | null
-  blueBins: number
-  teamLeader: string
-  teamMembers: string[]
-}
-
-export type DesignInput = {
-  labels: Labels
-  teamMembers: { id: string; name: string; email: string }[]
-  steps: { name: string; stations: DesignStationInput[] }[]
-}
 
 /** `GET /api/account`. Nobody is signed in while SSO is off. */
 export type Account =

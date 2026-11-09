@@ -3,6 +3,7 @@ import { computed, ref } from "vue"
 import { lineFetch } from "../api"
 import { codePattern, proposeCode } from "../demandCode"
 import { useLabels } from "../composables/useLabels"
+import type { DemandInput } from "../wire"
 import AppModal from "./AppModal.vue"
 
 const emit = defineEmits<{ created: []; close: [] }>()
@@ -62,7 +63,7 @@ async function create() {
         dueOn: dueOn.value,
         pieces: pieces.value,
         code: code.value,
-      }),
+      } satisfies DemandInput),
     })
     if (!response.ok) {
       throw new Error((await response.text()) || `API answered ${response.status}`)
