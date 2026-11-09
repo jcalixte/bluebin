@@ -105,7 +105,13 @@ const pieces = computed(() =>
     </div>
 
     <div v-else class="grid gap-3">
-      <DemandRow v-for="demand in sorted" :key="demand.id" :demand="demand" />
+      <DemandRow
+        v-for="demand in sorted"
+        :key="demand.id"
+        :demand="demand"
+        :can-change-code="canAct"
+        @changed="load"
+      />
     </div>
 
     <NewDemandDialog v-if="creating" @created="created" @close="creating = false" />

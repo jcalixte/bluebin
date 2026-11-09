@@ -296,9 +296,7 @@ fn check_code(
   code: String,
   id: String,
 ) -> Result(String, CreateError) {
-  use code <- result.try(
-    demand_code.check(code) |> result.map_error(Invalid),
-  )
+  use code <- result.try(demand_code.check(code) |> result.map_error(Invalid))
   use owners <- result.try(query(
     connection,
     "select label from demand

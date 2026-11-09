@@ -83,7 +83,14 @@ pub fn a_new_demand_is_checked_before_anything_is_written_test() {
 pub fn a_new_demand_puts_its_pieces_in_the_backlog_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "  Search  ", "Retail", today(connection), 3, None)
+    demand.create(
+      connection,
+      "  Search  ",
+      "Retail",
+      today(connection),
+      3,
+      None,
+    )
   assert text(connection, "select label || '/' || state || '/' || started_on
       from demand where id = '" <> id <> "'") == "Search/active/"
     <> today(connection)
@@ -126,7 +133,10 @@ pub fn a_demand_code_has_two_to_four_letters_test() {
   let assert Error(_) = demand_code.check("C-K")
 }
 
-fn references_of(connection: sqlight.Connection, demand: String) -> List(String) {
+fn references_of(
+  connection: sqlight.Connection,
+  demand: String,
+) -> List(String) {
   let assert Ok(references) =
     sqlight.query(
       "select reference from piece where demand_id = ?1 order by rowid",
@@ -171,7 +181,10 @@ pub fn no_two_active_demands_have_the_same_code_test() {
   let assert Ok(id) =
     demand.create(connection, "Checkout", "Retail", today(connection), 1, None)
   assert references_of(connection, id) == ["CHE-1"]
-  exec(connection, "update demand set state = 'delivered' where id = 'd-checkout'")
+  exec(
+    connection,
+    "update demand set state = 'delivered' where id = 'd-checkout'",
+  )
   let assert Ok(Nil) = demand.change_code(connection, "d-offline", "CHK")
 }
 

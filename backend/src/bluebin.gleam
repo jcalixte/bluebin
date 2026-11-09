@@ -646,14 +646,7 @@ fn list_workspaces(
   caller: String,
 ) -> wisp.Response {
   let email = signed_in_email(identity_of(request, context, caller))
-  case
-    access.workspaces(
-      context.accounts,
-      caller,
-      email,
-      start_of(context),
-    )
-  {
+  case access.workspaces(context.accounts, caller, email, start_of(context)) {
     Ok(workspaces) -> send_json(json.array(workspaces, workspace_json), 200)
     Error(Nil) -> wisp.internal_server_error()
   }

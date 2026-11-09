@@ -1652,12 +1652,24 @@ pub fn a_version_3_database_gets_demand_codes_test() {
   assert code_of("d-billing") == "BE"
   // Only the active Demands need different codes.
   assert code_of("d-old") == "OC"
-  assert count(connection, "select count(*) from piece
-      where id = 'p-checkout-9' and reference = 'CR-9'") == 1
-  assert count(connection, "select count(*) from piece
-      where id = 'p-offline-4-ios' and reference = 'OM-4 · iOS'") == 1
-  assert count(connection, "select count(*) from piece
-      where reference like 'US-%'") == 0
+  assert count(
+      connection,
+      "select count(*) from piece
+      where id = 'p-checkout-9' and reference = 'CR-9'",
+    )
+    == 1
+  assert count(
+      connection,
+      "select count(*) from piece
+      where id = 'p-offline-4-ios' and reference = 'OM-4 · iOS'",
+    )
+    == 1
+  assert count(
+      connection,
+      "select count(*) from piece
+      where reference like 'US-%'",
+    )
+    == 0
 }
 
 pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {

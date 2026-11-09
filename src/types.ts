@@ -1,5 +1,7 @@
 export type Demand = {
   id: string
+  /** The Demand Code, `CHK`: it starts the Piece Reference of each of its Pieces. */
+  code: string
   label: string
   client: string
   dueOn: string

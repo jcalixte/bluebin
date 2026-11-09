@@ -574,19 +574,23 @@ fn migrate(
 
 /// Gives each Demand the code Bluebin proposes from its label, unique among
 /// the active Demands, then writes every Piece Reference again.
-fn backfill_codes(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
-  use demands <- result.try(sqlight.query(
-    "select id, label, state = 'active' from demand
+fn backfill_codes(
+  connection: sqlight.Connection,
+) -> Result(Nil, sqlight.Error) {
+  use demands <- result.try(
+    sqlight.query(
+      "select id, label, state = 'active' from demand
       order by state = 'active' desc, rowid",
-    on: connection,
-    with: [],
-    expecting: {
-      use id <- decode.field(0, decode.string)
-      use label <- decode.field(1, decode.string)
-      use active <- decode.field(2, sqlight.decode_bool())
-      decode.success(#(id, label, active))
-    },
-  ))
+      on: connection,
+      with: [],
+      expecting: {
+        use id <- decode.field(0, decode.string)
+        use label <- decode.field(1, decode.string)
+        use active <- decode.field(2, sqlight.decode_bool())
+        decode.success(#(id, label, active))
+      },
+    ),
+  )
   use _ <- result.try(
     list.try_fold(demands, [], fn(taken, demand) {
       let #(id, label, active) = demand

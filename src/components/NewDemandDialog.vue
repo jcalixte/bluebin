@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import { lineFetch } from "../api"
+import { codePattern, proposeCode } from "../demandCode"
 import { useLabels } from "../composables/useLabels"
 import AppModal from "./AppModal.vue"
 
@@ -25,6 +26,14 @@ const label = ref("")
 const client = ref("")
 const dueOn = ref("")
 const pieces = ref(1)
+/** Follows the name until the Team Member types a code of their own. */
+const typedCode = ref<string | null>(null)
+const code = computed({
+  get: () => typedCode.value ?? proposeCode(label.value),
+  set: (value: string) => {
+    typedCode.value = value.toUpperCase()
+  },
+})
 const saving = ref(false)
 const problem = ref<string | null>(null)
 
@@ -32,6 +41,7 @@ const ready = computed(
   () =>
     label.value.trim() !== "" &&
     client.value.trim() !== "" &&
+    codePattern.test(code.value) &&
     dueOn.value >= minDueOn &&
     Number.isInteger(pieces.value) &&
     pieces.value >= 1 &&
@@ -51,6 +61,7 @@ async function create() {
         client: client.value.trim(),
         dueOn: dueOn.value,
         pieces: pieces.value,
+        code: code.value,
       }),
     })
     if (!response.ok) {
@@ -82,6 +93,22 @@ async function create() {
           placeholder="Offline mode"
           required
         />
+      </label>
+      <label class="flex flex-col gap-1 text-sm">
+        <span class="font-medium">Code</span>
+        <input
+          v-model="code"
+          class="input w-full font-mono uppercase"
+          maxlength="4"
+          pattern="[A-Za-z]{2,4}"
+          autocomplete="off"
+          aria-describedby="demand-code-hint"
+          required
+        />
+        <span id="demand-code-hint" class="text-xs opacity-70">
+          2 to 4 letters. It names each {{ labels.piece }}: {{ code || "CHK" }}-1,
+          {{ code || "CHK" }}-2…
+        </span>
       </label>
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium">Client</span>

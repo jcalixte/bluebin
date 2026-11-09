@@ -1,11 +1,51 @@
 <script setup lang="ts">
-import { computed } from "vue"
+import { computed, ref } from "vue"
+import { lineFetch } from "../api"
 import { useLabels } from "../composables/useLabels"
+import { codePattern } from "../demandCode"
 import type { Demand } from "../types"
 
-const props = defineProps<{ demand: Demand }>()
+const props = defineProps<{ demand: Demand; canChangeCode: boolean }>()
+const emit = defineEmits<{ changed: [] }>()
 
 const { labels } = useLabels()
+
+/** The code being typed, or null when the Demand Code is not being changed. */
+const newCode = ref<string | null>(null)
+const savingCode = ref(false)
+const codeProblem = ref<string | null>(null)
+
+function startChangingCode() {
+  newCode.value = props.demand.code
+  codeProblem.value = null
+}
+
+async function changeCode() {
+  const code = newCode.value?.trim().toUpperCase() ?? ""
+  if (!codePattern.test(code) || savingCode.value) return
+  if (code === props.demand.code) {
+    newCode.value = null
+    return
+  }
+  savingCode.value = true
+  codeProblem.value = null
+  try {
+    const response = await lineFetch(`/api/demands/${encodeURIComponent(props.demand.id)}/code`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code }),
+    })
+    if (!response.ok) {
+      throw new Error((await response.text()) || `API answered ${response.status}`)
+    }
+    newCode.value = null
+    emit("changed")
+  } catch (cause) {
+    codeProblem.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    savingCode.value = false
+  }
+}
 
 /** Past this count, one tick per Piece is too dense to read. */
 const maxTicks = 60
@@ -89,7 +129,52 @@ const barLabel = computed(
       class="card-body grid gap-x-8 gap-y-4 p-4 sm:p-5 lg:grid-cols-[minmax(12rem,18rem)_1fr_9rem] lg:items-center"
     >
       <header class="min-w-0">
-        <h3 class="text-base font-semibold leading-tight">{{ demand.label }}</h3>
+        <h3 class="flex items-baseline gap-2 text-base font-semibold leading-tight">
+          <button
+            v-if="canChangeCode && newCode === null"
+            type="button"
+            class="badge badge-outline shrink-0 cursor-pointer font-mono hover:bg-base-200"
+            :title="`Change the code of ${demand.label}: it names each of its ${labels.pieces}`"
+            :aria-label="`Code ${demand.code}. Change it`"
+            @click="startChangingCode"
+          >
+            {{ demand.code }}
+          </button>
+          <span
+            v-else-if="newCode === null"
+            class="badge badge-outline shrink-0 font-mono"
+            :title="`The code of ${demand.label}: it names each of its ${labels.pieces}`"
+          >
+            {{ demand.code }}
+          </span>
+          <span class="min-w-0">{{ demand.label }}</span>
+        </h3>
+        <form
+          v-if="newCode !== null"
+          class="mt-2 flex flex-wrap items-center gap-2"
+          @submit.prevent="changeCode"
+          @keydown.esc="newCode = null"
+        >
+          <input
+            v-model="newCode"
+            class="input input-sm w-20 font-mono uppercase"
+            maxlength="4"
+            pattern="[A-Za-z]{2,4}"
+            autocomplete="off"
+            :aria-label="`New code of ${demand.label}`"
+            required
+            autofocus
+          />
+          <button type="submit" class="btn btn-primary btn-sm" :disabled="savingCode">Save</button>
+          <button type="button" class="btn btn-ghost btn-sm" @click="newCode = null">Cancel</button>
+          <p class="w-full text-xs opacity-70">
+            Each {{ labels.piece }} takes the new code: {{ newCode.toUpperCase() || "CHK" }}-1,
+            {{ newCode.toUpperCase() || "CHK" }}-2…
+          </p>
+          <p v-if="codeProblem" role="alert" class="w-full text-sm text-error">
+            {{ codeProblem }}
+          </p>
+        </form>
         <p class="mt-1 text-sm opacity-70">
           {{ demand.client }} · due <time :datetime="demand.dueOn">{{ dueLabel }}</time>
         </p>

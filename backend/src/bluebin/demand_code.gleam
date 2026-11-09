@@ -54,7 +54,8 @@ pub fn check(code: String) -> Result(String, String) {
 /// Writes the Piece Reference of each Piece from the code of its Demand and
 /// its number: "CHK-3", and "CHK-3 · iOS" for a Sub-Piece. Add a `where` to
 /// limit it to one Demand.
-pub const write_references_sql = "
+pub const write_references_sql =
+  "
 update piece
    set reference = (select d.code from demand d where d.id = piece.demand_id)
                    || '-' || number || coalesce(' · ' || branch, '')"
