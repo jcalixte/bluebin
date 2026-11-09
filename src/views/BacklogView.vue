@@ -3,14 +3,17 @@ import { computed, ref } from "vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import HeijunkaBox from "../components/HeijunkaBox.vue"
+import InTheLineCard from "../components/InTheLineCard.vue"
 import { useBacklog } from "../composables/useBacklog"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLabels } from "../composables/useLabels"
+import { useLine } from "../composables/useLine"
 import { useWorkspaces } from "../composables/useWorkspaces"
 
 const { backlog, error, loading, makeUrgent } = useBacklog()
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 const { labels } = useLabels()
+const { line } = useLine()
 const { canAct } = useWorkspaces()
 
 /** The Piece under the pointer, shared by the Heijunka box and the list. */
@@ -194,6 +197,8 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
           </div>
         </div>
       </div>
+
+      <InTheLineCard v-if="line" :line="line" />
     </div>
 
     <DeviationDialog
