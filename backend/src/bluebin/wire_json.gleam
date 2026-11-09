@@ -282,3 +282,186 @@ pub fn design(value: wire.Design) -> json.Json {
     #("steps", json.array(value.steps, design_step)),
   ])
 }
+
+pub fn blue_bin(value: wire.BlueBin) -> json.Json {
+  json.object([
+    #("slot", json.int(value.slot)),
+    #("id", json.nullable(value.id, json.string)),
+    #("piece", json.nullable(value.piece, json.string)),
+    #("demand", json.nullable(value.demand, json.string)),
+    #("pulledBy", json.nullable(value.pulled_by, json.string)),
+  ])
+}
+
+pub fn overflow(value: wire.Overflow) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("piece", json.string(value.piece)),
+    #("demand", json.string(value.demand)),
+  ])
+}
+
+pub fn deviation(value: wire.Deviation) -> json.Json {
+  json.object([
+    #("rule", json.string(value.rule)),
+    #("piece", json.nullable(value.piece, json.string)),
+    #("reason", json.string(value.reason)),
+    #("at", json.string(value.at)),
+  ])
+}
+
+pub fn member(value: wire.Member) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("busy", json.bool(value.busy)),
+  ])
+}
+
+pub fn team_member_name(value: wire.TeamMemberName) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+  ])
+}
+
+pub fn in_progress_piece(value: wire.InProgressPiece) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("piece", json.string(value.piece)),
+    #("demand", json.string(value.demand)),
+    #("teamMember", json.nullable(value.team_member, json.string)),
+    #("teamMemberId", json.nullable(value.team_member_id, json.string)),
+    #("paused", json.bool(value.paused)),
+    #("underRework", json.bool(value.under_rework)),
+    #("helpers", json.array(value.helpers, team_member_name)),
+  ])
+}
+
+pub fn rework(value: wire.Rework) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("piece", json.string(value.piece)),
+    #("description", json.string(value.description)),
+    #("foundBy", json.string(value.found_by)),
+    #("foundById", json.nullable(value.found_by_id, json.string)),
+    #("assignee", json.nullable(value.assignee, json.string)),
+    #("assigneeId", json.nullable(value.assignee_id, json.string)),
+    #("helpers", json.array(value.helpers, team_member_name)),
+    #("canHelp", json.array(value.can_help, team_member_name)),
+  ])
+}
+
+pub fn work_station(value: wire.WorkStation) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("position", json.int(value.position)),
+    #("branch", json.nullable(value.branch, json.string)),
+    #("blueBinCount", json.int(value.blue_bin_count)),
+    #("teamLeader", json.nullable(value.team_leader, json.string)),
+    #("blueBins", json.array(value.blue_bins, blue_bin)),
+    #("overflow", json.array(value.overflow, overflow)),
+    #("teamMembers", json.array(value.team_members, member)),
+    #("inProgress", json.array(value.in_progress, in_progress_piece)),
+    #("rework", json.array(value.rework, rework)),
+    #("firstPassYield", json.nullable(value.first_pass_yield, json.float)),
+    #("reworkHours", json.float(value.rework_hours)),
+    #("deviations", json.array(value.deviations, deviation)),
+    #("kanbans", json.int(value.kanbans)),
+  ])
+}
+
+pub fn rule_confirm(value: wire.RuleConfirm) -> json.Json {
+  json.object([
+    #("confirm", json.string(value.confirm)),
+    #("rules", json.array(value.rules, json.string)),
+    #("message", json.string(value.message)),
+  ])
+}
+
+pub fn reorder_confirm(value: wire.ReorderConfirm) -> json.Json {
+  json.object([
+    #("confirm", json.string(value.confirm)),
+    #("message", json.string(value.message)),
+    #("effects", json.array(value.effects, reorder_effect)),
+  ])
+}
+
+pub fn step(value: wire.Step) -> json.Json {
+  json.object([
+    #("position", json.int(value.position)),
+    #("name", json.string(value.name)),
+  ])
+}
+
+pub fn andon(value: wire.Andon) -> json.Json {
+  case value {
+    wire.StopAndon(..) as variant ->
+      json.object([
+        #("kind", json.string("stop")),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+        #("raisedBy", json.nullable(variant.raised_by, json.string)),
+        #("raisedAt", json.string(variant.raised_at)),
+        #("teamLeaderId", json.nullable(variant.team_leader_id, json.string)),
+        #("teamLeader", json.nullable(variant.team_leader, json.string)),
+      ])
+    wire.ReworkWaitsAndon(..) as variant ->
+      json.object([
+        #("kind", json.string("rework_waits")),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+        #("rework", json.string(variant.rework)),
+        #("piece", json.string(variant.piece)),
+        #("waitingHours", json.float(variant.waiting_hours)),
+      ])
+  }
+}
+
+pub fn assignment_kind(value: wire.AssignmentKind) -> json.Json {
+  json.string(case value {
+    wire.PieceKind -> "piece"
+    wire.ReworkKind -> "rework"
+  })
+}
+
+pub fn stale_assignment(value: wire.StaleAssignment) -> json.Json {
+  json.object([
+    #("kind", assignment_kind(value.kind)),
+    #("id", json.string(value.id)),
+  ])
+}
+
+pub fn bottleneck(value: wire.Bottleneck) -> json.Json {
+  json.object([
+    #("station", json.string(value.station)),
+    #("capacityHours", json.nullable(value.capacity_hours, json.float)),
+    #("slower", json.bool(value.slower)),
+    #("fullInFront", json.bool(value.full_in_front)),
+  ])
+}
+
+pub fn held_for_release(value: wire.HeldForRelease) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("piece", json.string(value.piece)),
+    #("demand", json.string(value.demand)),
+    #("demandLabel", json.string(value.demand_label)),
+    #("waitingHours", json.float(value.waiting_hours)),
+  ])
+}
+
+pub fn line(value: wire.Line) -> json.Json {
+  json.object([
+    #("stations", json.array(value.stations, work_station)),
+    #("steps", json.array(value.steps, step)),
+    #("taktTimeHours", json.float(value.takt_time_hours)),
+    #("demandsBehind", json.int(value.demands_behind)),
+    #("andons", json.array(value.andons, andon)),
+    #("stale", json.array(value.stale, stale_assignment)),
+    #("activeAssignments", json.int(value.active_assignments)),
+    #("bottlenecks", json.array(value.bottlenecks, bottleneck)),
+    #("heldForRelease", json.array(value.held_for_release, held_for_release)),
+  ])
+}

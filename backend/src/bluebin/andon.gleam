@@ -3,6 +3,8 @@ import bluebin/calendar.{type Calendar}
 import bluebin/db
 import bluebin/demand
 import bluebin/measures
+import bluebin/wire
+import bluebin/wire_json
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
@@ -259,62 +261,54 @@ pub fn of_stations(andons: List(Andon), stations: List(String)) -> List(Andon) {
 }
 
 pub fn andons_json(andons: List(Andon)) -> Json {
-  json.array(andons, fn(andon) {
-    case andon {
-      Stop(
-        station_id:,
-        station:,
+  json.array(andons, fn(andon) { wire_andon(andon) |> wire_json.andon })
+}
+
+pub fn wire_andon(andon: Andon) -> wire.Andon {
+  case andon {
+    Stop(
+      station_id:,
+      station:,
+      raised_by:,
+      raised_at:,
+      team_leader_id:,
+      team_leader:,
+    ) ->
+      wire.StopAndon(
+        station: station_id,
+        station_name: station,
         raised_by:,
         raised_at:,
         team_leader_id:,
         team_leader:,
-      ) ->
-        json.object([
-          #("kind", json.string("stop")),
-          #("station", json.string(station_id)),
-          #("stationName", json.string(station)),
-          #("raisedBy", json.nullable(raised_by, json.string)),
-          #("raisedAt", json.string(raised_at)),
-          #("teamLeaderId", json.nullable(team_leader_id, json.string)),
-          #("teamLeader", json.nullable(team_leader, json.string)),
-        ])
-      ReworkWaits(station_id:, station:, rework_id:, piece:, waiting:) ->
-        json.object([
-          #("kind", json.string("rework_waits")),
-          #("station", json.string(station_id)),
-          #("stationName", json.string(station)),
-          #("rework", json.string(rework_id)),
-          #("piece", json.string(piece)),
-          #("waitingHours", json.float(hours(waiting))),
-        ])
-    }
-  })
+      )
+    ReworkWaits(station_id:, station:, rework_id:, piece:, waiting:) ->
+      wire.ReworkWaitsAndon(
+        station: station_id,
+        station_name: station,
+        rework: rework_id,
+        piece:,
+        waiting_hours: hours(waiting),
+      )
+  }
 }
 
-pub fn stale_json(stale: List(Stale)) -> Json {
-  json.array(stale, fn(one) {
-    json.object([
-      #("kind", json.string(one.kind)),
-      #("id", json.string(one.id)),
-    ])
-  })
+pub fn wire_stale(stale: Stale) -> wire.StaleAssignment {
+  // `stale` gives only the kinds "piece" and "rework".
+  let kind = case stale.kind {
+    "rework" -> wire.ReworkKind
+    _ -> wire.PieceKind
+  }
+  wire.StaleAssignment(kind:, id: stale.id)
 }
 
-pub fn bottlenecks_json(bottlenecks: List(Bottleneck)) -> Json {
-  json.array(bottlenecks, fn(one) {
-    json.object([
-      #("station", json.string(one.station_id)),
-      #(
-        "capacityHours",
-        json.nullable(
-          option.map(one.capacity, demand.round_to_tenth),
-          json.float,
-        ),
-      ),
-      #("slower", json.bool(one.slower)),
-      #("fullInFront", json.bool(one.full_in_front)),
-    ])
-  })
+pub fn wire_bottleneck(bottleneck: Bottleneck) -> wire.Bottleneck {
+  wire.Bottleneck(
+    station: bottleneck.station_id,
+    capacity_hours: option.map(bottleneck.capacity, demand.round_to_tenth),
+    slower: bottleneck.slower,
+    full_in_front: bottleneck.full_in_front,
+  )
 }
 
 fn hours(seconds: Int) -> Float {

@@ -1,6 +1,7 @@
 import bluebin/db
 import bluebin/demand
 import bluebin/heijunka
+import bluebin/wire
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/json
@@ -360,16 +361,14 @@ pub fn held_for_release(
   )
 }
 
-pub fn held_for_release_json(held: List(HeldForRelease)) -> json.Json {
-  json.array(held, fn(one) {
-    json.object([
-      #("id", json.string(one.id)),
-      #("piece", json.string(one.reference)),
-      #("demand", json.string(one.demand)),
-      #("demandLabel", json.string(one.demand_label)),
-      #("waitingHours", json.float(one.waiting_hours)),
-    ])
-  })
+pub fn wire_held(one: HeldForRelease) -> wire.HeldForRelease {
+  wire.HeldForRelease(
+    id: one.id,
+    piece: one.reference,
+    demand: one.demand,
+    demand_label: one.demand_label,
+    waiting_hours: one.waiting_hours,
+  )
 }
 
 fn deliver_demand_when_complete(

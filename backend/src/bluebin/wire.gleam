@@ -291,3 +291,161 @@ pub type Design {
     steps: List(DesignStep),
   )
 }
+
+pub type BlueBin {
+  BlueBin(
+    slot: Int,
+    id: Option(String),
+    piece: Option(String),
+    demand: Option(String),
+    /// At a Split, the Branches that already pulled their Sub-Piece of it.
+    pulled_by: Option(String),
+  )
+}
+
+pub type Overflow {
+  Overflow(id: String, piece: String, demand: String)
+}
+
+pub type Deviation {
+  Deviation(rule: String, piece: Option(String), reason: String, at: String)
+}
+
+pub type Member {
+  Member(id: String, name: String, busy: Bool)
+}
+
+pub type TeamMemberName {
+  TeamMemberName(id: String, name: String)
+}
+
+pub type InProgressPiece {
+  InProgressPiece(
+    id: String,
+    piece: String,
+    demand: String,
+    team_member: Option(String),
+    team_member_id: Option(String),
+    paused: Bool,
+    /// An open Rework repairs it: finishing it accepts the repair.
+    under_rework: Bool,
+    /// The Team Members who Help the Rework on this Piece.
+    helpers: List(TeamMemberName),
+  )
+}
+
+pub type Rework {
+  Rework(
+    id: String,
+    piece: String,
+    description: String,
+    /// The Work Station that found the defect and holds the Piece.
+    found_by: String,
+    found_by_id: Option(String),
+    assignee: Option(String),
+    assignee_id: Option(String),
+    helpers: List(TeamMemberName),
+    /// Who may join as Helper now: the two Work Stations concerned, while someone repairs.
+    can_help: List(TeamMemberName),
+  )
+}
+
+pub type WorkStation {
+  WorkStation(
+    id: String,
+    name: String,
+    position: Int,
+    branch: Option(String),
+    blue_bin_count: Int,
+    team_leader: Option(String),
+    blue_bins: List(BlueBin),
+    overflow: List(Overflow),
+    team_members: List(Member),
+    in_progress: List(InProgressPiece),
+    rework: List(Rework),
+    /// A fraction in 0..1; null until a Piece has left.
+    first_pass_yield: Option(Float),
+    rework_hours: Float,
+    deviations: List(Deviation),
+    kanbans: Int,
+  )
+}
+
+/// The 409 answer of a flow action that breaks a rule: send it again with a
+/// reason to record the Deviation.
+pub type RuleConfirm {
+  RuleConfirm(confirm: String, rules: List(String), message: String)
+}
+
+/// The 409 answer of a reorder of the Heijunka Sequence, with what it costs.
+pub type ReorderConfirm {
+  ReorderConfirm(confirm: String, message: String, effects: List(ReorderEffect))
+}
+
+pub type Step {
+  Step(position: Int, name: String)
+}
+
+/// A stop raised by hand (F42), or a Rework that waits with nobody on it (F15).
+pub type Andon {
+  StopAndon(
+    station: String,
+    station_name: String,
+    raised_by: Option(String),
+    raised_at: String,
+    team_leader_id: Option(String),
+    team_leader: Option(String),
+  )
+  ReworkWaitsAndon(
+    station: String,
+    station_name: String,
+    rework: String,
+    piece: String,
+    waiting_hours: Float,
+  )
+}
+
+pub type AssignmentKind {
+  PieceKind
+  ReworkKind
+}
+
+/// An active Assignment with no event for more than one working day.
+pub type StaleAssignment {
+  StaleAssignment(kind: AssignmentKind, id: String)
+}
+
+/// `capacityHours` is the average Touch Time per Piece over the last 7 days, divided by its Team Members.
+pub type Bottleneck {
+  Bottleneck(
+    station: String,
+    capacity_hours: Option(Float),
+    slower: Bool,
+    full_in_front: Bool,
+  )
+}
+
+/// A deployed Piece that waits for its Release; `waitingHours` since its Deployment, in Calendar Time.
+pub type HeldForRelease {
+  HeldForRelease(
+    id: String,
+    piece: String,
+    demand: String,
+    demand_label: String,
+    waiting_hours: Float,
+  )
+}
+
+pub type Line {
+  Line(
+    stations: List(WorkStation),
+    steps: List(Step),
+    takt_time_hours: Float,
+    demands_behind: Int,
+    andons: List(Andon),
+    stale: List(StaleAssignment),
+    active_assignments: Int,
+    bottlenecks: List(Bottleneck),
+    held_for_release: List(HeldForRelease),
+  )
+}

@@ -1,9 +1,9 @@
 import bluebin/db
 import bluebin/text
+import bluebin/wire
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/int
-import gleam/json.{type Json}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -84,7 +84,9 @@ pub type Deviation {
   )
 }
 
-pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
+pub fn load(
+  connection: sqlight.Connection,
+) -> Result(List(wire.WorkStation), sqlight.Error) {
   use stations <- result.try(query_stations(connection))
   use parked <- result.try(query_parked(connection))
   use members <- result.try(query_members(connection))
@@ -111,10 +113,7 @@ pub fn load(connection: sqlight.Connection) -> Result(Json, sqlight.Error) {
         |> dict.from_list,
       deviations: by_station(deviations, fn(one) { one.station_id }),
     )
-  stations
-  |> list.map(station_json(_, rows))
-  |> json.preprocessed_array
-  |> Ok
+  Ok(list.map(stations, wire_station(_, rows)))
 }
 
 /// The rows of every Work Station, by its id.
@@ -153,7 +152,7 @@ fn rows_of(groups: Dict(String, List(a)), key: String) -> List(a) {
   dict.get(groups, key) |> result.unwrap([])
 }
 
-fn station_json(station: Station, rows: Rows) -> Json {
+fn wire_station(station: Station, rows: Rows) -> wire.WorkStation {
   let #(in_bins, over) = list.split(of(rows.parked, station), station.blue_bins)
   let quality = dict.get(rows.quality, station.id)
 
@@ -167,112 +166,68 @@ fn station_json(station: Station, rows: Rows) -> Json {
     Error(_) -> 0.0
   }
 
-  json.object([
-    #("id", json.string(station.id)),
-    #("name", json.string(station.name)),
-    #("position", json.int(station.position)),
-    #("branch", json.nullable(station.branch, json.string)),
-    #("blueBinCount", json.int(station.blue_bins)),
-    #("teamLeader", json.nullable(station.team_leader, json.string)),
-    #(
-      "blueBins",
-      json.preprocessed_array(bin_rows(1, station.blue_bins, in_bins)),
-    ),
-    #("overflow", json.array(over, overflow_json)),
-    #("teamMembers", json.array(of(rows.members, station), member_json)),
-    #(
-      "inProgress",
-      json.array(of(rows.in_progress, station), fn(piece) {
-        in_progress_json(piece, rows_of(rows.helpers_of_piece, piece.id))
-      }),
-    ),
-    #(
-      "rework",
-      json.array(of(rows.rework, station), fn(item) {
-        rework_json(
-          item,
-          rows_of(rows.helpers_of_rework, item.id),
-          rows_of(rows.can_help, item.id),
+  wire.WorkStation(
+    id: station.id,
+    name: station.name,
+    position: station.position,
+    branch: station.branch,
+    blue_bin_count: station.blue_bins,
+    team_leader: station.team_leader,
+    blue_bins: bin_rows(1, station.blue_bins, in_bins),
+    overflow: list.map(over, fn(piece) {
+      wire.Overflow(id: piece.id, piece: piece.reference, demand: piece.demand)
+    }),
+    team_members: list.map(of(rows.members, station), fn(member) {
+      wire.Member(id: member.id, name: member.name, busy: member.busy)
+    }),
+    in_progress: list.map(of(rows.in_progress, station), fn(piece) {
+      wire.InProgressPiece(
+        id: piece.id,
+        piece: piece.piece,
+        demand: piece.demand,
+        team_member: piece.team_member,
+        team_member_id: piece.team_member_id,
+        paused: piece.paused,
+        under_rework: piece.under_rework,
+        helpers: wire_helpers(rows_of(rows.helpers_of_piece, piece.id)),
+      )
+    }),
+    rework: list.map(of(rows.rework, station), fn(item) {
+      wire.Rework(
+        id: item.id,
+        piece: item.piece,
+        description: item.description,
+        found_by: item.found_by,
+        found_by_id: item.found_by_id,
+        assignee: item.assignee,
+        assignee_id: item.assignee_id,
+        helpers: wire_helpers(rows_of(rows.helpers_of_rework, item.id)),
+        can_help: wire_helpers(rows_of(rows.can_help, item.id)),
+      )
+    }),
+    first_pass_yield:,
+    rework_hours:,
+    deviations: of(rows.deviations, station)
+      |> list.take(3)
+      |> list.map(fn(item) {
+        wire.Deviation(
+          rule: item.rule,
+          piece: item.piece,
+          reason: item.reason,
+          at: item.at,
         )
       }),
-    ),
-    #("firstPassYield", json.nullable(first_pass_yield, json.float)),
-    #("reworkHours", json.float(rework_hours)),
-    #(
-      "deviations",
-      json.array(of(rows.deviations, station) |> list.take(3), deviation_json),
-    ),
-    #(
-      "kanbans",
-      json.int(dict.get(rows.kanbans, station.id) |> result.unwrap(0)),
-    ),
-  ])
+    kanbans: dict.get(rows.kanbans, station.id) |> result.unwrap(0),
+  )
 }
 
-fn overflow_json(piece: Parked) -> Json {
-  json.object([
-    #("id", json.string(piece.id)),
-    #("piece", json.string(piece.reference)),
-    #("demand", json.string(piece.demand)),
-  ])
+fn wire_helpers(helpers: List(Helper)) -> List(wire.TeamMemberName) {
+  list.map(helpers, fn(helper) {
+    wire.TeamMemberName(id: helper.id, name: helper.name)
+  })
 }
 
-fn member_json(member: Member) -> Json {
-  json.object([
-    #("id", json.string(member.id)),
-    #("name", json.string(member.name)),
-    #("busy", json.bool(member.busy)),
-  ])
-}
-
-fn in_progress_json(piece: InProgress, helpers: List(Helper)) -> Json {
-  json.object([
-    #("id", json.string(piece.id)),
-    #("piece", json.string(piece.piece)),
-    #("demand", json.string(piece.demand)),
-    #("teamMember", json.nullable(piece.team_member, json.string)),
-    #("teamMemberId", json.nullable(piece.team_member_id, json.string)),
-    #("paused", json.bool(piece.paused)),
-    #("underRework", json.bool(piece.under_rework)),
-    #("helpers", json.array(helpers, helper_json)),
-  ])
-}
-
-fn helper_json(helper: Helper) -> Json {
-  json.object([
-    #("id", json.string(helper.id)),
-    #("name", json.string(helper.name)),
-  ])
-}
-
-fn rework_json(
-  item: Rework,
-  helpers: List(Helper),
-  can_help: List(Helper),
-) -> Json {
-  json.object([
-    #("id", json.string(item.id)),
-    #("piece", json.string(item.piece)),
-    #("description", json.string(item.description)),
-    #("foundBy", json.string(item.found_by)),
-    #("foundById", json.nullable(item.found_by_id, json.string)),
-    #("assignee", json.nullable(item.assignee, json.string)),
-    #("assigneeId", json.nullable(item.assignee_id, json.string)),
-    #("helpers", json.array(helpers, helper_json)),
-    #("canHelp", json.array(can_help, helper_json)),
-  ])
-}
-
-fn deviation_json(item: Deviation) -> Json {
-  json.object([
-    #("rule", json.string(item.rule)),
-    #("piece", json.nullable(item.piece, json.string)),
-    #("reason", json.string(item.reason)),
-    #("at", json.string(item.at)),
-  ])
-}
-
-fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(Json) {
+fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(wire.BlueBin) {
   case slot > last {
     True -> []
     False -> {
@@ -281,31 +236,13 @@ fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(Json) {
         [] -> #(None, [])
       }
       let row =
-        json.object([
-          #("slot", json.int(slot)),
-          #(
-            "id",
-            json.nullable(option.map(here, fn(one) { one.id }), json.string),
-          ),
-          #(
-            "piece",
-            json.nullable(
-              option.map(here, fn(one) { one.reference }),
-              json.string,
-            ),
-          ),
-          #(
-            "demand",
-            json.nullable(option.map(here, fn(one) { one.demand }), json.string),
-          ),
-          #(
-            "pulledBy",
-            json.nullable(
-              option.then(here, fn(one) { one.pulled_by }),
-              json.string,
-            ),
-          ),
-        ])
+        wire.BlueBin(
+          slot:,
+          id: option.map(here, fn(one) { one.id }),
+          piece: option.map(here, fn(one) { one.reference }),
+          demand: option.map(here, fn(one) { one.demand }),
+          pulled_by: option.then(here, fn(one) { one.pulled_by }),
+        )
       [row, ..bin_rows(slot + 1, last, rest)]
     }
   }
@@ -599,13 +536,8 @@ pub fn list_steps(
   )
 }
 
-pub fn steps_json(steps: List(Step)) -> Json {
-  json.array(steps, fn(step) {
-    json.object([
-      #("position", json.int(step.position)),
-      #("name", json.string(step.name)),
-    ])
-  })
+pub fn wire_step(step: Step) -> wire.Step {
+  wire.Step(position: step.position, name: step.name)
 }
 
 pub fn rename_step(

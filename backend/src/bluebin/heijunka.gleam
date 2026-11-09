@@ -171,17 +171,14 @@ fn next_place(sequence: List(Placed), demand_id: String) -> Int {
   |> list.length
 }
 
-pub fn effects_json(effects: List(Effect)) -> json.Json {
-  json.array(effects, fn(effect) {
-    wire.ReorderEffect(
-      demand: effect.demand.id,
-      label: effect.demand.label,
-      places: effect.places,
-      hours: effect.hours,
-      takt_gap: effect.takt_gap,
-    )
-    |> wire_json.reorder_effect
-  })
+pub fn wire_effect(effect: Effect) -> wire.ReorderEffect {
+  wire.ReorderEffect(
+    demand: effect.demand.id,
+    label: effect.demand.label,
+    places: effect.places,
+    hours: effect.hours,
+    takt_gap: effect.takt_gap,
+  )
 }
 
 /// One Demand on one day: the Pieces the Takt Time plans to leave the Backlog

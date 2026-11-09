@@ -7,11 +7,13 @@ import bluebin/flow
 import bluebin/heijunka
 import bluebin/line
 import bluebin/measures
+import bluebin/wire_json
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/result
 import gleam/string
 import gleeunit
 import sqlight
@@ -562,6 +564,13 @@ pub fn a_rework_on_an_assembled_piece_finds_its_author_in_the_branch_test() {
   assert raised.assignee == Some("Alice")
 }
 
+/// The Work Stations of `GET /api/line`, as JSON.
+fn load_line(
+  connection: sqlight.Connection,
+) -> Result(json.Json, sqlight.Error) {
+  line.load(connection) |> result.map(json.array(_, wire_json.work_station))
+}
+
 pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
   use connection <- with_seeded_database()
   // 12 passes at iOS, one reworked: (12 - 1) / 12 = 0.91…
@@ -570,7 +579,7 @@ pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
       "select count(*) from piece_pass where station_id = 'ws-ios'",
     )
     == 12
-  let assert Ok(payload) = line.load(connection)
+  let assert Ok(payload) = load_line(connection)
   let text = json.to_string(payload)
   assert string.contains(text, "\"firstPassYield\"")
   assert string.contains(text, "\"reworkHours\"")
@@ -579,7 +588,7 @@ pub fn the_payload_carries_the_first_pass_yield_and_the_rework_time_test() {
   assert string.contains(text, "\"reworkHours\":3.0")
 
   exec(connection, "delete from piece_pass where station_id = 'ws-uat'")
-  let assert Ok(empty) = line.load(connection)
+  let assert Ok(empty) = load_line(connection)
   assert string.contains(json.to_string(empty), "\"firstPassYield\":null")
 }
 
@@ -926,7 +935,7 @@ pub fn the_demands_payload_carries_the_takt_numbers_test() {
 
 pub fn the_line_payload_lists_every_work_station_test() {
   use connection <- with_seeded_database()
-  let assert Ok(payload) = line.load(connection)
+  let assert Ok(payload) = load_line(connection)
   let text = json.to_string(payload)
 
   let station_names = [
@@ -1685,7 +1694,7 @@ pub fn a_version_3_database_gets_demand_codes_test() {
 pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
   use connection <- with_seeded_database()
   // Alice repairs rw-1: Karim (iOS) and Yasmine (QA iOS) can help (F61).
-  let assert Ok(payload) = line.load(connection)
+  let assert Ok(payload) = load_line(connection)
   // The warning of a pull at QA iOS finds its Reworks by this id (F14).
   assert string.contains(
     json.to_string(payload),
@@ -1698,7 +1707,7 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
 
   // Karim helps: he shows on the Rework and on OFF-4 in Yasmine's hands (F64).
   let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
-  let assert Ok(payload) = line.load(connection)
+  let assert Ok(payload) = load_line(connection)
   let text = json.to_string(payload)
   assert string.contains(
     text,

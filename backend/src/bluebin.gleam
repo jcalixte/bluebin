@@ -1023,10 +1023,8 @@ fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
     })
   {
     Ok(team_member) ->
-      json.object([
-        #("id", json.string(team_member.id)),
-        #("name", json.string(team_member.name)),
-      ])
+      wire.TeamMemberName(id: team_member.id, name: team_member.name)
+      |> wire_json.team_member_name
       |> send_json(201)
     Error(design.Invalid(reason)) -> wisp.bad_request(reason)
     Error(design.StoreFailed) -> wisp.internal_server_error()
@@ -1136,19 +1134,19 @@ fn line_view(database: String) -> wisp.Response {
   let takt = demand.line_takt_hours(demands)
   use bottlenecks <- result.try(andon.bottlenecks(connection, takt))
   use held <- result.try(flow.held_for_release(connection))
-  Ok(
-    json.object([
-      #("stations", stations),
-      #("steps", line.steps_json(steps)),
-      #("taktTimeHours", json.float(takt)),
-      #("demandsBehind", json.int(demand.behind_count(demands))),
-      #("andons", andon.andons_json(andons)),
-      #("stale", andon.stale_json(stale)),
-      #("activeAssignments", json.int(active)),
-      #("bottlenecks", andon.bottlenecks_json(bottlenecks)),
-      #("heldForRelease", flow.held_for_release_json(held)),
-    ]),
+  wire.Line(
+    stations:,
+    steps: list.map(steps, line.wire_step),
+    takt_time_hours: takt,
+    demands_behind: demand.behind_count(demands),
+    andons: list.map(andons, andon.wire_andon),
+    stale: list.map(stale, andon.wire_stale),
+    active_assignments: active,
+    bottlenecks: list.map(bottlenecks, andon.wire_bottleneck),
+    held_for_release: list.map(held, flow.wire_held),
   )
+  |> wire_json.line
+  |> Ok
 }
 
 fn andons(database: String) -> wisp.Response {
@@ -1362,30 +1360,20 @@ fn flow_response(result: Result(flow.Flowed, flow.FlowError)) -> wisp.Response {
 fn flow_failure(failure: flow.FlowError) -> wisp.Response {
   case failure {
     flow.NeedsConfirmation(rules) ->
-      json.object([
-        #(
-          "confirm",
-          json.string(list.map(rules, flow.rule_name) |> string.join(" ")),
-        ),
-        #(
-          "rules",
-          json.array(rules, fn(rule) { json.string(flow.rule_name(rule)) }),
-        ),
-        #(
-          "message",
-          json.string(list.map(rules, flow.rule_warning) |> string.join(" ")),
-        ),
-      ])
+      wire.RuleConfirm(
+        confirm: list.map(rules, flow.rule_name) |> string.join(" "),
+        rules: list.map(rules, flow.rule_name),
+        message: list.map(rules, flow.rule_warning) |> string.join(" "),
+      )
+      |> wire_json.rule_confirm
       |> send_json(409)
     flow.ReorderNeedsConfirmation(effects) ->
-      json.object([
-        #("confirm", json.string(flow.rule_name(flow.ReorderHeijunkaSequence))),
-        #(
-          "message",
-          json.string(flow.rule_warning(flow.ReorderHeijunkaSequence)),
-        ),
-        #("effects", heijunka.effects_json(effects)),
-      ])
+      wire.ReorderConfirm(
+        confirm: flow.rule_name(flow.ReorderHeijunkaSequence),
+        message: flow.rule_warning(flow.ReorderHeijunkaSequence),
+        effects: list.map(effects, heijunka.wire_effect),
+      )
+      |> wire_json.reorder_confirm
       |> send_json(409)
     flow.NothingToPull ->
       conflict(
@@ -1694,12 +1682,7 @@ fn rename_step(
       line.rename_step(connection, position, name)
     })
   {
-    Ok(step) ->
-      json.object([
-        #("position", json.int(step.position)),
-        #("name", json.string(step.name)),
-      ])
-      |> send_json(200)
+    Ok(step) -> line.wire_step(step) |> wire_json.step |> send_json(200)
     Error(line.EmptyName) -> wisp.bad_request("a step needs a name")
     Error(line.NameTooLong) ->
       wisp.bad_request(
