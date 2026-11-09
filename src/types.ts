@@ -1,4 +1,5 @@
-// Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
+// The API shapes come from `./wire`, which `gleam dev` writes from
+// backend/src/bluebin/wire.gleam: change them there. Below: the SPA's own types.
 import type { Duration, ReorderEffect } from "./wire"
 
 export type {

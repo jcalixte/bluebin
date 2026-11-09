@@ -22,4 +22,8 @@ Further documentation can be found at <https://hexdocs.pm/bluebin>.
 ```sh
 gleam run   # Run the project
 gleam test  # Run the tests
+gleam dev   # Write the JSON encoders, decoders and TS types from wire.gleam
 ```
+
+JSON shapes live in `src/bluebin/wire.gleam`; run `gleam dev` after a change.
+A type whose name ends in `Input` is a request body and gets a decoder.
