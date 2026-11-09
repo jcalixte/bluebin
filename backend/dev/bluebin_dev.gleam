@@ -1,0 +1,272 @@
+//// `gleam dev`: writes the JSON encoders and the TypeScript types of the
+//// records in `bluebin/wire.gleam`. Run it after each change to that file;
+//// `test/wire_test.gleam` fails while the written files are out of date.
+
+import glance
+import gleam/bit_array
+import gleam/int
+import gleam/io
+import gleam/list
+import gleam/option.{None, Some}
+import gleam/result
+import gleam/string
+import simplifile
+
+pub const source_path = "src/bluebin/wire.gleam"
+
+pub const gleam_path = "src/bluebin/wire_json.gleam"
+
+pub const typescript_path = "../src/wire.ts"
+
+pub fn main() -> Nil {
+  let assert Ok(source) = simplifile.read(source_path)
+  case generate(source) {
+    Ok(Generated(gleam:, typescript:)) -> {
+      let assert Ok(Nil) = simplifile.write(gleam_path, gleam)
+      let assert Ok(Nil) = simplifile.write(typescript_path, typescript)
+      io.println("Wrote " <> gleam_path <> " and " <> typescript_path)
+    }
+    Error(message) -> panic as { source_path <> ": " <> message }
+  }
+}
+
+pub type Generated {
+  Generated(gleam: String, typescript: String)
+}
+
+type Record {
+  Record(name: String, fields: List(Field))
+}
+
+type Field {
+  Field(label: String, kind: Kind, doc: List(String))
+}
+
+type Kind {
+  Text
+  Whole
+  Decimal
+  Flag
+  Nullable(Kind)
+  Many(Kind)
+  Other(String)
+}
+
+pub fn generate(source: String) -> Result(Generated, String) {
+  use module <- result.try(
+    glance.module(source)
+    |> result.replace_error("glance cannot parse it"),
+  )
+  // In the order of the source file: glance does not keep it.
+  let custom_types =
+    module.custom_types
+    |> list.map(fn(definition) { definition.definition })
+    |> list.sort(fn(a, b) { int.compare(a.location.start, b.location.start) })
+  let names = list.map(custom_types, fn(custom) { custom.name })
+  use records <- result.map(
+    list.try_map(custom_types, record(_, names, source)),
+  )
+  Generated(
+    gleam: gleam_module(records),
+    typescript: typescript_module(records),
+  )
+}
+
+fn record(
+  custom: glance.CustomType,
+  names: List(String),
+  source: String,
+) -> Result(Record, String) {
+  case custom {
+    glance.CustomType(
+      publicity: glance.Public,
+      parameters: [],
+      variants: [glance.Variant(fields: [_, ..] as fields, ..)],
+      name:,
+      ..,
+    ) -> {
+      use fields <- result.map(
+        list.try_map(fields, field(_, custom.name, names, source)),
+      )
+      Record(name:, fields:)
+    }
+    _ ->
+      Error(
+        custom.name
+        <> " must be public, with no type parameter and one variant with fields",
+      )
+  }
+}
+
+fn field(
+  field: glance.VariantField,
+  record: String,
+  names: List(String),
+  source: String,
+) -> Result(Field, String) {
+  case field {
+    glance.LabelledVariantField(item:, label:) -> {
+      use kind <- result.map(
+        kind(item, names)
+        |> result.map_error(fn(type_) {
+          record <> "." <> label <> " has the unsupported type " <> type_
+        }),
+      )
+      Field(label:, kind:, doc: doc_before(source, item.location.start))
+    }
+    glance.UnlabelledVariantField(..) ->
+      Error(record <> " has a field with no label")
+  }
+}
+
+fn kind(type_: glance.Type, names: List(String)) -> Result(Kind, String) {
+  case type_ {
+    glance.NamedType(name: "String", module: None, parameters: [], ..) ->
+      Ok(Text)
+    glance.NamedType(name: "Int", module: None, parameters: [], ..) -> Ok(Whole)
+    glance.NamedType(name: "Float", module: None, parameters: [], ..) ->
+      Ok(Decimal)
+    glance.NamedType(name: "Bool", module: None, parameters: [], ..) -> Ok(Flag)
+    glance.NamedType(name: "Option", module: None, parameters: [inner], ..)
+    | glance.NamedType(
+        name: "Option",
+        module: Some("option"),
+        parameters: [inner],
+        ..,
+      ) -> kind(inner, names) |> result.map(Nullable)
+    glance.NamedType(name: "List", module: None, parameters: [inner], ..) ->
+      kind(inner, names) |> result.map(Many)
+    glance.NamedType(name:, module: None, parameters: [], ..) ->
+      case list.contains(names, name) {
+        True -> Ok(Other(name))
+        False -> Error(name)
+      }
+    glance.NamedType(name:, ..) -> Error(name)
+    _ -> Error("other than a named type")
+  }
+}
+
+/// The `///` lines right above the field that starts at byte `start`.
+fn doc_before(source: String, start: Int) -> List(String) {
+  let before =
+    bit_array.from_string(source)
+    |> bit_array.slice(0, start)
+    |> result.try(bit_array.to_string)
+    |> result.unwrap("")
+  before
+  |> string.split("\n")
+  |> list.reverse
+  |> list.drop(1)
+  |> list.map(string.trim_start)
+  |> list.take_while(string.starts_with(_, "///"))
+  |> list.reverse
+  |> list.map(fn(line) { string.trim(string.drop_start(line, 3)) })
+}
+
+// Gleam -----------------------------------------------------------------------
+
+const max_width = 80
+
+fn gleam_module(records: List(Record)) -> String {
+  "//// Generated by `gleam dev` from `bluebin/wire.gleam`. Do not edit.
+
+import bluebin/wire
+import gleam/json
+" <> string.concat(list.map(records, encoder))
+}
+
+fn encoder(record: Record) -> String {
+  let entries =
+    list.map(record.fields, fn(field) {
+      let key = "\"" <> camel_case(field.label) <> "\""
+      let value = expression(field.kind, "value." <> field.label)
+      let line = "    #(" <> key <> ", " <> value <> "),"
+      case string.length(line) <= max_width {
+        True -> line <> "\n"
+        False ->
+          "    #(\n      " <> key <> ",\n      " <> value <> ",\n    ),\n"
+      }
+    })
+  "\npub fn "
+  <> snake_case(record.name)
+  <> "(value: wire."
+  <> record.name
+  <> ") -> json.Json {\n  json.object([\n"
+  <> string.concat(entries)
+  <> "  ])\n}\n"
+}
+
+fn expression(kind: Kind, value: String) -> String {
+  case kind {
+    Nullable(inner) ->
+      "json.nullable(" <> value <> ", " <> function(inner) <> ")"
+    Many(inner) -> "json.array(" <> value <> ", " <> function(inner) <> ")"
+    _ -> function(kind) <> "(" <> value <> ")"
+  }
+}
+
+fn function(kind: Kind) -> String {
+  case kind {
+    Text -> "json.string"
+    Whole -> "json.int"
+    Decimal -> "json.float"
+    Flag -> "json.bool"
+    Other(name) -> snake_case(name)
+    Nullable(_) | Many(_) -> "fn(item) { " <> expression(kind, "item") <> " }"
+  }
+}
+
+// TypeScript ------------------------------------------------------------------
+
+fn typescript_module(records: List(Record)) -> String {
+  "// Generated by `gleam dev` in backend/ from backend/src/bluebin/wire.gleam. Do not edit.\n"
+  <> string.concat(list.map(records, typescript_type))
+}
+
+fn typescript_type(record: Record) -> String {
+  let fields =
+    list.map(record.fields, fn(field) {
+      let doc = case field.doc {
+        [] -> ""
+        lines -> "  /** " <> string.join(lines, " ") <> " */\n"
+      }
+      doc <> "  " <> camel_case(field.label) <> ": " <> ts(field.kind) <> "\n"
+    })
+  "\nexport type " <> record.name <> " = {\n" <> string.concat(fields) <> "}\n"
+}
+
+fn ts(kind: Kind) -> String {
+  case kind {
+    Text -> "string"
+    Whole | Decimal -> "number"
+    Flag -> "boolean"
+    Other(name) -> name
+    Nullable(inner) -> ts(inner) <> " | null"
+    Many(Nullable(_) as inner) -> "(" <> ts(inner) <> ")[]"
+    Many(inner) -> ts(inner) <> "[]"
+  }
+}
+
+// Names -----------------------------------------------------------------------
+
+/// `forecast_late_days` → `forecastLateDays`
+fn camel_case(label: String) -> String {
+  case string.split(label, "_") {
+    [first, ..rest] -> first <> string.concat(list.map(rest, string.capitalise))
+    [] -> label
+  }
+}
+
+/// `BlueBin` → `blue_bin`
+fn snake_case(name: String) -> String {
+  name
+  |> string.to_graphemes
+  |> list.index_map(fn(letter, index) {
+    let lower = string.lowercase(letter)
+    case index > 0 && lower != letter {
+      True -> "_" <> lower
+      False -> lower
+    }
+  })
+  |> string.concat
+}

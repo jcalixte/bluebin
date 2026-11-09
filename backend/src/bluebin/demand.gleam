@@ -2,6 +2,8 @@ import bluebin/calendar.{type Calendar}
 import bluebin/db
 import bluebin/demand_code
 import bluebin/text
+import bluebin/wire
+import bluebin/wire_json
 import gleam/bool
 import gleam/dynamic/decode
 import gleam/float
@@ -184,28 +186,23 @@ pub fn to_json(
 ) -> String {
   json.array(demands, fn(demand) {
     let forecast = forecast(demand, calendar, today)
-    json.object([
-      #("id", json.string(demand.id)),
-      #("code", json.string(demand.code)),
-      #("label", json.string(demand.label)),
-      #("client", json.string(demand.client)),
-      #("dueOn", json.string(demand.due_on)),
-      #("piecesAsked", json.int(demand.pieces_asked)),
-      #("piecesDeployed", json.int(demand.pieces_deployed)),
-      #("workingDaysTotal", json.int(demand.working_days_total)),
-      #("workingDaysElapsed", json.int(demand.working_days_elapsed)),
-      #("taktTimeHours", json.float(round_to_tenth(takt_time_hours(demand)))),
-      #("taktGap", json.float(takt_gap(demand))),
-      #("andon", json.bool(andon(demand))),
-      #(
-        "forecastOn",
-        json.nullable(option.map(forecast, fn(f) { f.on }), json.string),
-      ),
-      #(
-        "forecastLateDays",
-        json.nullable(option.map(forecast, fn(f) { f.late_days }), json.int),
-      ),
-    ])
+    wire.Demand(
+      id: demand.id,
+      code: demand.code,
+      label: demand.label,
+      client: demand.client,
+      due_on: demand.due_on,
+      pieces_asked: demand.pieces_asked,
+      pieces_deployed: demand.pieces_deployed,
+      working_days_total: demand.working_days_total,
+      working_days_elapsed: demand.working_days_elapsed,
+      takt_time_hours: round_to_tenth(takt_time_hours(demand)),
+      takt_gap: takt_gap(demand),
+      andon: andon(demand),
+      forecast_on: option.map(forecast, fn(f) { f.on }),
+      forecast_late_days: option.map(forecast, fn(f) { f.late_days }),
+    )
+    |> wire_json.demand
   })
   |> json.to_string
 }

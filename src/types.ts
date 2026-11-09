@@ -1,22 +1,5 @@
-export type Demand = {
-  id: string
-  /** The Demand Code, `CHK`: it starts the Piece Reference of each of its Pieces. */
-  code: string
-  label: string
-  client: string
-  dueOn: string
-  piecesAsked: number
-  piecesDeployed: number
-  workingDaysTotal: number
-  workingDaysElapsed: number
-  taktTimeHours: number
-  taktGap: number
-  andon: boolean
-  /** `YYYY-MM-DD`; null until a Piece of the Demand is deployed. */
-  forecastOn: string | null
-  /** Working days from `dueOn` to `forecastOn`: above 0 is late, 0 or less is on time. */
-  forecastLateDays: number | null
-}
+// Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
+export type { Demand } from "./wire"
 
 export type BlueBin = {
   slot: number
