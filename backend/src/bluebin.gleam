@@ -190,7 +190,13 @@ pub fn handle_request(
     // Open: the container healthcheck has no identity.
     ["api", "health"] -> {
       use <- wisp.require_method(request, http.Get)
-      wisp.ok()
+      case db.check(context.accounts) {
+        Ok(Nil) -> wisp.ok()
+        Error(error) -> {
+          wisp.log_error("Health check: " <> error.message)
+          wisp.response(503)
+        }
+      }
     }
     ["api", "s", owner, "lines", line, ..rest] ->
       look(request, context, owner, line, ["api", ..rest])

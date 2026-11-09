@@ -153,7 +153,9 @@ fonts, so Cascadia Mono and Inter show only where the OS has them.
 Passkeys come first at sign-in (authentik 2025.12 or later): import
 [`authentik/passkey.yaml`](./authentik/passkey.yaml) after the flows. When the
 username field gets focus, the browser offers the user's passkeys; the password
-stays as fallback, and a passkey sign-in skips the second factor. A passkey
+stays as fallback, and a passkey sign-in skips the second factor. The button
+**Use a security key** under the form opens the flow `passkey-authentication`,
+which asks for a passkey at once, with no username. A passkey
 belongs to one host, so make it on `auth.bluebin.app` for Bluebin: user settings
 (`/if/user/#/settings`) > MFA Devices > Enroll > WebAuthn device.
 

@@ -118,6 +118,15 @@ pub fn the_healthcheck_needs_no_identity_test() {
   assert response.status == 200
 }
 
+pub fn the_healthcheck_fails_when_the_database_cannot_open_test() {
+  let assert Ok(hub) = live.start()
+  // A file is not a directory: SQLite cannot open a database under it.
+  let context = bluebin.Context(..sso_off(hub), accounts: "gleam.toml/x.db")
+  let response =
+    bluebin.handle_request(simulate.request(http.Get, "/api/health"), context)
+  assert response.status == 503
+}
+
 pub fn a_signed_in_user_gets_a_seeded_workspace_test() {
   let assert Ok(hub) = live.start()
   let uid = "router-test-" <> int.to_string(int.random(1_000_000))

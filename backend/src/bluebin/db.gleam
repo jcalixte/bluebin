@@ -493,6 +493,17 @@ pub fn open(
   run(connection)
 }
 
+/// For the container healthcheck: the SQLite NIF loads and `database` answers
+/// a read. A rolling deploy moves the traffic only to a container that passes.
+/// Opens with `sqlight.open`, not `with_connection_at`, which crashes when the
+/// file cannot open.
+pub fn check(database: String) -> Result(Nil, sqlight.Error) {
+  use connection <- result.try(sqlight.open(database))
+  let version = user_version(connection)
+  let _ = sqlight.close(connection)
+  result.replace(version, Nil)
+}
+
 pub fn directory_of(path: String) -> String {
   case string.split(path, "/") |> list.reverse {
     [_, _, ..] as parts ->

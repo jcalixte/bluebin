@@ -7,6 +7,10 @@
 # username field gets focus (WebAuthn conditional UI). A passkey signs the user
 # in with no password and no second factor. The password stays as fallback.
 #
+# The flow passkey-authentication is linked under the sign-in form as the
+# button "Use a security key". It asks the browser for a passkey at once, with
+# no username, then signs the user in.
+#
 # A passkey belongs to one host name: a passkey made on auth.apoena.dev does not
 # work on auth.bluebin.app. Make one on each host where you sign in:
 # https://auth.bluebin.app/if/user/#/settings > MFA Devices > Enroll > WebAuthn.
@@ -24,6 +28,27 @@ entries:
       webauthn_user_verification: required
       not_configured_action: skip
 
+  - model: authentik_flows.flow
+    id: passkey-flow
+    identifiers:
+      slug: passkey-authentication
+    attrs:
+      name: Passkey sign-in
+      title: Sign in with a passkey
+      designation: authentication
+      authentication: none
+  # With no user yet, this stage asks for any passkey of this host.
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf passkey-flow
+      stage: !KeyOf passkey-validation
+      order: 10
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf passkey-flow
+      stage: !Find [authentik_stages_user_login.userloginstage, [name, default-authentication-login]]
+      order: 100
+
   - model: authentik_stages_identification.identificationstage
     identifiers:
       name: default-authentication-identification
@@ -33,6 +58,7 @@ entries:
         - email
         - username
       webauthn_stage: !KeyOf passkey-validation
+      passwordless_flow: !KeyOf passkey-flow
 
   # Autofill shows only discoverable credentials (resident keys).
   - model: authentik_stages_authenticator_webauthn.authenticatorwebauthnstage
