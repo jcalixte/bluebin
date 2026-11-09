@@ -29,5 +29,6 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-exec docker run --rm -v "$PWD:/build" -w /build "$IMAGE" \
+# The repo root, not only backend/: test/wire_test.gleam reads ../src/wire.ts.
+exec docker run --rm -v "$PWD/..:/build" -w /build/backend "$IMAGE" \
   sh -c 'apk add --no-cache build-base sqlite-dev >/dev/null && gleam test'

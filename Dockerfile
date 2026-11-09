@@ -30,6 +30,9 @@ RUN apk add --no-cache build-base sqlite-dev
 ENV ESQLITE_USE_SYSTEM=1
 WORKDIR /build
 COPY backend/ .
+# test/wire_test.gleam checks that `gleam dev` output is up to date, and the
+# TypeScript half lives in the SPA at ../src/wire.ts.
+COPY src/wire.ts /src/wire.ts
 # The test suite is the deploy gate: a red suite fails the build before production.
 ARG SKIP_TESTS=0
 RUN [ "$SKIP_TESTS" = "1" ] || gleam test
