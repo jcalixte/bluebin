@@ -11,8 +11,8 @@ import gleam/set.{type Set}
 import gleam/string
 import sqlight
 
-/// The Working Calendar of the Line. `days` uses `strftime('%w')`
-/// numbers, 0 for Sunday; `start` and `end` are minutes after midnight, UTC.
+/// `days` uses `strftime('%w')` numbers, 0 for Sunday; `start` and `end` are
+/// minutes after midnight, UTC.
 pub type Calendar {
   Calendar(days: List(Int), start: Int, end: Int, holidays: List(Holiday))
 }
@@ -318,8 +318,6 @@ fn format_time(minutes: Int) -> String {
   pad(minutes / 60) <> ":" <> pad(minutes % 60)
 }
 
-/// The Calendar of a `PUT /api/calendar` body, or `Error` for a time that is
-/// not "HH:MM".
 pub fn from_input(input: wire.WorkingCalendarInput) -> Result(Calendar, Nil) {
   use start <- result.try(parse_time(input.start))
   use end <- result.try(parse_time(input.end))

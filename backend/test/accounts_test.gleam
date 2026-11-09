@@ -22,7 +22,6 @@ pub fn the_first_word_is_the_suggested_first_name_test() {
   assert accounts.suggested_name(request.new()) == #("", "")
 }
 
-/// Each test has its own accounts file, removed at the end.
 fn scratch_accounts() -> String {
   "data/accounts-test-" <> int.to_string(int.random(1_000_000_000)) <> ".db"
 }
@@ -145,7 +144,6 @@ pub fn with_sso_on_an_account_needs_an_email_test() {
   let no_email = [#("x-authentik-uid", "a1b2c3")]
   let looked = call(context, http.Get, no_email, "")
   let saved = call(context, http.Put, no_email, ada_named)
-  // No uid with SSO on: the request passed no sign-in.
   let visitor = call(context, http.Get, [], "")
   remove(path)
 

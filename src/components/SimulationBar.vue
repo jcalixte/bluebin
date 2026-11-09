@@ -42,13 +42,11 @@ const myName = computed(
   () => seated.value.find((one) => one.id === actingAs.value)?.name || "Unnamed Team Member",
 )
 
-/** The Host learns why it plays the owner again. */
 const takenName = computed(() => {
   if (takenFromHost.value === null) return null
   return seated.value.find((one) => one.id === takenFromHost.value)?.name || "Unnamed Team Member"
 })
 
-/** Host: the Team Members Guests play, and how many Guests still pick one. */
 const roster = computed(() =>
   seated.value
     .filter((one) => one.id in seats.value)

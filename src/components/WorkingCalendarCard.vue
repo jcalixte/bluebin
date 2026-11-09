@@ -58,7 +58,6 @@ onMounted(async () => {
   }
 })
 
-/** Adds the public holidays of the country and year the calendar does not hold yet. */
 async function addPublicHolidays() {
   importing.value = true
   importError.value = null

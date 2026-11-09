@@ -1,11 +1,8 @@
-/** A Demand Code: 2 to 4 letters, A to Z. */
 export const codePattern = /^[A-Z]{2,4}$/
 
 /**
- * The code proposed for a Demand label: the initials of its words, or the
- * first three letters of a one-word label. Same rule as `propose` in
- * backend/src/bluebin/demand_code.gleam, without the codes in use: the backend
- * refuses a code that another active Demand has.
+ * Same rule as `propose` in backend/src/bluebin/demand_code.gleam, without the codes in use: the
+ * backend refuses a code that another active Demand has.
  */
 export function proposeCode(label: string): string {
   const words = label

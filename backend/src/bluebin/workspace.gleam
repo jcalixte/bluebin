@@ -2,8 +2,8 @@ import gleam/http/request.{type Request}
 import gleam/list
 import gleam/string
 
-/// The authentik user id. Traefik forward auth copies it from authentik's
-/// answer (`authResponseHeaders`) and so replaces any value a client sends.
+/// Traefik forward auth copies it from authentik's answer
+/// (`authResponseHeaders`) and so replaces any value a client sends.
 /// With SSO off, nothing replaces it: the header then only picks a file.
 const header = "x-authentik-uid"
 
@@ -16,8 +16,6 @@ const allowed =
 
 /// The caller's own Workspace. Another owner's comes from the URL (`parse`),
 /// behind the guard of `bluebin/access`.
-/// No header means the `anonymous` workspace; `Error(Nil)` when the header is
-/// unsafe as a file name.
 pub fn from_request(request: Request(body)) -> Result(String, Nil) {
   case request.get_header(request, header) {
     Ok(uid) ->

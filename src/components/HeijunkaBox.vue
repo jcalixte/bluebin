@@ -4,7 +4,6 @@ import type { BacklogPiece } from "../types"
 
 const props = defineProps<{ sequence: BacklogPiece[] }>()
 
-/** The Piece under the pointer, here or in the sequence list. */
 const hovered = defineModel<string | null>("hovered", { default: null })
 
 type Lane = {
@@ -16,7 +15,6 @@ type Lane = {
   slots: (BacklogPiece | null)[]
 }
 
-/** One lane per Demand, in the order of its first Piece in the sequence. */
 const lanes = computed(() => {
   const size = props.sequence.length
   const byDemand = new Map<string, Lane>()
@@ -43,7 +41,6 @@ const columns = computed(() => ({
   gridTemplateColumns: `var(--lane-head) repeat(${props.sequence.length}, minmax(0.75rem, 2.5rem))`,
 }))
 
-/** A mark on the first position and every fifth, so a position is easy to find. */
 const marked = (index: number) => index === 0 || (index + 1) % 5 === 0
 
 function dueLabel(day: string) {

@@ -7,7 +7,6 @@ import { useWorkingCalendar } from "./useWorkingCalendar"
 
 export type Period = { from: string; to: string }
 
-/** How the two periods are picked: around a dated Line change, or by hand. */
 export type CompareMode = "change" | "custom"
 
 // Days are UTC days, as the API counts them.
@@ -19,7 +18,7 @@ function daysAgo(days: number) {
   return dayOf(Date.now() - days * dayMs)
 }
 
-/** The number of days of a period, both ends included. */
+/** Both ends included. */
 export function periodDays(period: Period) {
   return Math.round((time(period.to) - time(period.from)) / dayMs) + 1
 }
@@ -40,7 +39,6 @@ export function periodsAround(day: string, days: number, today: string, started:
 
 export type PeriodProblem = "missing" | "order" | "future" | "before_start"
 
-/** Why a period cannot be measured: it must be inside the Line's days, up to today. */
 export function periodProblem(
   period: Period,
   started: string | null,

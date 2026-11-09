@@ -91,8 +91,6 @@ pub fn workspaces_do_not_share_data_test() {
   assert list.length(left) == 3
 }
 
-/// The router writes under `data/workspaces`, so each test uses its own uid
-/// and removes the file it made.
 fn remove_workspace(uid: String) {
   let path = db.workspace_path(uid)
   let _ = simplifile.delete_all([path, path <> "-wal", path <> "-shm"])
@@ -251,7 +249,6 @@ pub fn the_routes_of_a_line_reach_its_own_data_test() {
   assert first == bare
 }
 
-/// A data wipe removes the directory while the server runs.
 pub fn a_removed_directory_is_made_again_test() {
   let directory = "data/test-wiped-" <> int.to_string(int.random(1_000_000))
   let path = directory <> "/a.db"
@@ -261,7 +258,6 @@ pub fn a_removed_directory_is_made_again_test() {
   let _ = simplifile.delete_all([directory])
 }
 
-/// No test with SSO off touches the accounts file.
 fn sso_off(hub: live.Hub) -> bluebin.Context {
   bluebin.Context(
     hub:,

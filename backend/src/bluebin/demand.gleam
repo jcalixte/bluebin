@@ -129,7 +129,7 @@ pub fn round_to_tenth(value: Float) -> Float {
 }
 
 /// The working days the Demand still needs at its pace so far: Pieces
-/// deployed ÷ working days elapsed. None until a Piece is deployed.
+/// deployed ÷ working days elapsed.
 pub fn remaining_working_days(demand: Demand) -> Option(Int) {
   case demand.pieces_deployed > 0 {
     False -> None
@@ -233,8 +233,7 @@ pub type CreateError {
   StoreFailed
 }
 
-/// Enters a Demand that starts today, with its Pieces waiting in the Backlog.
-/// With no `code`, Bluebin proposes one from the label. Returns its id.
+/// The Demand starts today, its Pieces waiting in the Backlog.
 pub fn create(
   connection: sqlight.Connection,
   label: String,
@@ -334,7 +333,6 @@ fn write_references(
   |> result.map(fn(_) { Nil })
 }
 
-/// A due date is a day, today or later.
 fn check_due(
   connection: sqlight.Connection,
   due_on: String,
@@ -358,8 +356,6 @@ fn check_due(
   }
 }
 
-/// The Demand, its Pieces in the Backlog numbered 1, 2…, and its flow event.
-/// Returns its id.
 fn insert(
   connection: sqlight.Connection,
   label: String,

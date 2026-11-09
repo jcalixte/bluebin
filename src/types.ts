@@ -1,5 +1,5 @@
 // The API shapes come from `./wire`, which `gleam dev` writes from
-// backend/src/bluebin/wire.gleam: change them there. Below: the SPA's own types.
+// backend/src/bluebin/wire.gleam: change them there.
 import type { Duration, ReorderEffect } from "./wire"
 
 export type {
@@ -53,7 +53,6 @@ export type {
   Workspace,
 } from "./wire"
 
-/** Help the Rework, offered in a pull warning before the Deviation (F14). */
 export type HelpOffer = {
   rework: string
   label: string

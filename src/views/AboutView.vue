@@ -68,7 +68,7 @@ onBeforeUnmount(() => {
   clearTimeout(unpinTimer)
 })
 
-/** One Blue Bin glyph. Full and empty differ by fill and border style, not by colour alone. */
+/** Full and empty differ by fill and border style, not by colour alone. */
 const fullBin = "size-7 rounded-field border-2 border-primary bg-primary"
 const emptyBin = "size-7 rounded-field border-2 border-dashed border-primary"
 const piece = "size-2.5 rounded-xs bg-base-content/70"

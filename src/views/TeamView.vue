@@ -8,7 +8,6 @@ import type { Rework, WorkStation } from "../types"
 const { line, error, loading } = useLine()
 const { current, ownWorkOnly } = useWorkspaces()
 
-/** My next thing of a Team Member, when who looks may open it. */
 function nextUrl(teamMember: string): string | null {
   if (ownWorkOnly.value && teamMember !== current.value?.teamMember) return null
   return `${pageUrl("/next")}?teamMember=${encodeURIComponent(teamMember)}`
@@ -112,7 +111,6 @@ const rows = computed<Row[]>(() => {
   return [...byId.values()]
 })
 
-/** Open Rework and Pieces in the Line that no Team Member holds. */
 const nobody = computed<Card[]>(() =>
   [...stations.value].reverse().flatMap((station) => [
     ...station.rework

@@ -3,7 +3,6 @@ import gleam/option.{None}
 import simplifile
 import wisp
 
-/// Serves the built SPA from `directory` for every `GET` outside `/api`.
 /// A path that is no file gets `index.html`, so a client route survives a
 /// reload; a missing asset stays a 404, never an HTML page with a JS type.
 pub fn serve(

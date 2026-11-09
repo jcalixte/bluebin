@@ -76,10 +76,9 @@ type Replay {
   Replay(open: Dict(String, Open), done: List(Pass))
 }
 
-/// Replays the flow events in order into the Passes of every Piece and
-/// Sub-Piece. A Piece is in hand from its pull (or Assembly, or resume) to its
-/// pause or its Blue Bin; it leaves the Blue Bin on the next pull from there,
-/// on its Split, on its Assembly (for its Sub-Pieces) or at its Deployment.
+/// A Piece is in hand from its pull (or Assembly, or resume) to its pause or
+/// its Blue Bin; it leaves the Blue Bin on the next pull from there, on its
+/// Split, on its Assembly (for its Sub-Pieces) or at its Deployment.
 pub fn replay(
   events: List(Event),
   children: Dict(String, List(String)),
@@ -306,12 +305,10 @@ pub fn span(
   Span(touch:, stagnation: int.max(0, to - from) - touch, stagnation_working:)
 }
 
-/// The sum of `intervals`, in Calendar Time.
 fn calendar_total(intervals: List(Interval)) -> Int {
   list.fold(intervals, 0, fn(total, one) { total + one.1 - one.0 })
 }
 
-/// The sum of `intervals`, in Working Time.
 fn working_total(calendar: Calendar, intervals: List(Interval)) -> Int {
   list.fold(intervals, 0, fn(total, one) {
     total + calendar.working_seconds(calendar, one.0, one.1)
@@ -544,7 +541,7 @@ pub fn load(
 }
 
 /// The first day of the Line, and the last `weeks` weeks, Monday to Sunday
-/// (UTC), the current week last: the points of the run chart (F38). The log is read once for all the weeks.
+/// (UTC), the current week last: the points of the run chart (F38).
 pub fn weekly(
   connection: sqlight.Connection,
   weeks: Int,
@@ -615,8 +612,6 @@ pub fn weekly(
   |> Ok
 }
 
-/// What the measures of one `load` share. The passes and the Rework touches
-/// are grouped by Piece or Sub-Piece once, so no measure rescans them.
 type Context {
   Context(
     calendar: Calendar,
@@ -696,7 +691,6 @@ fn measured(context: Context, intervals: List(Interval)) -> #(Int, Int) {
   #(calendar_total(intervals), working_total(context.calendar, intervals))
 }
 
-/// The touches of a Piece and its Sub-Pieces: their passes and their Rework.
 fn touches(context: Context, piece: String) -> List(Interval) {
   [piece, ..lookup(context.children, piece)]
   |> list.flat_map(fn(unit) {
@@ -708,7 +702,6 @@ fn touches(context: Context, piece: String) -> List(Interval) {
   })
 }
 
-/// The Pieces released in the period. The Lead Time ends at the Release.
 fn piece_measures(
   context: Context,
   pieces: List(PieceRow),
@@ -746,8 +739,7 @@ fn piece_measures(
   })
 }
 
-/// The Demands with a Piece released in the period. The Demand Lead Time
-/// shows once every Piece of the Demand is released.
+/// The Demand Lead Time shows once every Piece of the Demand is released.
 fn demand_measures(
   context: Context,
   demands: List(DemandRow),
@@ -902,7 +894,6 @@ fn query(
   |> result.replace_error(StoreFailed)
 }
 
-/// The Passes of every Piece and Sub-Piece, replayed from the log.
 fn load_passes(
   connection: sqlight.Connection,
   now: Int,

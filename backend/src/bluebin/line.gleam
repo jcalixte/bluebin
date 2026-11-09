@@ -117,7 +117,6 @@ pub fn load(
   Ok(list.map(stations, wire_station(_, rows)))
 }
 
-/// The rows of every Work Station, by its id.
 type Rows {
   Rows(
     parked: Dict(String, List(Parked)),

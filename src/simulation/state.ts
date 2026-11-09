@@ -1,13 +1,8 @@
 import { ref } from "vue"
 
-/**
- * The build for try.bluebin.app (`vite --mode simulation`): one Line that lives only in this page,
- * with no sign-in and no server. The API's own routes run in the browser on an in-memory SQLite
- * (see `start.ts` and `sim/` at the root). A constant, so the real build drops all of it.
- */
+/** A constant, so the real build drops the Simulation (`vite --mode simulation`). */
 export const simulation = import.meta.env.MODE === "simulation"
 
-/** Each site links to the other: the real app for a Line that stays, the Simulation to try. */
 export const appUrl = "https://bluebin.app"
 export const simulationUrl = "https://try.bluebin.app/line"
 
@@ -32,10 +27,8 @@ function readInvitation(): string | null {
 
 export const invitation = readInvitation()
 
-/** This page plays one Team Member in the Simulation of another page, its Host. */
 export const guest = invitation !== null
 
-/** Leaves the shared Simulation for one of this page only. */
 export function playAlone() {
   sessionStorage.removeItem(joinKey)
   location.assign("/line")
@@ -54,7 +47,6 @@ export function plugEngine(found: Engine) {
   engine = found
 }
 
-/** A Guest sends each call to its Host, which answers the status and the body. */
 type Remote = (method: string, path: string, body: string) => Promise<[number, string]>
 
 let remote: Remote | null = null
@@ -63,18 +55,15 @@ export function plugRemote(found: Remote) {
   remote = found
 }
 
-/** Each screen reads again after a change, as the live stream of the API makes it do. */
 export function onSimulatedChange(listener: () => void): () => void {
   changes.addEventListener("change", listener)
   return () => changes.removeEventListener("change", listener)
 }
 
-/** Tells each screen to read again; a Guest calls it when its Host announces a change. */
 export function changed() {
   changes.dispatchEvent(new Event("change"))
 }
 
-/** One call to the Line of this page, as `teamMember`: the Host answers its Guests with it too. */
 export function answer(
   method: string,
   path: string,
@@ -87,7 +76,6 @@ export function answer(
   return [status, text]
 }
 
-/** `fetch` for a route inside the Line, answered by the Simulation as `actingAs`. */
 export async function simulatedFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method ?? "GET").toUpperCase()
   const body = typeof init.body === "string" ? init.body : ""
@@ -101,7 +89,6 @@ export async function simulatedFetch(path: string, init: RequestInit = {}): Prom
   })
 }
 
-/** Starts the Line again from the demo data, or empty; the owner plays again. */
 export function restartSimulation(demo: boolean) {
   if (!engine) throw new Error("The Simulation is not ready.")
   engine.start(demo)

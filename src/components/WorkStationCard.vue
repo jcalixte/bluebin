@@ -17,7 +17,6 @@ const props = defineProps<{
   taktHours: number
   /** Whether who looks may act as this Team Member, or at all with none (`access.actor`). */
   canActAs: (teamMember?: string) => boolean
-  /** The signed-in Account's own Team Member in this Line, if any. */
   ownTeamMember?: string | null
 }>()
 
@@ -34,10 +33,6 @@ const emit = defineEmits<{
   closeAndon: [teamMember: string]
 }>()
 
-/**
- * Who takes a pulled Piece by default: the signed-in Account's own Team Member when it works at
- * this Work Station, else the only Team Member of a Work Station of one.
- */
 const defaultTeamMember = computed(() => {
   const own = props.ownTeamMember
   if (own && props.station.teamMembers.some((one) => one.id === own) && props.canActAs(own)) {
@@ -52,13 +47,8 @@ watch(defaultTeamMember, (id) => {
   teamMember.value = id
 })
 
-/**
- * Whether who looks acts as one of this Work Station's Team Members: only then may they pull a
- * Piece or hand one over here.
- */
 const actsHere = computed(() => props.station.teamMembers.some((one) => props.canActAs(one.id)))
 
-/** Who looks may make these Team Members Helpers of the Rework (F61). */
 function helpersToAdd(rework: Rework) {
   return rework.canHelp.filter((one) => props.canActAs(one.id))
 }

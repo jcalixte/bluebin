@@ -386,7 +386,6 @@ pub fn generated_decoders_decode_request_bodies_test() {
     )
   let assert Error(_) =
     json.parse("{\"kind\": \"piece\", \"id\": \"p-1\"}", assign)
-  // An absent and a null `Option` field are both None.
   let pull = wire_json.pull_input_decoder()
   let empty = wire.PullInput(station: "ws-web", team_member: None, reason: None)
   assert json.parse("{\"station\": \"ws-web\"}", pull) == Ok(empty)

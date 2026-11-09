@@ -4,12 +4,10 @@
  */
 export type Seats = Record<string, string>
 
-/** The Team Member a peer plays, or `null`. */
 export function seatOf(seats: Seats, peer: string): string | null {
   return Object.keys(seats).find((teamMember) => seats[teamMember] === peer) ?? null
 }
 
-/** Frees the seat of a peer, as when it leaves. */
 export function release(seats: Seats, peer: string): Seats {
   return Object.fromEntries(Object.entries(seats).filter(([, one]) => one !== peer))
 }
@@ -31,7 +29,6 @@ export function claim(
   return { ...release(seats, peer), [teamMember]: peer }
 }
 
-/** Drops the seats of Team Members removed from the Line. */
 export function keepPresent(seats: Seats, teamMembers: string[]): Seats {
   return Object.fromEntries(
     Object.entries(seats).filter(([teamMember]) => teamMembers.includes(teamMember)),

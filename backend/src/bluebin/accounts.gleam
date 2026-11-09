@@ -26,8 +26,7 @@ pub type AccountError {
   StoreFailed
 }
 
-/// The email the owner typed on a Team Member, and the Account that has it.
-/// The link holds once such an Account exists (ADR-0003).
+/// The link holds once an Account with `email` exists (ADR-0003).
 pub type Link {
   Link(team_member: String, email: String, account: Option(Account))
 }
@@ -92,8 +91,6 @@ pub fn email_of(request: Request(body)) -> Result(String, Nil) {
   }
 }
 
-/// The first and last name to suggest on the first sign-in, from the one
-/// name authentik knows: its first word, then the rest.
 pub fn suggested_name(request: Request(body)) -> #(String, String) {
   let name = request.get_header(request, name_header) |> result.unwrap("")
   case string.split_once(string.trim(name), " ") {
@@ -102,8 +99,7 @@ pub fn suggested_name(request: Request(body)) -> #(String, String) {
   }
 }
 
-/// The Account of `uid`, `None` before its first and last name are given.
-/// An email changed in authentik replaces the stored one.
+/// `None` before its first and last name are given.
 pub fn sign_in(
   database: String,
   uid: String,
@@ -133,7 +129,6 @@ pub fn sign_in(
   }
 }
 
-/// Makes the Account on its first save; later saves change its name.
 pub fn save(
   database: String,
   uid: String,
@@ -191,8 +186,8 @@ pub fn normal_email(email: String) -> Result(String, Nil) {
   }
 }
 
-/// The links of one Line. A link to a Team Member who left the Line grants
-/// nothing: the caller keeps only the Team Members it knows (ADR-0004).
+/// A link to a Team Member who left the Line grants nothing: the caller keeps
+/// only the Team Members it knows (ADR-0004).
 pub fn links(
   database: String,
   workspace: String,
@@ -355,8 +350,6 @@ fn first_duplicate(emails: List(String)) -> Option(String) {
   }
 }
 
-/// Each (Team Member, email) pair with its email made normal, or the reason
-/// to show the owner: an email that is none, or one given twice.
 pub fn check_emails(
   emails: List(#(String, String)),
 ) -> Result(List(#(String, String)), String) {
@@ -418,8 +411,6 @@ pub fn links_of(
   |> result.replace_error(Nil)
 }
 
-/// A Line is Private until its owner shares it. The last dated change wins,
-/// so the log is the state.
 pub fn is_shared(
   database: String,
   workspace: String,
@@ -460,7 +451,7 @@ pub fn share(
   |> result.replace_error(Nil)
 }
 
-/// The owner's name, to title a Workspace; `None` before the first sign-in.
+/// `None` before the first sign-in.
 pub fn name_of_uid(
   database: String,
   uid: String,

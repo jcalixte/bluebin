@@ -4,33 +4,23 @@ import type { Design, TeamMember } from "../wire"
 import { claim, keepPresent, release, seatOf, type Seats } from "./seats"
 import { actingAs, answer, changed, onSimulatedChange, plugRemote } from "./state"
 
-/**
- * A shared Simulation: the page that invites is the Host and runs the Line; each page that opens
- * its link is a Guest that plays one Team Member. The pages talk peer to peer (WebRTC); Trystero
- * finds them through public Nostr relays, which see only encrypted connection offers. Trystero
- * loads only when a page invites or joins.
- */
+/** Trystero finds peers through public Nostr relays, which see only encrypted connection offers. */
 
 const appId = "app.bluebin.try"
 
-/** How long a Guest waits for its Host to answer one call. */
 const callTimeoutMs = 15000
 
 /** A Team Member a Guest can pick: its Work Stations, and those it is Team Leader of. */
 export type Pickable = TeamMember & { leads: string[] }
-/** What the Host tells each Guest: who can be played, and who plays whom. */
 type Table = { teamMembers: Pickable[]; seats: Seats }
 type Call = { method: string; path: string; body: string }
 type Answer = { status: number; text: string }
 
-/** Team Member id → peer id of the Guest who plays it. */
 export const seats = ref<Seats>({})
 export const teamMembers = ref<Pickable[]>([])
 
-/** Host: the link to send, once it invites; and the Guests in the room. */
 export const inviteLink = ref<string | null>(null)
 export const guests = ref<string[]>([])
-/** Host: the Team Member it played until a Guest took it, or `null`. */
 export const takenFromHost = ref<string | null>(null)
 
 /**
@@ -85,7 +75,6 @@ function teamLeads(): Map<string, string[]> {
 let inviting: Promise<string> | null = null
 let stopHosting: (() => Promise<void>) | null = null
 
-/** Host: opens the room once and answers the link that Guests open. */
 export function invite(): Promise<string> {
   // A failed attempt must not stay cached: the next Invite tries again.
   inviting ??= startHosting().catch((cause: unknown) => {
@@ -104,7 +93,6 @@ async function startHosting(): Promise<string> {
     void table.send({ teamMembers: teamMembers.value, seats: seats.value }, { target })
   }
 
-  /** The Host plays the owner and each Team Member no Guest plays. */
   function setSeats(next: Seats) {
     seats.value = next
     if (actingAs.value in next) {
@@ -182,10 +170,6 @@ async function startHosting(): Promise<string> {
   return inviteLink.value
 }
 
-/**
- * Host: ends the shared Simulation for every Guest. The Line stays in this page; a new invitation
- * opens a new room, with a new link.
- */
 export async function endSharing() {
   const stop = stopHosting
   stopHosting = null
@@ -198,7 +182,6 @@ export async function endSharing() {
 
 let take: ((teamMember: string) => Promise<string>) | null = null
 
-/** Guest: joins the room of the link and sends every call of the Line to its Host. */
 export async function join(code: string) {
   const room = await open(code)
   const { table, change, call, take: takeSeat, end } = actions(room)

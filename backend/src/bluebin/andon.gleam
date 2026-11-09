@@ -13,8 +13,8 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import sqlight
 
-/// What calls for attention now. Computed on each read from the current state,
-/// the log and the Working Calendar; nothing here is stored.
+/// Computed on each read from the current state, the log and the Working
+/// Calendar; nothing here is stored.
 pub type Andon {
   /// A Team Member stopped the Work Station; its Team Leader closes it (F42).
   Stop(
@@ -55,7 +55,6 @@ pub type Bottleneck {
 /// One hour of Working Time (F15).
 const rework_wait_limit = 3600
 
-/// The Andons open now, with their wait in Working Time.
 pub fn current(
   connection: sqlight.Connection,
 ) -> Result(List(Andon), sqlight.Error) {
@@ -235,7 +234,6 @@ pub fn bottlenecks(
   |> Ok
 }
 
-/// Average Touch Time per Piece, divided by the Team Members who share the work.
 pub fn capacity_hours(
   station: measures.StationMeasure,
   team_members: Int,

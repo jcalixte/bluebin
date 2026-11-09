@@ -6,9 +6,8 @@ import { onSimulatedChange, simulation } from "../simulation/state"
 const reopenAfterMs = 5000
 
 /**
- * Reloads the screen on each change the API announces, and after a lost
- * stream comes back: events missed meanwhile are not replayed, the current
- * state is read again instead.
+ * Events missed while the stream is lost are not replayed: the state is read again when it comes
+ * back.
  */
 export function useLiveUpdates(reload: () => Promise<unknown>) {
   let source: EventSource | null = null

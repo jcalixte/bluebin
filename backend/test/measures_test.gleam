@@ -147,7 +147,6 @@ pub fn p85_is_the_nearest_rank_test() {
   assert measures.p85([]) == Error(Nil)
 }
 
-/// `from` to `to`, both included, in that order.
 fn span_of(from: Int, to: Int) -> List(Int) {
   case from == to, from < to {
     True, _ -> [from]
@@ -301,7 +300,6 @@ pub fn the_lead_time_ends_at_the_release_test() {
     piece.span
   }
   let at_deployment = measured()
-  // Held for 12 hours after its Deployment, then released.
   exec(
     connection,
     "update piece set released_at =
@@ -464,7 +462,6 @@ pub fn the_line_starts_at_its_first_event_test() {
       one(connection, "select date('now')"),
     )
     == order.Lt
-  // No Piece is released before the Line starts.
   list.each(history.weeks, fn(week) {
     case string.compare(week.to, history.started_on) == order.Lt {
       True -> {

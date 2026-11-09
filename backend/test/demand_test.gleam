@@ -313,11 +313,9 @@ pub fn only_a_piece_held_for_release_can_be_released_test() {
   let pieces = "p-" <> string.drop_start(id, 2)
   put_in_last_blue_bin(connection, pieces <> "-1")
   let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: True)
-  // The second Piece is still in the Backlog: the whole Release is refused.
   assert flow.release(connection, [pieces <> "-1", pieces <> "-2"])
     == Error(flow.PieceNotHere)
   let assert Ok([_]) = flow.held_for_release(connection)
-  // A Piece already released cannot be released again.
   let assert Ok(1) = flow.release(connection, [pieces <> "-1"])
   assert flow.release(connection, [pieces <> "-1"]) == Error(flow.PieceNotHere)
 }
@@ -487,7 +485,6 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from demand") == 0
 
-  // The empty Line runs: a Demand enters, its first Piece is pulled.
   let assert Ok(_) =
     demand.create(connection, "Search", "Retail", today(connection), 2, None)
   let assert Ok(id) = option.to_result(station.id, Nil)

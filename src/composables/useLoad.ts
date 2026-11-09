@@ -1,9 +1,6 @@
 import { ref } from "vue"
 
-/**
- * Wraps a read of the API in the `loading` and `error` state a screen shows. Only the
- * latest call writes: a slow answer that comes back after a newer call is dropped.
- */
+/** Only the latest call writes: a slow answer that comes back after a newer call is dropped. */
 export function useLoad<T>(read: () => Promise<T>, apply: (value: T) => void) {
   const error = ref<string | null>(null)
   const loading = ref(true)

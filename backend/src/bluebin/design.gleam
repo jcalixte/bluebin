@@ -133,8 +133,8 @@ pub fn load(
   Ok(#(Design(labels:, team_members:, steps:), held))
 }
 
-/// Each Work Station in Line order, with its step position and what it holds.
-/// `members` pairs a Work Station id with a Team Member id.
+/// In Line order, with its step position. `members` pairs a Work Station id
+/// with a Team Member id.
 fn load_stations(
   connection: sqlight.Connection,
   members: List(#(String, String)),
@@ -188,7 +188,6 @@ fn load_stations(
 
 /// The shape of the steps alone: one trunk Work Station per step, or a Split
 /// into two or more named Branches that run side by side until the Assembly.
-/// Nested Splits are not supported.
 pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
   use <- bool.guard(
     steps == [],
@@ -349,7 +348,6 @@ fn check_change(
   }
 }
 
-/// A Team Member is added on its own before the design names it.
 fn check_team_members(
   wanted: List(TeamMember),
   current: List(TeamMember),
@@ -373,7 +371,6 @@ fn check_team_members(
   })
 }
 
-/// A Work Station that holds work cannot go.
 fn check_removed_stations(
   current: Dict(String, Station),
   wanted_ids: List(String),
@@ -393,8 +390,7 @@ fn check_removed_stations(
   })
 }
 
-/// A Team Member with work in hand stays in its Work Station. `busy` pairs
-/// a Work Station id with a Team Member id.
+/// `busy` pairs a Work Station id with a Team Member id.
 fn check_busy(
   busy: List(#(String, String)),
   placed: List(#(Int, Station)),
@@ -1055,9 +1051,11 @@ type StationState {
   )
 }
 
-/// The saves of the Design that change the flow, newest first (F38). Events of
-/// one save, a few seconds apart at most, make one change. Renames and labels
-/// change no flow, so they are not listed.
+/// Events of one save land at most this many seconds apart.
+const save_window = 2
+
+/// The saves of the Design that change the flow, newest first (F38). Renames
+/// and labels change no flow, so they are not listed.
 pub fn line_changes(
   connection: sqlight.Connection,
 ) -> Result(List(wire.LineChange), Nil) {
@@ -1103,7 +1101,7 @@ pub fn line_changes(
   |> list.fold([], fn(changes, item) {
     let #(second, at, text) = item
     case changes {
-      [#(last, opened_at, texts), ..rest] if second - last <= 2 -> [
+      [#(last, opened_at, texts), ..rest] if second - last <= save_window -> [
         #(second, opened_at, [text, ..texts]),
         ..rest
       ]
@@ -1332,7 +1330,6 @@ fn wire_suggestion(suggestion: measures.Suggestion) -> wire.BlueBinSuggestion {
   )
 }
 
-/// The Design of a `PUT /api/design` body.
 pub fn from_input(input: wire.DesignInput) -> Design {
   let wire.Labels(demand:, demands:, piece:, pieces:) = input.labels
   Design(
@@ -1358,8 +1355,8 @@ pub fn from_input(input: wire.DesignInput) -> Design {
   )
 }
 
-/// The email of each Team Member in a Design body; one with no `email`, sent
-/// by an SPA older than the links, keeps its link.
+/// A Team Member with no `email`, sent by an SPA older than the links, keeps
+/// its link.
 pub fn emails_of(input: wire.DesignInput) -> List(#(String, String)) {
   list.filter_map(input.team_members, fn(team_member) {
     option.to_result(team_member.email, Nil)

@@ -32,7 +32,6 @@ const workspace = computed(() =>
   workspaces.value.find((one) => (workspaceOwner ? one.owner === workspaceOwner : one.own)),
 )
 
-/** In the Simulation, the visitor is the owner or a Member, as `actingAs` says. */
 const simulated = computed<LineEntry>(() => ({
   id: lineId,
   name: "Simulation",
@@ -48,7 +47,6 @@ const current = computed(() =>
 /** Until the menu loads, the own Workspace is the owner's and any other is look-only. */
 const role = computed<LineRole>(() => current.value?.role ?? (workspaceOwner ? "viewer" : "owner"))
 
-/** A Viewer only looks: the API refuses every flow action (F53). */
 const canAct = computed(() => role.value !== "viewer")
 
 /**
@@ -61,10 +59,6 @@ function canActAs(teamMember?: string): boolean {
   return teamMember === undefined || teamMember === current.value?.teamMember
 }
 
-/**
- * A Member sees only their own My next thing; the owner, who looks, and a Member with no Team
- * Member see any Team Member's.
- */
 const ownWorkOnly = computed(() => role.value === "member" && !!current.value?.teamMember)
 
 type Home = { owner: string | null; id: string; teamMember: string }
@@ -84,7 +78,6 @@ export function homeLine(all: Workspace[], owner: string | null, line: string): 
   return held.find((one) => one.owner === owner && one.id === line) ?? held[0] ?? null
 }
 
-/** Not inside a Line: the Line menu and the role of this page's Line. */
 export function useWorkspaces() {
   loading ??= fetchWorkspaces()
   return {

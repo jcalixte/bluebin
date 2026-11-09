@@ -15,13 +15,8 @@ const teamMemberId = ref(
   new URLSearchParams(location.search).get("teamMember") ?? localStorage.getItem(storageKey) ?? "",
 )
 
-/**
- * A Member sees only their own work, so they pick no name; the owner sees their own work first,
- * then any Team Member's. In the Simulation, "Play as" makes the visitor that Member.
- */
 const { current, canActAs, ownWorkOnly: pinned } = useWorkspaces()
 
-/** Who looks may not act as the Team Member picked: then no action shows. */
 const acting = computed(() => canActAs(teamMemberId.value))
 watch(
   () => current.value?.teamMember,
@@ -115,7 +110,7 @@ const ruleIndex = computed(() => rules.findIndex((rule) => rule.kind === next.va
 
 type Tone = "error" | "primary" | "warning" | "neutral"
 
-/** What the hero card says. Rework is a defect, so it is the only red. */
+/** Rework is a defect, so it is the only red. */
 const focus = computed<{ tone: Tone; eyebrow: string; title: string; action: string | null }>(
   () => {
     const now = next.value

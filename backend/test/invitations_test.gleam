@@ -15,7 +15,6 @@ const flow_answer =
 const invitation_answer =
   "{\"pk\": \"dee58273-8435-43de-a789-1a7f3de09497\", \"name\": \"bluebin-x\"}"
 
-/// A fake authentik: answers the flow lookup, then the new invitation.
 fn authentik(request: request.Request(String)) -> Result(#(Int, String), Nil) {
   case request.method, request.path {
     http.Get, "/api/v3/flows/instances/bluebin-invitation/" ->
@@ -99,7 +98,6 @@ pub fn only_akadmin_makes_an_invitation_test() {
   )
 
   assert call(context(True, path), signed_in("ada")).status == 403
-  // Signed in with no email: like `/api/account`.
   let no_email = [
     #("x-authentik-uid", "a1b2c3"),
     #("x-authentik-username", "akadmin"),

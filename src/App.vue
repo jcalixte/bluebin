@@ -37,7 +37,6 @@ const { labels } = useLabels()
 const { account, checked } = useAccount()
 const { role, workspaces, ready } = useWorkspaces()
 
-/** Design is for the owner; Measures is not for who only looks at a Shared Line. */
 const shownViews = computed(() =>
   views.filter(
     (view) =>
@@ -50,7 +49,6 @@ const unnamed = computed(() =>
   account.value?.signedIn && !account.value.named ? account.value : null,
 )
 
-/** `akadmin`, authentik's own admin, who invites people. */
 const isAdmin = computed(() => account.value?.signedIn === true && account.value.admin)
 const inviting = ref(false)
 
@@ -58,11 +56,9 @@ function viewAt(path: string): View {
   return views.find((view) => view.path === path.replace(/\/+$/, "")) ?? views[0]
 }
 
-/** Opened at `/`, as after sign-in: the Account's own work comes first (F45). */
 const landing = ref(location.pathname === "/" && !lookOnly && !simulation)
 settleLineUrl()
 const opened = ref<View>(viewAt(viewPath()))
-/** A link to a hidden tab, as Measures in a Shared Line, opens the first tab. */
 const current = computed<View>({
   get: () =>
     shownViews.value.some((view) => view.id === opened.value.id) ? opened.value : views[0],

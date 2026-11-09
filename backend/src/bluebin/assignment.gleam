@@ -259,8 +259,6 @@ fn help_the_rework(
   )
 }
 
-/// The Rework a Team Member helps (`helping_sql`), or one they can help
-/// (`help_the_rework_sql`), read as `Helping`.
 fn help(
   connection: sqlight.Connection,
   sql: String,

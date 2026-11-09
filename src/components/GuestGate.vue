@@ -16,7 +16,6 @@ let patience: ReturnType<typeof setTimeout> | undefined
 
 const playing = computed(() => host.value === "here" && mySeat.value !== null)
 
-/** One heading per screen, so the Guest reads at once where they stand. */
 const heading = computed(() => {
   if (joinError.value) return "This link did not open"
   if (host.value === "ended") return "The host ended this Simulation"
@@ -25,7 +24,6 @@ const heading = computed(() => {
   return "Pick the Team Member you play"
 })
 
-/** Without a host, playing alone is the way on; while a host is here, it is a side exit. */
 const stranded = computed(() => joinError.value !== null || host.value === "ended")
 
 function lookAgain() {

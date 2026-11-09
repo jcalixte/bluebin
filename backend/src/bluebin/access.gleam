@@ -17,15 +17,12 @@ pub type Role {
   NoRole
 }
 
-/// What a route inside a Line asks of the Role.
 pub type Need {
   Read
   Flow
   Own
 }
 
-/// Why `need` found no Need: the path is no route inside a Line, or the
-/// route takes other methods.
 pub type Refusal {
   NoSuchRoute
   WrongMethod(allowed: List(http.Method))
@@ -223,7 +220,6 @@ pub fn linked_elsewhere(
   }
 }
 
-/// A Workspace the Account can open, with the Lines it opens there.
 pub type OpenWorkspace {
   OpenWorkspace(
     owner: String,
@@ -288,8 +284,6 @@ pub fn workspaces(
   }
 }
 
-/// The Workspaces where `email` is a Team Member: its Lines there, and the
-/// Shared Lines of those Workspaces, by owner name.
 fn other_workspaces(
   accounts_database: String,
   caller: String,

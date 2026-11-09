@@ -186,9 +186,7 @@ create table helper (
 );
 ",
   ),
-  // The Demand Code replaces the Piece label initials ("US") in the Piece
-  // Reference. `backfill_codes` then gives each Demand its code and writes
-  // the references again.
+  // `migrate` runs `backfill_codes` after this step.
   #(
     3,
     "
@@ -206,7 +204,6 @@ update piece
   ),
 ]
 
-/// The Pieces already past a Work Station get a pass, after the seed.
 const seed_passes_sql =
   "
 insert or ignore into piece_pass (piece_id, station_id, team_member_id, at)
@@ -458,15 +455,13 @@ pub type Start {
   Empty
 }
 
-/// Makes the database from `start` when it is new. The SPA sends several
-/// requests at once on its first load, so the slow path holds the write lock:
-/// the other requests wait, then see the current version.
+/// The SPA sends several requests at once on its first load, so the slow path
+/// holds the write lock: the other requests wait, then see the current version.
 pub fn ready(database: String, start: Start) -> Result(Nil, sqlight.Error) {
   open(database, start, function.identity, fn(_) { Ok(Nil) })
 }
 
-/// `ready`, then `run` on the same connection. A store failure of `ready`
-/// goes through `on_store_error`.
+/// `ready`, then `run` on the same connection.
 pub fn open(
   database: String,
   start: Start,
@@ -552,8 +547,7 @@ pub fn prepare(
   }
 }
 
-/// Runs the steps from `version` up to `schema_version`, in the caller's
-/// transaction. A version with no step is refused, not read.
+/// Runs in the caller's transaction.
 fn migrate(
   connection: sqlight.Connection,
   version: Int,
@@ -583,8 +577,6 @@ fn migrate(
   }
 }
 
-/// Gives each Demand the code Bluebin proposes from its label, unique among
-/// the active Demands, then writes every Piece Reference again.
 fn backfill_codes(
   connection: sqlight.Connection,
 ) -> Result(Nil, sqlight.Error) {
@@ -658,8 +650,7 @@ pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   seed(connection)
 }
 
-/// Starts a Line from scratch: no Demand, Piece or history, one Team Member
-/// in one Work Station. The Working Calendar and the labels stay.
+/// Unlike `reset`, the Working Calendar and the labels stay.
 pub fn reset_empty(
   connection: sqlight.Connection,
 ) -> Result(Nil, sqlight.Error) {
@@ -667,10 +658,8 @@ pub fn reset_empty(
   sqlight.exec(empty_sql <> start_empty_sql, connection)
 }
 
-/// Runs `run` in one write transaction: commits on Ok, rolls back on Error.
 /// `begin immediate` takes the write lock at once, so a busy database waits
-/// at the start instead of failing at the first write. A failed begin or
-/// commit goes through `on_store_error`.
+/// at the start instead of failing at the first write.
 pub fn transaction(
   connection: sqlight.Connection,
   on_store_error store_error: fn(sqlight.Error) -> e,
@@ -696,7 +685,7 @@ pub fn transaction(
   }
 }
 
-/// The current time, in seconds since the Unix epoch, from SQLite's clock.
+/// In seconds since the Unix epoch, from SQLite's clock.
 pub fn now(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
   sqlight.query(
     "select cast(strftime('%s', 'now') as integer)",

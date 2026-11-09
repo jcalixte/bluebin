@@ -119,8 +119,6 @@ pub fn next_of_its_demand(sequence: List(Placed), piece: Placed) -> Bool {
   })
 }
 
-/// The sequence once `piece_id` is made urgent: it goes behind the Pieces
-/// already urgent, ahead of every other one.
 pub fn make_urgent(sequence: List(Placed), piece_id: String) -> List(Placed) {
   let #(urgent, rest) =
     list.split_while(sequence, fn(placed) { placed.piece.urgent != None })
@@ -129,7 +127,6 @@ pub fn make_urgent(sequence: List(Placed), piece_id: String) -> List(Placed) {
   list.flatten([urgent, moved, others])
 }
 
-/// The Pieces a Team Member can make urgent and that would really move.
 pub fn can_be_urgent(sequence: List(Placed)) -> List(String) {
   sequence
   |> list.filter(fn(placed) {
@@ -268,8 +265,8 @@ pub fn on_plan(cell: MixCell) -> Bool {
   float.absolute_value(int.to_float(cell.real) -. cell.planned) <=. 1.0
 }
 
-/// The days shown, added up. A plan under 1 Piece a day keeps each day on
-/// plan with no Piece at all, so only the sum shows a Demand left behind.
+/// A plan under 1 Piece a day keeps each day on plan with no Piece at all,
+/// so only the sum shows a Demand left behind.
 pub fn total(cells: List(MixCell)) -> MixCell {
   MixCell(
     day: "",

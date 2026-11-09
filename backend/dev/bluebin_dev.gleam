@@ -35,7 +35,6 @@ pub type Generated {
   Generated(gleam: String, typescript: String)
 }
 
-/// One custom type of `wire.gleam`.
 type Definition {
   /// One variant with labelled fields: a JSON object.
   Record(name: String, doc: List(String), fields: List(Field))
@@ -183,7 +182,6 @@ fn variant_kind(variant: String, type_: String) -> String {
   |> snake_case
 }
 
-/// `PriorityItem` → `Item`
 fn last_word(name: String) -> String {
   let #(lower, rest) =
     string.to_graphemes(name)
@@ -261,8 +259,6 @@ fn doc_before(source: String, start: Int) -> List(String) {
   |> list.reverse
   |> list.map(fn(line) { string.trim(string.drop_start(line, 3)) })
 }
-
-// Gleam -----------------------------------------------------------------------
 
 const max_width = 80
 
@@ -548,8 +544,6 @@ fn decode_function(kind: Kind) -> String {
   }
 }
 
-// TypeScript ------------------------------------------------------------------
-
 const ts_max_width = 100
 
 fn typescript_module(definitions: List(Definition)) -> String {
@@ -655,9 +649,6 @@ fn ts(kind: Kind) -> String {
   }
 }
 
-// Names -----------------------------------------------------------------------
-
-/// `forecast_late_days` → `forecastLateDays`
 fn camel_case(label: String) -> String {
   case string.split(label, "_") {
     [first, ..rest] -> first <> string.concat(list.map(rest, string.capitalise))
@@ -665,7 +656,6 @@ fn camel_case(label: String) -> String {
   }
 }
 
-/// `BlueBin` → `blue_bin`
 fn snake_case(name: String) -> String {
   name
   |> string.to_graphemes

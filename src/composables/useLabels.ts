@@ -21,7 +21,6 @@ async function fetchLabels() {
   }
 }
 
-/** Until the API answers, the labels are the defaults. */
 export function useLabels() {
   loaded ??= fetchLabels()
 

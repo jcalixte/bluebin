@@ -15,7 +15,6 @@ import { useLiveUpdates } from "./useLiveUpdates"
 /** Must match max_name_length in backend/src/bluebin/line.gleam. */
 export const maxNameLength = 40
 
-/** A draft holds every field, `id` and `branch` included. */
 export type DraftStation = Required<DesignStationInput> & {
   key: string
   locked: boolean
@@ -90,7 +89,6 @@ function toPayload(design: DesignShape): DesignInput {
   }
 }
 
-/** The base name, or the base name with the first free number: "New step 2". */
 export function freshName(base: string, taken: string[]) {
   const names = new Set(taken.map((name) => name.trim()))
   if (!names.has(base)) return base
@@ -285,7 +283,6 @@ export function useDesign() {
     }
   }
 
-  /** Saved with the other changes. Each Work Station lets the Team Member go too. */
   function removeTeamMember(id: string) {
     if (!draft.value) return
     draft.value.teamMembers = draft.value.teamMembers.filter((teamMember) => teamMember.id !== id)
@@ -311,7 +308,6 @@ export function useDesign() {
     return station.key
   }
 
-  /** Gives the key of the new step. */
   function addStepAfter(index: number) {
     const step: DraftStep = {
       key: newKey(),
@@ -332,7 +328,6 @@ export function useDesign() {
     }
   }
 
-  /** A locked Work Station cannot move past another locked Work Station. */
   function canMove(index: number, delta: -1 | 1) {
     const list = steps()
     const other = list[index + delta]
@@ -353,11 +348,6 @@ export function useDesign() {
     return isBranchStep(step) || !step.stations.some((station) => station.locked)
   }
 
-  /**
-   * An empty step gets one Work Station. A trunk step splits into 2 Branches,
-   * or into the Branches of the Branch step next to it. A Branch step gets
-   * one more Branch. Gives the key of the first new Work Station.
-   */
   function splitStep(index: number): string | null {
     const list = steps()
     const step = list[index]
@@ -379,7 +369,6 @@ export function useDesign() {
     return keys[0]
   }
 
-  /** The last Branch left in a step becomes its one Work Station, unless it is locked. */
   function removeStation(stepIndex: number, stationIndex: number) {
     const step = steps()[stepIndex]
     const station = step?.stations[stationIndex]

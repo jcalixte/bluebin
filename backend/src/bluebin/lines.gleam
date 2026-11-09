@@ -9,8 +9,8 @@ import gleam/string
 import simplifile
 import sqlight
 
-/// The Line every account has from its first request. Its data stays
-/// in the file the account had when it could own only one Line.
+/// The Line every account has; its data stays in the account's original,
+/// pre-Lines database file.
 pub const first = "main"
 
 /// The other Lines: this prefix and lowercase hex digits only, so an
@@ -70,7 +70,6 @@ pub fn database(
   open(workspace, line, start, fn(_) { Ok(path(workspace, line)) })
 }
 
-/// Like `database`, then `run` on the same connection.
 fn open(
   workspace: String,
   line: String,
@@ -102,8 +101,7 @@ fn guard_known(
   }
 }
 
-/// Every Line of the workspace, by name. Makes the first one from `start`
-/// when it is new.
+/// Makes the first Line from `start` when it is new.
 pub fn list(
   workspace: String,
   start: db.Start,
@@ -220,8 +218,7 @@ fn random_hex() -> String {
   |> string.pad_start(to: 12, with: "0")
 }
 
-/// The live channel of one Line: two Lines, of one account or
-/// of two, never wake each other's screens.
+/// Two Lines, of one account or of two, never wake each other's screens.
 pub fn channel(workspace: String, line: String) -> String {
   workspace <> "/" <> line
 }

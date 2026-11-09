@@ -119,8 +119,6 @@ pub fn the_seed_runs_once_test() {
   assert count(connection, "select count(*) from work_station") == 9
 }
 
-/// Row counts of every table, plus the step names and Piece states, so two
-/// databases with the same seed give the same fingerprint.
 fn fingerprint(connection: sqlight.Connection) -> List(Int) {
   [
     "demand", "piece", "flow_event", "team_member", "work_station",
@@ -564,7 +562,6 @@ pub fn a_rework_on_an_assembled_piece_finds_its_author_in_the_branch_test() {
   assert raised.assignee == Some("Alice")
 }
 
-/// The Work Stations of `GET /api/line`, as JSON.
 fn load_line(
   connection: sqlight.Connection,
 ) -> Result(json.Json, sqlight.Error) {
@@ -672,7 +669,6 @@ fn pieces_of(
 
 pub fn a_new_piece_upstream_waits_behind_the_one_downstream_test() {
   use connection <- with_seeded_database()
-  // Marc takes BIL-2 from Analysis into Tech Conception, downstream.
   let assert Ok(_) = flow.finish(connection, "ws-analysis", "p-billing-2", None)
   let assert Ok(_) =
     flow.pull(connection, "ws-conception", Some("pe-marc"), None)
@@ -841,8 +837,7 @@ pub fn without_a_kanban_a_team_member_helps_downstream_test() {
 
 pub fn a_work_station_stopped_by_its_rework_gets_help_only_from_the_two_test() {
   use connection <- with_seeded_database()
-  // Everyone has free hands and no Kanban; QA iOS waits on rw-1, which
-  // Alice repairs.
+  // QA iOS waits on rw-1, which Alice repairs.
   exec(connection, "delete from kanban; update piece set assignee = null")
   // QA iOS found the defect, iOS made it: both Help the Rework (F19).
   let assert assignment.HelpTheRework(
@@ -863,7 +858,6 @@ pub fn a_work_station_stopped_by_its_rework_gets_help_only_from_the_two_test() {
     }
   })
 
-  // Once Karim helps, his next thing is the help itself.
   let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
   let assert assignment.Helping(rework: "rw-1", assignee: "Alice", ..) =
     next_of(connection, "pe-karim")
@@ -874,7 +868,6 @@ pub fn the_holder_of_a_piece_under_rework_helps_its_repair_test() {
   // In the seed, Yasmine holds OFF-4 at QA iOS while Alice repairs it.
   let assert assignment.HelpTheRework(rework: "rw-1", assignee: "Alice", ..) =
     next_of(connection, "pe-yasmine")
-  // Once repaired, she finishes it.
   let assert Ok(_) = flow.repair_rework(connection, "rw-1")
   let assert assignment.Continue(assignment.Transform(id: "p-offline-4-ios", ..)) =
     next_of(connection, "pe-yasmine")
@@ -1134,7 +1127,6 @@ pub fn the_backlog_releases_the_head_of_the_heijunka_sequence_test() {
   assert state_of(connection, head.piece.id) == "in_flow"
 }
 
-/// The next Piece of the Demand whose next Piece comes last in the sequence.
 fn last_demand_next_piece(sequence: List(heijunka.Placed)) -> heijunka.Placed {
   let assert Ok(last) = list.last(sequence)
   let assert Ok(placed) =
@@ -1463,7 +1455,6 @@ pub fn the_next_thing_shows_only_the_andons_of_my_work_stations_test() {
   let assert [andon.Stop(station_id: "ws-web", ..)] = mine
 }
 
-/// A database of a version with no migration step is refused, never read.
 pub fn a_database_of_another_schema_version_is_refused_test() {
   use connection <- db.with_connection_at(":memory:")
   exec(connection, "create table person (id text); pragma user_version = 15;")
@@ -1519,7 +1510,6 @@ pub fn helpers_join_a_rework_and_its_repair_ends_their_help_test() {
     )
     == 1
   assert helpers(connection) == 2
-  // Joining the same Rework again changes nothing.
   let assert Ok(again) = flow.help_the_rework(connection, "rw-1", "pe-karim")
   assert again.paused == []
   assert count(
@@ -1568,7 +1558,6 @@ pub fn only_the_two_work_stations_help_while_someone_repairs_test() {
 
 pub fn a_helper_helps_one_piece_and_their_own_rework_comes_first_test() {
   use connection <- with_seeded_database()
-  // A second open Rework on another Piece, found by QA iOS.
   exec(
     connection,
     "insert into rework (id, piece_id, station_id, description, raised_by,
@@ -1629,7 +1618,6 @@ pub fn a_version_2_database_migrates_to_the_latest_version_test() {
     ) <> "'") == 1
   let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
 
-  // A version with no step is refused, not read.
   exec(connection, "pragma user_version = 1;")
   let assert Error(_) = db.prepare(connection, db.Demo)
 }
@@ -1721,12 +1709,10 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
 
 pub fn finishing_a_piece_under_rework_accepts_its_repair_test() {
   use connection <- with_seeded_database()
-  // Karim helps rw-1 on OFF-4 while his CHK-9 waits.
   let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
   let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
   assert state_of(connection, "p-checkout-9-ios") == "paused"
 
-  // QA iOS finishes OFF-4: the Rework closes, as if repaired.
   let assert Ok(_) =
     flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
   assert state_of(connection, "p-offline-4-ios") == "in_bin"

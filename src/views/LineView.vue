@@ -76,7 +76,6 @@ function pullHere(station: string, who?: string) {
   void run((why) => pull(station, who, why))
 }
 
-/** The open Reworks found by the Work Station that tried to pull, first in its warning. */
 const helpOffers = computed<HelpOffer[]>(() => {
   const at = pullAt.value
   if (!at || !pending.value?.confirm.split(" ").includes("pull_with_an_open_rework")) return []
@@ -146,7 +145,6 @@ const lastPosition = computed(() =>
   (line.value?.stations ?? []).reduce((last, station) => Math.max(last, station.position), 0),
 )
 
-/** The Piece each Team Member transforms now, with its Work Station. */
 const activePieces = computed(() => {
   const active = new Map<string, { piece: string; station: string; position: number }>()
   for (const station of line.value?.stations ?? []) {

@@ -63,8 +63,6 @@ pub fn a_route_missing_from_the_table_is_refused_test() {
   assert access.need(http.Post, ["api", "reset"]) == Error(access.NoSuchRoute)
 }
 
-/// An unknown path inside a Line answers 404 and a known one with another
-/// method 405, once the Line opens to the caller.
 pub fn an_unknown_route_in_a_line_is_not_found_test() {
   let world = world(True)
   let #(unknown, _) =
@@ -169,7 +167,6 @@ fn call(
   #(response.status, simulate.read_body(response))
 }
 
-/// A visitor who is not signed in: forward auth sends no identity header.
 fn call_anonymous(
   context: bluebin.Context,
   method: http.Method,
@@ -405,7 +402,6 @@ pub fn a_shared_line_is_look_only_for_every_account_test() {
       world.carol,
       "{\"station\": \"ws-web\"}",
     )
-  // Bob is a Team Member in no Line of this Workspace: he looks too.
   let #(bob, _) = call(world.context, http.Get, main, world.bob, "")
   let #(bob_acts, _) =
     call(
@@ -471,7 +467,6 @@ pub fn the_menu_names_the_owners_own_team_member_test() {
     menu,
     "\"id\":\"main\",\"name\":\"Line\",\"shared\":false,\"role\":\"owner\",\"teamMember\":\"pe-alice\"",
   )
-  // The owner is no Team Member of the other Line.
   assert string.contains(menu, "\"role\":\"owner\",\"teamMember\":null")
 }
 
@@ -592,8 +587,6 @@ fn access_share(path: String, workspace: String, line: String) {
   accounts.share(path, workspace, line, True)
 }
 
-/// With SSO on, a request with no uid passed no sign-in: it gets no
-/// Workspace, not even through a path that climbs out of `/api/s/`.
 pub fn with_sso_on_no_uid_gets_no_workspace_test() {
   let world = world(True)
   let #(lines, _) = call_anonymous(world.context, http.Get, "/api/lines", "")

@@ -36,7 +36,6 @@ pub fn propose(label: String, taken: List(String)) -> String {
   }
 }
 
-/// `code` in capitals, if it has two to four letters A to Z.
 pub fn check(code: String) -> Result(String, String) {
   let code = string.uppercase(string.trim(code))
   let length = string.length(code)

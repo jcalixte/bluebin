@@ -7,7 +7,6 @@ const props = defineProps<{
   message: string
   effects?: ReorderEffect[]
   busy?: boolean
-  /** Help the Rework, offered before the Deviation (F14). */
   helps?: HelpOffer[]
 }>()
 
@@ -15,7 +14,6 @@ const emit = defineEmits<{ confirm: [reason: string]; cancel: []; help: [rework:
 
 const reason = ref("")
 
-/** With a help to offer, the reason opens only when the Team Member goes on anyway. */
 const goingOn = ref((props.helps ?? []).length === 0)
 
 function confirm() {

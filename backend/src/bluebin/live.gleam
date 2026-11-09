@@ -8,7 +8,7 @@ import gleam/result
 import gleam/string_tree
 import mist
 
-/// What an open stream receives. `Heartbeat` never leaves the stream itself.
+/// `Heartbeat` never leaves the stream itself.
 pub opaque type Signal {
   Changed(action: String)
   Heartbeat
@@ -99,8 +99,8 @@ pub fn subscribe(hub: Hub, workspace: String, stream: Subject(Signal)) -> Nil {
   process.send(hub, Subscribe(workspace, stream))
 }
 
-/// Tell the open screens of one workspace that its state changed. `action`
-/// names what did it, for example `pull` or `rework/repair`.
+/// `action` names what changed the state, for example `pull` or
+/// `rework/repair`.
 pub fn announce(hub: Hub, workspace: String, action: String) -> Nil {
   process.send(hub, Announce(workspace, action))
 }
@@ -112,8 +112,8 @@ pub fn changed_action(signal: Signal) -> Result(String, Nil) {
   }
 }
 
-/// `GET /api/events`: one `change` event per announced change. A screen that
-/// reconnects reloads the current state, so no event is replayed.
+/// `GET /api/events`. A screen that reconnects reloads the current state, so
+/// no event is replayed.
 pub fn stream(
   request: Request(mist.Connection),
   hub: Hub,

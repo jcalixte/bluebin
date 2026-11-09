@@ -12,7 +12,6 @@ defineEmits<{
   release: [pieces: string[]]
 }>()
 
-/** One group per Demand, in the order of its first Deployment. */
 const demands = computed(() => {
   const groups = new Map<string, { label: string; pieces: HeldForRelease[] }>()
   for (const one of props.held) {

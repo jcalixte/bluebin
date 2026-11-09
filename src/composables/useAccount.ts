@@ -28,7 +28,6 @@ async function fetchAccount() {
 
 let loaded: Promise<void> | null = null
 
-/** Not inside a Line: one Account for every Line and Workspace. */
 export function useAccount() {
   loaded ??= fetchAccount()
 

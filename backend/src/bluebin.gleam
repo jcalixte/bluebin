@@ -472,8 +472,7 @@ fn start_of(context: Context) -> db.Start {
   }
 }
 
-/// Where the Team Member links of a Line live. Only a signed-in owner with
-/// SSO on links anyone (F52).
+/// Only a signed-in owner with SSO on links anyone (F52).
 type Linking {
   Linking(accounts: String, workspace: String, line: String)
 }
@@ -1028,7 +1027,6 @@ fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
   }
 }
 
-/// `weeks` from 4 to 52; 12 by default.
 fn weekly_measures(request: wisp.Request, database: String) -> wisp.Response {
   let weeks =
     wisp.get_query(request)
@@ -1398,7 +1396,7 @@ fn flow_failure(failure: flow.FlowError) -> wisp.Response {
   }
 }
 
-/// A flow action the state of the Line refuses: the SPA shows `message`.
+/// The SPA shows `message`.
 fn conflict(code: String, message: String) -> wisp.Response {
   json.object([
     #("error", json.string(code)),
@@ -1617,7 +1615,6 @@ fn rename_step(
   }
 }
 
-/// The JSON body decoded, or `400` with `message`.
 fn require_body(
   request: wisp.Request,
   decoder: decode.Decoder(a),
@@ -1631,7 +1628,6 @@ fn require_body(
   }
 }
 
-/// A domain step after `require_body`: `400` with the same `message`.
 fn or_bad_request(
   result: Result(a, Nil),
   message: String,
@@ -1643,7 +1639,6 @@ fn or_bad_request(
   }
 }
 
-/// A read of the Line: its JSON, or `500` when the store fails.
 fn read(
   database: String,
   load: fn(sqlight.Connection) -> Result(json.Json, error),

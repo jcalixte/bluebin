@@ -20,9 +20,7 @@ const compact = computed(() => width.value < compactBelow)
 const margin = computed(() => ({ top: 24, right: compact.value ? 52 : 84, bottom: 28, left: 52 }))
 const plotWidth = computed(() => width.value - margin.value.left - margin.value.right)
 const plotHeight = computed(() => height - margin.value.top - margin.value.bottom)
-/** Space for one week label on the x axis. */
 const labelSpace = 64
-/** Least space between two limit labels, so they do not overlap. */
 const labelGap = 14
 /** Below this, the natural limits are noise themselves. */
 const minimumWeeks = 5
@@ -131,7 +129,6 @@ const signal = (index: number) => signals.value.get(index) ?? null
 const rule =
   "Circled: a signal, a week outside the limits or 3 of 4 weeks past halfway to one. Other weeks are noise."
 
-/** Weeks since the chosen change, and those that signal against the weeks before it. */
 const signalsAfter = computed(() => {
   if (!limits.value || changeDay.value === null) return null
   const after = points.value.filter(
@@ -173,7 +170,6 @@ const path = computed(() =>
     .join(" "),
 )
 
-/** The baseline weeks behind a light band, only when they are the weeks before a change. */
 const baselineBand = computed(() => {
   if (!limits.value || changeDay.value === null) return null
   const first = baseline.value[0]
@@ -183,10 +179,6 @@ const baselineBand = computed(() => {
   return { x: from, width: x(last.index) + step.value / 2 - from }
 })
 
-/**
- * The limit lines with their labels at the right. Limits are dashed, as thresholds; the
- * average is solid. Labels move apart when lines are too close to read them.
- */
 const limitLines = computed(() => {
   const found = limits.value
   if (!found) return []

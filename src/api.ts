@@ -28,7 +28,6 @@ const lineUrl = /^(?:\/([ws])\/([A-Za-z0-9_-]+))?\/lines\/([a-z0-9-]+)(\/.*)?$/
 
 type Page = { owner: string | null; id: string; view: string; look: boolean }
 
-/** The last Line opened: a bare id in the own Workspace, `<owner-uid>/<id>` in another. */
 function rememberedLine(): { owner: string | null; id: string } {
   const remembered = localStorage.getItem(lastLineKey) ?? firstLine
   const [owner, id] = remembered.includes("/") ? remembered.split("/", 2) : [null, remembered]
@@ -59,7 +58,6 @@ export const lineId = page.id
 /** The owner of the Workspace this page shows; `null` for the Account's own. */
 export const workspaceOwner = page.owner
 
-/** Opened by the look-only link of a Shared Line: no Account, no Line menu, nothing to act on. */
 export const lookOnly = page.look
 
 export function viewPath(): string {
@@ -96,12 +94,10 @@ export function api(path: string): string {
   return `${lineApi}${path.slice("/api".length)}`
 }
 
-/** `fetch` of a route inside the Line of this page, `/api/demands` for example. */
 export function lineFetch(path: string, init?: RequestInit): Promise<Response> {
   return simulation ? simulatedFetch(path, init) : fetch(api(path), init)
 }
 
-/** The body of each flow action, as the server decodes it. */
 export type ActionBodies = {
   "/api/pull": PullInput
   "/api/finish": FinishInput

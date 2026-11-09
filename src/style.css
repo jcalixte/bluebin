@@ -11,8 +11,7 @@
   --color-primary-content: #ffffff;
   --color-error: #d12a05;
   --color-error-content: #ffffff;
-  /* OK / good news green. Mid-tone: white labels on it are 2.9:1 (fails AA),
-     so the content colour is dark (6.6:1), not white like primary/error. */
+  /* White labels on it are 2.9:1 (fails AA), so the content colour is dark (6.6:1). */
   --color-success: #10ac84;
   --color-success-content: #0d1117;
 }
@@ -42,9 +41,6 @@
      warning itself (9.0:1 on base-100). */
   --color-warning-ink: light-dark(var(--color-warning-content), var(--color-warning));
 
-  /* A step or Work Station just added in the Design: it grows in place and a
-     primary ring around it holds, then fades, so the eye finds where it
-     arrived. Opacity and transform only. */
   --animate-arrive: arrive 250ms ease-out;
   --animate-glow: glow 1.2s ease-out;
 

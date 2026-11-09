@@ -64,7 +64,6 @@ pub fn links_change_with_a_dated_log_test() {
   let assert Ok(Nil) =
     save([#("pe-a", "a@example.com"), #("pe-b", "b@example.com")], all)
   let first = emails(path, "w1")
-  // Two Team Members swap their emails in one save.
   let assert Ok(Nil) =
     save([#("pe-a", "b@example.com"), #("pe-b", "a@example.com")], all)
   let swapped = emails(path, "w1")

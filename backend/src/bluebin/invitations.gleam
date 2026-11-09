@@ -31,7 +31,7 @@ pub type Invitation {
 }
 
 pub type Failure {
-  /// `AUTHENTIK_TOKEN` is not set, so Bluebin cannot call authentik.
+  /// `AUTHENTIK_TOKEN` is not set.
   NoToken
   Unreachable
   /// authentik answered with this status, as 403 when the token lacks a permission.
@@ -60,8 +60,7 @@ pub fn invite(token: Option(String), send: Send) -> Invite {
   }
 }
 
-/// A single-use invitation to the sign-up flow, valid for a week from `now`
-/// (Unix seconds).
+/// `now` is in Unix seconds.
 pub fn create(
   token: String,
   send: Send,

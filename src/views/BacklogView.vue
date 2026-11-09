@@ -16,7 +16,6 @@ const { labels } = useLabels()
 const { line } = useLine()
 const { canAct } = useWorkspaces()
 
-/** The Piece under the pointer, shared by the Heijunka box and the list. */
 const hovered = ref<string | null>(null)
 
 const sequence = computed(() => backlog.value?.sequence ?? [])

@@ -16,7 +16,6 @@ type Row = {
   who: string | null
 }
 
-/** Flow order: the first Work Station first, Deployment last. */
 const rows = computed<Row[]>(() => {
   const stations = [...props.line.stations].sort((a, b) => a.position - b.position)
   const atStations = stations.flatMap((station) => [

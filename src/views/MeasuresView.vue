@@ -81,7 +81,6 @@ function problemText(problem: PeriodProblem) {
   }[problem]
 }
 
-/** Why the periods around the change are shorter than asked. */
 const shortenedBy = computed(() => {
   if (lengths.value[1] >= days.value) return null
   return after.to === today ? "recent" : "line_start"
@@ -228,7 +227,6 @@ const summary = computed(() => {
   ]
 })
 
-/** The share of Demands to deliver by their due date. */
 const onTimeTarget = 0.9
 
 const onTime = computed(() => {

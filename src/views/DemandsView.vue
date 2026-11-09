@@ -18,7 +18,6 @@ function created() {
   void load()
 }
 
-/** The Demand furthest behind its Takt Time comes first, then the earliest due. */
 const sorted = computed(() =>
   [...demands.value].sort((a, b) => a.taktGap - b.taktGap || a.dueOn.localeCompare(b.dueOn)),
 )

@@ -78,7 +78,6 @@ const percentOf = (pieces: number) =>
 const deployedPercent = computed(() => percentOf(props.demand.piecesDeployed))
 const taktPercent = computed(() => timeShare.value * 100)
 
-/** The Pieces the Takt Time asked for by now and that are not deployed yet. */
 const owedPercent = computed(() => Math.max(0, taktPercent.value - deployedPercent.value))
 
 const ticks = computed(() => {
@@ -299,7 +298,7 @@ const barLabel = computed(
   );
 }
 
-/* One gap per Piece boundary: Pieces flow one at a time, so the bar counts them. */
+/* One gap per Piece boundary. */
 .ticks {
   background: linear-gradient(to right, transparent calc(100% - 2px), var(--color-base-100) 0) 0 0 /
     calc(100% / var(--ticks)) 100% repeat-x;

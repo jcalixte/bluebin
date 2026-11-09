@@ -1,6 +1,4 @@
 #!/usr/bin/env sh
-# Run the Gleam test suite.
-#
 #   ./test.sh            native when Erlang/OTP and a C toolchain are present,
 #                        otherwise inside the same image the deploy builds from
 #   ./test.sh --docker   force the container route

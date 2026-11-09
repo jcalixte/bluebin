@@ -77,7 +77,6 @@ function stepName(index: number) {
   return draft.value?.steps[index]?.name.trim() || `step ${index + 1}`
 }
 
-/** Keys of the steps and Work Stations just added: they show where they arrive. */
 const arrived = ref(new Set<string>())
 const arrivalMs = 1200
 
@@ -105,7 +104,6 @@ function arrivalClass(key: string) {
     : ""
 }
 
-/** The list of things to fix opens from the save bar, so it never pushes the Line down. */
 const showProblems = ref(false)
 
 function confirmDiscard() {

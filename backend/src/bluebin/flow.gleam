@@ -321,8 +321,7 @@ fn release_one(
   deliver_demand_when_complete(connection, piece_id)
 }
 
-/// A Piece deployed and held for Release, with its wait since its Deployment
-/// in Calendar Time.
+/// `waiting_hours` runs from its Deployment, in Calendar Time.
 pub type HeldForRelease {
   HeldForRelease(
     id: String,
@@ -465,7 +464,7 @@ pub fn make_urgent(
   }
 }
 
-/// The Work Station the Backlog feeds; a reorder is its Deviation.
+/// A Backlog reorder is this Work Station's Deviation.
 fn first_station(connection: sqlight.Connection) -> Result(String, FlowError) {
   one(
     connection,
@@ -735,7 +734,6 @@ pub fn stop_helping(
   }
 }
 
-/// The Rework that `team_member_id` helps and its Piece, if any.
 fn helped_rework(
   connection: sqlight.Connection,
   team_member_id: String,
@@ -1481,7 +1479,6 @@ fn load_station(
   )
 }
 
-/// The position of the last Work Station, whose Blue Bin feeds the Deployment.
 fn last_position(connection: sqlight.Connection) -> Result(Int, FlowError) {
   one(
     connection,
@@ -1873,7 +1870,6 @@ fn rows(
   |> result.replace_error(StoreFailed)
 }
 
-/// The first row, or `none` when the query answers no row.
 fn one(
   connection: sqlight.Connection,
   sql: String,

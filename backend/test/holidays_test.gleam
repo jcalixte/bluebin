@@ -6,7 +6,6 @@ import simplifile
 
 const france = "[{\"date\":\"2026-01-01\",\"localName\":\"Jour de l'an\"}]"
 
-/// A cache directory of its own, so the tests never share a file.
 fn fresh_directory() -> String {
   let directory =
     "build/test-holidays/" <> int.to_string(int.absolute_value(unique()))

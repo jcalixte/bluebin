@@ -1,6 +1,5 @@
 import type { Holiday } from "./types"
 
-/** The server asks Nager.Date (https://date.nager.at) and keeps its answers a month. */
 const api = "/api/holidays"
 
 export type Country = { countryCode: string; name: string }
@@ -30,7 +29,6 @@ export async function fetchCountries(): Promise<Country[]> {
   return countries.sort((a, b) => a.name.localeCompare(b.name))
 }
 
-/** The nationwide public holidays of `country` in `year`, by date. */
 export async function fetchPublicHolidays(year: number, country: string): Promise<Holiday[]> {
   const holidays = await get<NagerHoliday[]>(`/${year}/${country}`)
   return holidays

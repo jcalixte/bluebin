@@ -571,8 +571,6 @@ pub type TeamMemberView {
   )
 }
 
-// Request bodies ---------------------------------------------------------------
-
 /// `PUT /api/account`.
 pub type AccountInput {
   AccountInput(first_name: String, last_name: String)
