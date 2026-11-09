@@ -15,6 +15,8 @@ import bluebin/lines
 import bluebin/live
 import bluebin/measures
 import bluebin/spa
+import bluebin/wire
+import bluebin/wire_json
 import bluebin/workspace
 import envoy
 import gleam/bool
@@ -659,27 +661,28 @@ fn list_workspaces(
 }
 
 fn workspace_json(workspace: access.OpenWorkspace) -> json.Json {
-  json.object([
-    #("owner", json.string(workspace.owner)),
-    #("name", json.nullable(workspace.name, json.string)),
-    #("own", json.bool(workspace.own)),
-    #("lines", json.array(workspace.lines, open_line_json)),
-  ])
+  wire.Workspace(
+    owner: workspace.owner,
+    name: workspace.name,
+    own: workspace.own,
+    lines: list.map(workspace.lines, line_entry),
+  )
+  |> wire_json.workspace
 }
 
-fn open_line_json(open: access.OpenLine) -> json.Json {
+fn line_entry(open: access.OpenLine) -> wire.LineEntry {
   let role = case open.role {
-    access.Member(_) -> "member"
-    access.Viewer -> "viewer"
-    access.Owner | access.NoRole -> "owner"
+    access.Member(_) -> wire.MemberRole
+    access.Viewer -> wire.ViewerRole
+    access.Owner | access.NoRole -> wire.OwnerRole
   }
-  json.object([
-    #("id", json.string(open.line.id)),
-    #("name", json.string(open.line.name)),
-    #("shared", json.bool(open.shared)),
-    #("role", json.string(role)),
-    #("teamMember", json.nullable(open.team_member, json.string)),
-  ])
+  wire.LineEntry(
+    id: open.line.id,
+    name: open.line.name,
+    shared: open.shared,
+    role:,
+    team_member: open.team_member,
+  )
 }
 
 fn list_lines(workspace: String, start: db.Start) -> wisp.Response {

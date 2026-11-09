@@ -21,3 +21,46 @@ pub fn demand(value: wire.Demand) -> json.Json {
     #("forecastLateDays", json.nullable(value.forecast_late_days, json.int)),
   ])
 }
+
+pub fn holiday(value: wire.Holiday) -> json.Json {
+  json.object([
+    #("day", json.string(value.day)),
+    #("label", json.string(value.label)),
+  ])
+}
+
+pub fn working_calendar(value: wire.WorkingCalendar) -> json.Json {
+  json.object([
+    #("days", json.array(value.days, json.int)),
+    #("start", json.string(value.start)),
+    #("end", json.string(value.end)),
+    #("holidays", json.array(value.holidays, holiday)),
+  ])
+}
+
+pub fn line_role(value: wire.LineRole) -> json.Json {
+  json.string(case value {
+    wire.OwnerRole -> "owner"
+    wire.MemberRole -> "member"
+    wire.ViewerRole -> "viewer"
+  })
+}
+
+pub fn line_entry(value: wire.LineEntry) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("shared", json.bool(value.shared)),
+    #("role", line_role(value.role)),
+    #("teamMember", json.nullable(value.team_member, json.string)),
+  ])
+}
+
+pub fn workspace(value: wire.Workspace) -> json.Json {
+  json.object([
+    #("owner", json.string(value.owner)),
+    #("name", json.nullable(value.name, json.string)),
+    #("own", json.bool(value.own)),
+    #("lines", json.array(value.lines, line_entry)),
+  ])
+}

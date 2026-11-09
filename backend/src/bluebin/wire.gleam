@@ -37,3 +37,47 @@ pub type Demand {
     forecast_late_days: Option(Int),
   )
 }
+
+pub type Holiday {
+  Holiday(day: String, label: String)
+}
+
+/// `days` uses 0 for Sunday to 6 for Saturday; `start` and `end` are UTC "HH:MM".
+pub type WorkingCalendar {
+  WorkingCalendar(
+    days: List(Int),
+    start: String,
+    end: String,
+    holidays: List(Holiday),
+  )
+}
+
+/// What the Account may do in a Line; the server checks it again (H10).
+pub type LineRole {
+  OwnerRole
+  MemberRole
+  ViewerRole
+}
+
+pub type LineEntry {
+  LineEntry(
+    id: String,
+    name: String,
+    /// Anyone with its look-only link sees a Shared Line, signed in or not.
+    shared: Bool,
+    role: LineRole,
+    /// The Account's own Team Member, for a member.
+    team_member: Option(String),
+  )
+}
+
+/// One Workspace of the Line menu, from `GET /api/workspaces`.
+pub type Workspace {
+  Workspace(
+    owner: String,
+    /// The owner's name; null before their first sign-in.
+    name: Option(String),
+    own: Bool,
+    lines: List(LineEntry),
+  )
+}

@@ -1,4 +1,6 @@
 import bluebin/db
+import bluebin/wire
+import bluebin/wire_json
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json
@@ -339,18 +341,13 @@ pub fn decoder() -> decode.Decoder(Calendar) {
 }
 
 pub fn to_json(calendar: Calendar) -> json.Json {
-  json.object([
-    #("days", json.array(calendar.days, json.int)),
-    #("start", json.string(format_time(calendar.start))),
-    #("end", json.string(format_time(calendar.end))),
-    #(
-      "holidays",
-      json.array(calendar.holidays, fn(holiday) {
-        json.object([
-          #("day", json.string(holiday.day)),
-          #("label", json.string(holiday.label)),
-        ])
-      }),
-    ),
-  ])
+  wire.WorkingCalendar(
+    days: calendar.days,
+    start: format_time(calendar.start),
+    end: format_time(calendar.end),
+    holidays: list.map(calendar.holidays, fn(holiday) {
+      wire.Holiday(day: holiday.day, label: holiday.label)
+    }),
+  )
+  |> wire_json.working_calendar
 }

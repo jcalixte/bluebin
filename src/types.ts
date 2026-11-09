@@ -1,5 +1,5 @@
 // Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
-export type { Demand } from "./wire"
+export type { Demand, Holiday, LineEntry, LineRole, WorkingCalendar, Workspace } from "./wire"
 
 export type BlueBin = {
   slot: number
@@ -335,19 +335,6 @@ export type Measures = {
   }
 }
 
-export type Holiday = {
-  day: string
-  label: string
-}
-
-/** `days` uses 0 for Sunday to 6 for Saturday; `start` and `end` are UTC "HH:MM". */
-export type WorkingCalendar = {
-  days: number[]
-  start: string
-  end: string
-  holidays: Holiday[]
-}
-
 /** The names a Line gives to its Demands and Pieces (F41). */
 export type Labels = {
   demand: string
@@ -438,25 +425,3 @@ export type Account =
       firstName: string
       lastName: string
     }
-
-/** What the Account may do in a Line; the server checks it again (H10). */
-export type LineRole = "owner" | "member" | "viewer"
-
-export type LineEntry = {
-  id: string
-  name: string
-  /** Anyone with its look-only link sees a Shared Line, signed in or not. */
-  shared: boolean
-  role: LineRole
-  /** The Account's own Team Member, for a member. */
-  teamMember: string | null
-}
-
-/** One Workspace of the Line menu, from `GET /api/workspaces`. */
-export type Workspace = {
-  owner: string
-  /** The owner's name; null before their first sign-in. */
-  name: string | null
-  own: boolean
-  lines: LineEntry[]
-}

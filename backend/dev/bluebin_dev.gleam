@@ -376,15 +376,16 @@ fn typescript_module(definitions: List(Definition)) -> String {
 }
 
 fn typescript_type(definition: Definition) -> String {
-  let head =
-    "\n" <> jsdoc(definition.doc, "") <> "export type " <> definition.name
-  case definition {
+  let head = "export type " <> definition.name
+  "\n"
+  <> jsdoc(definition.doc, "")
+  <> case definition {
     Record(fields:, ..) -> head <> " = " <> ts_object(fields, [], "") <> "\n"
     Enum(variants:, ..) -> {
       let kinds =
         list.map(variants, fn(variant) { "\"" <> variant.kind <> "\"" })
       let line = head <> " = " <> string.join(kinds, " | ")
-      case string.length(line) - 1 <= ts_max_width {
+      case string.length(line) <= ts_max_width {
         True -> line <> "\n"
         False ->
           head
