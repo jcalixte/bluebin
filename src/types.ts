@@ -265,6 +265,8 @@ export type MixRow = {
   demand: string
   label: string
   cells: MixCell[]
+  /** The days shown, added up. Absent from a backend older than this field. */
+  total?: Omit<MixCell, "day">
 }
 
 /** `sequence` is the Heijunka Sequence: its first Piece leaves the Backlog next. */

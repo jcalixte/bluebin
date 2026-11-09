@@ -161,7 +161,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
             <h3 class="card-title text-base">Product Mix</h3>
             <p class="text-sm opacity-70">
               Pieces that left the Backlog each day, against the plan of each Demand's Takt Time.
-              More than 1 Piece apart is off plan.
+              More than 1 Piece apart, on one day or over all the days, is off plan.
             </p>
             <div class="overflow-x-auto">
               <table class="table table-sm">
@@ -175,6 +175,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                     >
                       {{ dateLabel(cell.day, { weekday: "short", day: "numeric" }) }}
                     </th>
+                    <th class="border-l border-base-300 text-center">Total</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -187,6 +188,16 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                         :title="`${cell.real} left the Backlog, ${cell.planned} planned`"
                       >
                         {{ cell.real }} / {{ cell.planned }}
+                      </span>
+                    </td>
+                    <td class="border-l border-base-300 text-center">
+                      <span
+                        v-if="row.total"
+                        class="badge badge-sm whitespace-nowrap font-semibold tabular-nums"
+                        :class="row.total.onPlan ? 'badge-success' : 'badge-error'"
+                        :title="`${row.total.real} left the Backlog over these days, ${row.total.planned} planned`"
+                      >
+                        {{ row.total.real }} / {{ row.total.planned }}
                       </span>
                     </td>
                   </tr>

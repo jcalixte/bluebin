@@ -1216,6 +1216,16 @@ pub fn a_day_is_on_plan_within_one_piece_of_gap_test() {
   assert heijunka.on_plan(heijunka.MixCell(..cell, planned: 1.2)) == True
 }
 
+pub fn days_with_no_piece_add_up_to_off_plan_test() {
+  let cell = heijunka.MixCell(day: "2026-11-02", planned: 0.7, real: 0)
+  let days = [cell, cell, cell, cell, heijunka.MixCell(..cell, real: 1)]
+  assert list.all(days, heijunka.on_plan)
+  let sum = heijunka.total(days)
+  assert sum.planned == 3.5
+  assert sum.real == 1
+  assert heijunka.on_plan(sum) == False
+}
+
 /// Every hour of every day is Working Time, so a test never depends on the
 /// clock it runs at.
 const always_working =

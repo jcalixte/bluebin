@@ -268,6 +268,18 @@ pub fn on_plan(cell: MixCell) -> Bool {
   float.absolute_value(int.to_float(cell.real) -. cell.planned) <=. 1.0
 }
 
+/// The days shown, added up. A plan under 1 Piece a day keeps each day on
+/// plan with no Piece at all, so only the sum shows a Demand left behind.
+pub fn total(cells: List(MixCell)) -> MixCell {
+  MixCell(
+    day: "",
+    planned: demand.round_to_tenth(
+      list.fold(cells, 0.0, fn(sum, cell) { sum +. cell.planned }),
+    ),
+    real: list.fold(cells, 0, fn(sum, cell) { sum + cell.real }),
+  )
+}
+
 pub fn to_json(backlog: Backlog, mix: List(MixRow)) -> json.Json {
   let urgent_ok = can_be_urgent(backlog.sequence)
   json.object([
@@ -303,6 +315,17 @@ pub fn to_json(backlog: Backlog, mix: List(MixRow)) -> json.Json {
                 #("real", json.int(cell.real)),
                 #("onPlan", json.bool(on_plan(cell))),
               ])
+            }),
+          ),
+          #(
+            "total",
+            json.object({
+              let sum = total(row.cells)
+              [
+                #("planned", json.float(sum.planned)),
+                #("real", json.int(sum.real)),
+                #("onPlan", json.bool(on_plan(sum))),
+              ]
             }),
           ),
         ])
