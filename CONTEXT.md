@@ -287,7 +287,7 @@ _Avoid_: hidden Line, secret Line
 - A linked **Team Member** shows the first and last name of its **Account**; the owner names only the **Team Members** with no **Account**
 - A **Workspace** has exactly one owner **Account**; its owner and each **Account** that is a **Team Member** in one of its **Lines** can open it
 - A **Simulation** belongs to no **Workspace** and no **Account**; it starts from the demo data, follows the same rules as any **Line**, and ends when its page closes
-- A **Simulation** has one **Host** and any number of **Guests**; each **Guest** plays exactly one **Team Member**, and the **Simulation** ends for every **Guest** when the page of its **Host** closes
+- A **Simulation** has one **Host** and any number of **Guests**; each **Guest** plays exactly one **Team Member**, and the **Simulation** ends for every **Guest** when its **Host** ends it or closes its page; the **Line** stays with the **Host**
 - Only the owner of a **Workspace** makes, renames, empties or redesigns its **Lines** (**Work Stations**, **Team Members**, **Blue Bins**, labels), and makes each one **Shared** or **Private**
 - A **Team Member** with an **Account** does the daily flow of their **Line** (pull, **Andon**, **Rework**, **Deviation**, **Assignment**, **Release**) and adds **Demands**
 - A linked **Team Member** acts only through their own **Account**; the owner acts for the **Team Members** with no **Account**

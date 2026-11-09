@@ -53,10 +53,18 @@ async function choose(teamMember: string) {
           <p role="alert" class="alert alert-error">{{ joinError }}</p>
         </template>
 
+        <template v-else-if="host === 'ended'">
+          <p>
+            The host ended the shared Simulation for every Guest. Ask the host for a new link, or
+            play one alone.
+          </p>
+        </template>
+
         <template v-else-if="host === 'gone'">
           <p>
-            The host closed the Simulation, so it ended for every Guest. Ask the host for a new
-            link, or play one alone.
+            The host is no longer here: the host closed the Simulation, or the connection dropped.
+            Reload this page to look for the host again, ask the host for a new link, or play one
+            alone.
           </p>
         </template>
 
@@ -80,11 +88,19 @@ async function choose(teamMember: string) {
             <li v-for="one in teamMembers" :key="one.id">
               <button
                 type="button"
-                class="btn btn-block justify-between"
+                class="btn btn-block h-auto min-h-12 justify-between py-2 text-left"
                 :disabled="one.id in seats || picking !== null"
                 @click="choose(one.id)"
               >
-                <span>{{ one.name || "Unnamed Team Member" }}</span>
+                <span class="grid gap-0.5">
+                  <span>{{ one.name || "Unnamed Team Member" }}</span>
+                  <span v-if="one.stations.length" class="text-sm font-normal opacity-70">{{
+                    one.stations.join(", ")
+                  }}</span>
+                  <span v-if="one.leads.length" class="text-sm font-normal">
+                    Team Leader of {{ one.leads.join(", ") }}
+                  </span>
+                </span>
                 <span v-if="one.id in seats" class="text-sm opacity-70">Another Guest</span>
                 <span
                   v-else-if="picking === one.id"

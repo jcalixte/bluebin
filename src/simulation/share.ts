@@ -1,6 +1,6 @@
 import { computed, ref } from "vue"
 import type { Room } from "trystero"
-import type { TeamMemberName } from "../wire"
+import type { Design, TeamMember } from "../wire"
 import { claim, keepPresent, release, seatOf, type Seats } from "./seats"
 import { actingAs, answer, changed, onSimulatedChange, plugRemote } from "./state"
 
@@ -16,21 +16,28 @@ const appId = "app.bluebin.try"
 /** How long a Guest waits for its Host to answer one call. */
 const callTimeoutMs = 15000
 
+/** A Team Member a Guest can pick: its Work Stations, and those it is Team Leader of. */
+export type Pickable = TeamMember & { leads: string[] }
 /** What the Host tells each Guest: who can be played, and who plays whom. */
-type Table = { teamMembers: TeamMemberName[]; seats: Seats }
+type Table = { teamMembers: Pickable[]; seats: Seats }
 type Call = { method: string; path: string; body: string }
 type Answer = { status: number; text: string }
 
 /** Team Member id → peer id of the Guest who plays it. */
 export const seats = ref<Seats>({})
-export const teamMembers = ref<TeamMemberName[]>([])
+export const teamMembers = ref<Pickable[]>([])
 
 /** Host: the link to send, once it invites; and the Guests in the room. */
 export const inviteLink = ref<string | null>(null)
 export const guests = ref<string[]>([])
+/** Host: the Team Member it played until a Guest took it, or `null`. */
+export const takenFromHost = ref<string | null>(null)
 
-/** Guest: whether its Host answered, and the Team Member it plays. */
-export const host = ref<"looking" | "here" | "gone">("looking")
+/**
+ * Guest: whether its Host answered, closed its page (`gone`) or ended the shared Simulation
+ * (`ended`); and the Team Member it plays.
+ */
+export const host = ref<"looking" | "here" | "gone" | "ended">("looking")
 const me = ref("")
 export const mySeat = computed(() => seatOf(seats.value, me.value))
 
@@ -58,21 +65,40 @@ function actions(room: Room) {
     change: room.makeAction<null>("change"),
     call: room.makeAction<Call, Answer>("call", { kind: "request" }),
     take: room.makeAction<string, string>("take", { kind: "request" }),
+    end: room.makeAction<null>("end"),
   }
 }
 
+/** Work Station names by the id of their Team Leader, from the Design the owner sees. */
+function teamLeads(): Map<string, string[]> {
+  const leads = new Map<string, string[]>()
+  const [status, text] = answer("GET", "/api/design", "", "")
+  if (status !== 200) return leads
+  for (const step of (JSON.parse(text) as Design).steps) {
+    for (const station of step.stations) {
+      leads.set(station.teamLeader, [...(leads.get(station.teamLeader) ?? []), station.name])
+    }
+  }
+  return leads
+}
+
 let inviting: Promise<string> | null = null
+let stopHosting: (() => Promise<void>) | null = null
 
 /** Host: opens the room once and answers the link that Guests open. */
 export function invite(): Promise<string> {
-  inviting ??= startHosting()
+  // A failed attempt must not stay cached: the next Invite tries again.
+  inviting ??= startHosting().catch((cause: unknown) => {
+    inviting = null
+    throw cause
+  })
   return inviting
 }
 
 async function startHosting(): Promise<string> {
   const code = `${randomCode(9)}.${randomCode(16)}`
   const room = await open(code)
-  const { table, change, call, take } = actions(room)
+  const { table, change, call, take, end } = actions(room)
 
   function sendTable(target: string | null = null) {
     void table.send({ teamMembers: teamMembers.value, seats: seats.value }, { target })
@@ -81,18 +107,27 @@ async function startHosting(): Promise<string> {
   /** The Host plays the owner and each Team Member no Guest plays. */
   function setSeats(next: Seats) {
     seats.value = next
-    if (actingAs.value in next) actingAs.value = ""
+    if (actingAs.value in next) {
+      takenFromHost.value = actingAs.value
+      actingAs.value = ""
+    }
     sendTable()
   }
 
   function readTeamMembers() {
     const [status, text] = answer("GET", "/api/team-members", "", "")
     if (status !== 200) return
-    teamMembers.value = (JSON.parse(text) as TeamMemberName[]).map(({ id, name }) => ({ id, name }))
+    const leads = teamLeads()
+    teamMembers.value = (JSON.parse(text) as TeamMember[]).map(({ id, name, stations }) => ({
+      id,
+      name,
+      stations,
+      leads: leads.get(id) ?? [],
+    }))
   }
 
   readTeamMembers()
-  onSimulatedChange(() => {
+  const stopListening = onSimulatedChange(() => {
     readTeamMembers()
     setSeats(
       keepPresent(
@@ -135,8 +170,30 @@ async function startHosting(): Promise<string> {
     setSeats(release(seats.value, peer))
   }
 
+  stopHosting = async () => {
+    stopListening()
+    room.onPeerJoin = null
+    room.onPeerLeave = null
+    await end.send(null)
+    await room.leave()
+  }
+
   inviteLink.value = `${location.origin}/line#join=${code}`
   return inviteLink.value
+}
+
+/**
+ * Host: ends the shared Simulation for every Guest. The Line stays in this page; a new invitation
+ * opens a new room, with a new link.
+ */
+export async function endSharing() {
+  const stop = stopHosting
+  stopHosting = null
+  inviting = null
+  inviteLink.value = null
+  guests.value = []
+  seats.value = {}
+  await stop?.()
 }
 
 let take: ((teamMember: string) => Promise<string>) | null = null
@@ -144,7 +201,7 @@ let take: ((teamMember: string) => Promise<string>) | null = null
 /** Guest: joins the room of the link and sends every call of the Line to its Host. */
 export async function join(code: string) {
   const room = await open(code)
-  const { table, change, call, take: takeSeat } = actions(room)
+  const { table, change, call, take: takeSeat, end } = actions(room)
   let hostId: string | null = null
 
   table.onMessage = (found, { peerId }) => {
@@ -157,8 +214,13 @@ export async function join(code: string) {
   change.onMessage = (_, { peerId }) => {
     if (peerId === hostId) changed()
   }
+  end.onMessage = (_, { peerId }) => {
+    if (peerId !== hostId) return
+    host.value = "ended"
+    void room.leave()
+  }
   room.onPeerLeave = (peer) => {
-    if (peer === hostId) host.value = "gone"
+    if (peer === hostId && host.value === "here") host.value = "gone"
   }
 
   function toHost() {

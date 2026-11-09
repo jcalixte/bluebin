@@ -195,7 +195,9 @@ Host and keeps the only copy of the Line; each page that opens its link
 (`/line#join=<room>.<password>`) is a Guest, picks one Team Member and sends
 every Line call to the Host over WebRTC ([`share.ts`](./src/simulation/share.ts)).
 The Host answers as that Team Member, plays the owner and every Team Member no
-Guest picks, and tells each Guest to read again after a change. A Guest loads
+Guest picks, and tells each Guest to read again after a change. A Guest picks
+from each Team Member's Work Stations and the ones it is Team Leader of; the
+Host can end the shared Simulation for every Guest and keep its Line. A Guest loads
 no SQLite. [Trystero](https://github.com/dmotz/trystero) finds the peers
 through public Nostr relays, which carry only offers encrypted with the
 password, so there is still no server. No TURN server: two browsers that cannot
