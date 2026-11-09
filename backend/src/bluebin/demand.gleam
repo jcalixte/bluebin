@@ -1,6 +1,6 @@
 import bluebin/calendar.{type Calendar}
 import bluebin/db
-import bluebin/design
+import bluebin/demand_code
 import bluebin/text
 import gleam/bool
 import gleam/dynamic/decode
@@ -16,6 +16,7 @@ import sqlight
 pub type Demand {
   Demand(
     id: String,
+    code: String,
     label: String,
     client: String,
     due_on: String,
@@ -49,6 +50,7 @@ with recursive
   )
 select
   d.id,
+  coalesce(d.code, ''),
   d.label,
   d.client,
   d.due_on,
@@ -71,16 +73,18 @@ pub fn list_active(
 
 fn decoder() -> decode.Decoder(Demand) {
   use id <- decode.field(0, decode.string)
-  use label <- decode.field(1, decode.string)
-  use client <- decode.field(2, decode.string)
-  use due_on <- decode.field(3, decode.string)
-  use pieces_asked <- decode.field(4, decode.int)
-  use pieces_deployed <- decode.field(5, decode.int)
-  use working_days_total <- decode.field(6, decode.int)
-  use working_days_elapsed <- decode.field(7, decode.int)
-  use hours_per_day <- decode.field(8, decode.float)
+  use code <- decode.field(1, decode.string)
+  use label <- decode.field(2, decode.string)
+  use client <- decode.field(3, decode.string)
+  use due_on <- decode.field(4, decode.string)
+  use pieces_asked <- decode.field(5, decode.int)
+  use pieces_deployed <- decode.field(6, decode.int)
+  use working_days_total <- decode.field(7, decode.int)
+  use working_days_elapsed <- decode.field(8, decode.int)
+  use hours_per_day <- decode.field(9, decode.float)
   decode.success(Demand(
     id:,
+    code:,
     label:,
     client:,
     due_on:,
@@ -182,6 +186,7 @@ pub fn to_json(
     let forecast = forecast(demand, calendar, today)
     json.object([
       #("id", json.string(demand.id)),
+      #("code", json.string(demand.code)),
       #("label", json.string(demand.label)),
       #("client", json.string(demand.client)),
       #("dueOn", json.string(demand.due_on)),
@@ -232,13 +237,14 @@ pub type CreateError {
 }
 
 /// Enters a Demand that starts today, with its Pieces waiting in the Backlog.
-/// Returns its id.
+/// With no `code`, Bluebin proposes one from the label. Returns its id.
 pub fn create(
   connection: sqlight.Connection,
   label: String,
   client: String,
   due_on: String,
   pieces: Int,
+  code: Option(String),
 ) -> Result(String, CreateError) {
   use label <- result.try(check_text(label, "A Demand needs a label."))
   use client <- result.try(check_text(client, "A Demand needs a Client."))
@@ -249,12 +255,88 @@ pub fn create(
     )),
   )
   use _ <- result.try(check_due(connection, due_on))
-  use labels <- result.try(
-    design.load_labels(connection) |> result.replace_error(StoreFailed),
-  )
 
   use <- db.transaction(connection, fn(_) { StoreFailed })
-  insert(connection, label, client, due_on, pieces, initials(labels.piece))
+  use code <- result.try(case code {
+    Some(code) -> check_code(connection, code, "")
+    None ->
+      active_codes(connection, "")
+      |> result.map(fn(taken) { demand_code.propose(label, taken) })
+  })
+  insert(connection, label, client, due_on, pieces, code)
+}
+
+/// Gives the active Demand `id` a new code; every Piece Reference of its
+/// Pieces changes with it.
+pub fn change_code(
+  connection: sqlight.Connection,
+  id: String,
+  code: String,
+) -> Result(Nil, CreateError) {
+  use <- db.transaction(connection, fn(_) { StoreFailed })
+  use code <- result.try(check_code(connection, code, id))
+  use changed <- result.try(query(
+    connection,
+    "update demand set code = ?2 where id = ?1 and state = 'active'
+     returning id",
+    [sqlight.text(id), sqlight.text(code)],
+    decode.at([0], decode.string),
+  ))
+  use <- bool.guard(
+    changed == [],
+    Error(Invalid("No active Demand has the id " <> id <> ".")),
+  )
+  write_references(connection, id)
+}
+
+/// `code` in capitals, if it is valid and no other active Demand than
+/// `id` has it.
+fn check_code(
+  connection: sqlight.Connection,
+  code: String,
+  id: String,
+) -> Result(String, CreateError) {
+  use code <- result.try(
+    demand_code.check(code) |> result.map_error(Invalid),
+  )
+  use owners <- result.try(query(
+    connection,
+    "select label from demand
+      where state = 'active' and code = ?1 and id <> ?2",
+    [sqlight.text(code), sqlight.text(id)],
+    decode.at([0], decode.string),
+  ))
+  case owners {
+    [] -> Ok(code)
+    [owner, ..] ->
+      Error(Invalid(code <> " is already the code of \"" <> owner <> "\"."))
+  }
+}
+
+fn active_codes(
+  connection: sqlight.Connection,
+  id: String,
+) -> Result(List(String), CreateError) {
+  query(
+    connection,
+    "select code from demand
+      where state = 'active' and code is not null and id <> ?1",
+    [sqlight.text(id)],
+    decode.at([0], decode.string),
+  )
+}
+
+fn write_references(
+  connection: sqlight.Connection,
+  id: String,
+) -> Result(Nil, CreateError) {
+  query(
+    connection,
+    demand_code.write_references_sql <> " where demand_id = ?1",
+    [sqlight.text(id)],
+    decode.success(Nil),
+  )
+  |> result.map(fn(_) { Nil })
 }
 
 /// A due date is a day, today or later.
@@ -281,28 +363,29 @@ fn check_due(
   }
 }
 
-/// The Demand, its Pieces in the Backlog referenced `prefix-1`, `prefix-2`…,
-/// and its flow event. Returns its id.
+/// The Demand, its Pieces in the Backlog numbered 1, 2…, and its flow event.
+/// Returns its id.
 fn insert(
   connection: sqlight.Connection,
   label: String,
   client: String,
   due_on: String,
   pieces: Int,
-  prefix: String,
+  code: String,
 ) -> Result(String, CreateError) {
   use rows <- result.try(query(
     connection,
     "insert into demand
-       (id, label, client, started_on, due_on, pieces_asked, state)
+       (id, label, client, started_on, due_on, pieces_asked, state, code)
      values ('d-' || lower(hex(randomblob(6))), ?1, ?2, date('now'), ?3, ?4,
-             'active')
+             'active', ?5)
      returning id",
     [
       sqlight.text(label),
       sqlight.text(client),
       sqlight.text(due_on),
       sqlight.int(pieces),
+      sqlight.text(code),
     ],
     decode.at([0], decode.string),
   ))
@@ -310,17 +393,14 @@ fn insert(
   use _ <- result.try(query(
     connection,
     "with recursive n(i) as (select 1 union all select i + 1 from n where i < ?2)
-     insert into piece (id, demand_id, reference, state, entered_at)
-     select 'p-' || substr(?1, 3) || '-' || i, ?1, ?3 || '-' || i, 'backlog',
+     insert into piece (id, demand_id, reference, number, state, entered_at)
+     select 'p-' || substr(?1, 3) || '-' || i, ?1, '', i, 'backlog',
             strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
        from n order by i",
-    [
-      sqlight.text(id),
-      sqlight.int(pieces),
-      sqlight.text(prefix),
-    ],
+    [sqlight.text(id), sqlight.int(pieces)],
     decode.success(Nil),
   ))
+  use _ <- result.try(write_references(connection, id))
   use _ <- result.try(query(
     connection,
     "insert into flow_event (kind, payload)
@@ -329,19 +409,6 @@ fn insert(
     decode.success(Nil),
   ))
   Ok(id)
-}
-
-/// "User Story" gives "US", the prefix of each Piece reference.
-pub fn initials(label: String) -> String {
-  case
-    string.split(label, " ")
-    |> list.filter_map(string.first)
-    |> string.concat
-    |> string.uppercase
-  {
-    "" -> "P"
-    found -> found
-  }
 }
 
 fn check_text(

@@ -1339,10 +1339,10 @@ fn split_off(
   let branch = option.unwrap(station.branch, "")
   use sub_piece <- result.try(one(
     connection,
-    "insert into piece (id, demand_id, reference, state, station_id, since,
-                        parent_id, branch)
+    "insert into piece (id, demand_id, reference, number, state, station_id,
+                        since, parent_id, branch)
      select id || '-' || lower(replace(?2, ' ', '-')), demand_id,
-            reference || ' · ' || ?2, 'in_flow', ?3,
+            reference || ' · ' || ?2, number, 'in_flow', ?3,
             strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), id, ?2
      from piece where id = ?1
      returning id, reference",

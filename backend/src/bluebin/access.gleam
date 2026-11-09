@@ -50,6 +50,7 @@ fn routes(segments: List(String)) -> List(#(http.Method, Need)) {
     ["api"] -> [#(http.Get, Read), #(http.Put, Own)]
     ["api", "events"] -> [#(http.Get, Read)]
     ["api", "demands"] -> [#(http.Get, Read), #(http.Post, Flow)]
+    ["api", "demands", _, "code"] -> [#(http.Put, Flow)]
     ["api", "line"] -> [#(http.Get, Read)]
     ["api", "backlog"] -> [#(http.Get, Read)]
     ["api", "backlog", "urgent"] -> [#(http.Post, Flow)]

@@ -18,6 +18,10 @@ _Avoid_: column, stage, step, lane
 A request for a quantity of Pieces by a due date, for example a Feature.
 _Avoid_: request, ticket, epic
 
+**Demand Code**:
+A short code of two to four capital letters that names one active Demand in its Line, for example CHK for "Checkout redesign".
+_Avoid_: prefix, key, initials, project key
+
 **Client**:
 The person or group that asks for a Demand and receives its Pieces at their Release.
 _Avoid_: customer, stakeholder, user, requester
@@ -33,6 +37,10 @@ _Avoid_: card, ticket, task, item
 **Sub-Piece**:
 A part of a Piece, created by a Split, that must rejoin the other parts before the Piece is complete, for example the iOS part of a User Story.
 _Avoid_: subtask, child ticket
+
+**Piece Reference**:
+The short name of a Piece: its Demand Code and its number in its Demand, for example CHK-3, and for a Sub-Piece its Branch too, for example CHK-3 · iOS.
+_Avoid_: id, ticket number, key, US-3
 
 **Split**:
 The point where a Piece divides into Sub-Pieces that flow in parallel, one per Branch.
@@ -212,6 +220,10 @@ _Avoid_: hidden Line, secret Line
 - A **Work Station** never has more **Kanbans** than empty **Blue Bins**
 - A **Kanban** targets exactly one **Work Station**
 - A **Demand** is decomposed into one or more **Pieces**; a **Piece** belongs to exactly one **Demand**
+- A **Demand** has exactly one **Demand Code**; no two active **Demands** of a **Line** have the same **Demand Code**, so a delivered **Demand** frees its code
+- Bluebin proposes the initials of the **Demand** label as its **Demand Code**; a **Team Member** can change it at any time, and every **Piece Reference** of that **Demand** changes with it
+- The **Pieces** of a **Demand** are numbered 1, 2, 3… in the order they enter the **Backlog**; the number never changes, even when the **Heijunka Sequence** or a **Deviation** changes the order
+- A **Sub-Piece** has the **Piece Reference** of its **Piece** and the name of its **Branch**
 - A **Demand** comes from exactly one **Client**; a **Client** can have many **Demands**
 - A **Demand** has one **Takt Time**: its available Working Time divided by its number of **Pieces**
 - A **Demand** has no **Forecast** until one of its **Pieces** is deployed; it is late when its **Forecast** falls after its due date
@@ -308,11 +320,11 @@ _Avoid_: hidden Line, secret Line
 > **Dev:** "My **Piece** sat in the Development **Blue Bin** all night, and QA had nothing to do all morning. Is that the same waste?"
 > **Domain expert:** "No. The night is the **Stagnation Time** of the **Piece**. The morning is the **Starvation Time** of QA. Only the first one is inside the **Lead Time**."
 
-> **Dev:** "QA iOS found a defect in US-3. Do I move it back to iOS?"
-> **Domain expert:** "No, a **Piece** never moves backward. QA iOS raises **Rework** against iOS. The **Rework** goes to the top of the iOS **Priority List**, Alice gets the **Assignment**, pauses her current **Piece**, and repairs US-3 where it is. The repair counts as **Rework Time** for iOS."
+> **Dev:** "QA iOS found a defect in OFF-3. Do I move it back to iOS?"
+> **Domain expert:** "No, a **Piece** never moves backward. QA iOS raises **Rework** against iOS. The **Rework** goes to the top of the iOS **Priority List**, Alice gets the **Assignment**, pauses her current **Piece**, and repairs OFF-3 where it is. The repair counts as **Rework Time** for iOS."
 
-> **Dev:** "QA iOS has a free **Blue Bin** and a **Kanban**, but Alice still repairs US-4. Can Yasmine pull US-8?"
-> **Domain expert:** "Only as a **Deviation**. The free **Blue Bin** does not change it: QA iOS found the defect, so it stops until the **Rework** closes. Yasmine can **Help the Rework**: she joins US-4 as a **Helper**, reproduces the defect and checks the repair with Alice. Alice keeps the **Assignment**. When the **Rework** closes, Yasmine's help ends by itself."
+> **Dev:** "QA iOS has a free **Blue Bin** and a **Kanban**, but Alice still repairs OFF-4. Can Yasmine pull CHK-8?"
+> **Domain expert:** "Only as a **Deviation**. The free **Blue Bin** does not change it: QA iOS found the defect, so it stops until the **Rework** closes. Yasmine can **Help the Rework**: she joins OFF-4 as a **Helper**, reproduces the defect and checks the repair with Alice. Alice keeps the **Assignment**. When the **Rework** closes, Yasmine's help ends by itself."
 
 > **Dev:** "Karim signs in. Can he pull a **Piece** in Mobile app?"
 > **Domain expert:** "Only if the owner typed his email on a **Team Member** of Mobile app. If Mobile app is a **Shared Line** and he is not a **Team Member** there, his **Account** only looks."
@@ -330,6 +342,7 @@ _Avoid_: hidden Line, secret Line
 - Feature / User Story vs **Demand** / **Piece** / **Sub-Piece** — resolved: a Feature is a **Demand**, a User Story is a **Piece**, a platform part (web, iOS, Android) is a **Sub-Piece**. "Feature" and "User Story" are the software team's names, not domain terms.
 - "the Demand is one piece" — resolved: a **Demand** is decomposed into **Pieces**, so that **Heijunka** can mix **Pieces** of different **Demands**.
 - **Stagnation Time** between two **Work Stations** — resolved: the wait from "Kanban sent" to "pulled in" is the **Starvation Time** of the **Work Station**, not the **Stagnation Time** of the **Piece**. This stops the same wait being counted twice.
+- "US" as the start of every Piece name (US-3) — resolved: replaced by the **Demand Code** (CHK-3). "US" came from the **Piece** label of the **Line**, the same for every **Piece**, so it told nothing; and the numbers started again for each **Demand**, so US-3 named several **Pieces** at once. The **Piece Reference** now shows the **Demand**, which matters for the **Product Mix**.
 - "a standard size for a User Story" — resolved: no rule. Unlike cars of one model, **Pieces** differ in work content. Bluebin does not size or weight them; the team cuts its **Pieces** and sees the consequences in **Touch Time**, **Takt Gap** and **Andons**.
 - "production" — resolved: two separate events. **Deployment** is when a **Piece** runs in production; **Release** is when the **Client** can use it. A team can deploy behind a flag and release later, for example to release all platforms on one date.
 - "release" for a manual reorder of the **Backlog** — avoid: **Release** is the moment the **Client** can use a **Piece**. A manual reorder is a **Deviation** on the **Heijunka Sequence**.

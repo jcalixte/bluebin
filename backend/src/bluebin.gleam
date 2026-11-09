@@ -789,6 +789,7 @@ fn route(
   case method, segments {
     http.Post, ["api", "demands"] -> create_demand(request, database)
     _, ["api", "demands"] -> demands(database)
+    _, ["api", "demands", id, "code"] -> change_code(request, database, id)
     _, ["api", "line"] -> line_view(database)
     _, ["api", "backlog"] -> backlog(database)
     _, ["api", "backlog", "urgent"] -> make_urgent(request, database)
@@ -1077,19 +1078,45 @@ fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
     use client <- decode.field("client", decode.string)
     use due_on <- decode.field("dueOn", decode.string)
     use pieces <- decode.field("pieces", decode.int)
-    decode.success(#(label, client, due_on, pieces))
+    use code <- decode.optional_field(
+      "code",
+      None,
+      decode.optional(decode.string),
+    )
+    decode.success(#(label, client, due_on, pieces, code))
   }
-  use #(label, client, due_on, pieces) <- require_body(
+  use #(label, client, due_on, pieces, code) <- require_body(
     request,
     decoder,
     or: "expected a body like {\"label\": \"Checkout redesign\", \"client\": \"Retail\", \"dueOn\": \"2026-12-31\", \"pieces\": 8}",
   )
   case
     db.with_connection_at(database, fn(connection) {
-      demand.create(connection, label, client, due_on, pieces)
+      demand.create(connection, label, client, due_on, pieces, code)
     })
   {
     Ok(id) -> send_json(json.object([#("id", json.string(id))]), 201)
+    Error(demand.Invalid(reason)) -> wisp.bad_request(reason)
+    Error(demand.StoreFailed) -> wisp.internal_server_error()
+  }
+}
+
+fn change_code(
+  request: wisp.Request,
+  database: String,
+  id: String,
+) -> wisp.Response {
+  use code <- require_body(
+    request,
+    decode.at(["code"], decode.string),
+    or: "expected a body like {\"code\": \"CHK\"}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      demand.change_code(connection, id, code)
+    })
+  {
+    Ok(Nil) -> wisp.no_content()
     Error(demand.Invalid(reason)) -> wisp.bad_request(reason)
     Error(demand.StoreFailed) -> wisp.internal_server_error()
   }

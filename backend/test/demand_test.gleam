@@ -1,6 +1,7 @@
 import bluebin/calendar.{Calendar, Holiday}
 import bluebin/db
 import bluebin/demand.{type Demand, Demand, Forecast}
+import bluebin/demand_code
 import bluebin/design
 import bluebin/flow
 import bluebin/heijunka
@@ -60,7 +61,7 @@ pub fn a_new_demand_is_checked_before_anything_is_written_test() {
   use connection <- with_seeded_database()
   let due = today(connection)
   let create = fn(label, client, due_on, pieces) {
-    demand.create(connection, label, client, due_on, pieces)
+    demand.create(connection, label, client, due_on, pieces, None)
   }
   assert refused(create("  ", "Retail", due, 3), "label")
   assert refused(create(string.repeat("a", 61), "Retail", due, 3), "longer")
@@ -82,7 +83,7 @@ pub fn a_new_demand_is_checked_before_anything_is_written_test() {
 pub fn a_new_demand_puts_its_pieces_in_the_backlog_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "  Search  ", "Retail", today(connection), 3)
+    demand.create(connection, "  Search  ", "Retail", today(connection), 3, None)
   assert text(connection, "select label || '/' || state || '/' || started_on
       from demand where id = '" <> id <> "'") == "Search/active/"
     <> today(connection)
@@ -96,7 +97,7 @@ pub fn a_new_demand_puts_its_pieces_in_the_backlog_test() {
       with: [sqlight.text(id)],
       expecting: decode.at([0], decode.string),
     )
-  assert references == ["US-1", "US-2", "US-3"]
+  assert references == ["SEA-1", "SEA-2", "SEA-3"]
   assert count(connection, "select count(*) from flow_event
       where kind = 'demand_entered'
         and json_extract(payload, '$.demand') = '" <> id <> "'") == 1
@@ -106,11 +107,85 @@ pub fn a_new_demand_puts_its_pieces_in_the_backlog_test() {
     == 3
 }
 
-pub fn the_reference_takes_the_initials_of_the_piece_label_test() {
-  assert demand.initials("User Story") == "US"
-  assert demand.initials("story") == "S"
-  assert demand.initials("  Change   request ") == "CR"
-  assert demand.initials("") == "P"
+pub fn the_proposed_code_takes_the_initials_of_the_demand_label_test() {
+  assert demand_code.propose("Checkout redesign", []) == "CR"
+  assert demand_code.propose("  offline   mode for the field app ", [])
+    == "OMFT"
+  assert demand_code.propose("Billing", []) == "BIL"
+  assert demand_code.propose("Évolution 2026", []) == "VOL"
+  assert demand_code.propose("X", []) == "XD"
+  assert demand_code.propose("2026", []) == "DM"
+  assert demand_code.propose("Checkout redesign", ["CR", "CRA"]) == "CRB"
+}
+
+pub fn a_demand_code_has_two_to_four_letters_test() {
+  assert demand_code.check(" chk ") == Ok("CHK")
+  let assert Error(_) = demand_code.check("C")
+  let assert Error(_) = demand_code.check("CHECK")
+  let assert Error(_) = demand_code.check("Q3")
+  let assert Error(_) = demand_code.check("C-K")
+}
+
+fn references_of(connection: sqlight.Connection, demand: String) -> List(String) {
+  let assert Ok(references) =
+    sqlight.query(
+      "select reference from piece where demand_id = ?1 order by rowid",
+      on: connection,
+      with: [sqlight.text(demand)],
+      expecting: decode.at([0], decode.string),
+    )
+  references
+}
+
+pub fn a_demand_takes_the_code_it_is_given_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(id) =
+    demand.create(
+      connection,
+      "Search",
+      "Retail",
+      today(connection),
+      2,
+      Some(" srch"),
+    )
+  assert references_of(connection, id) == ["SRCH-1", "SRCH-2"]
+}
+
+pub fn no_two_active_demands_have_the_same_code_test() {
+  use connection <- with_seeded_database()
+  let assert Error(demand.Invalid(reason)) =
+    demand.create(
+      connection,
+      "Search",
+      "Retail",
+      today(connection),
+      2,
+      Some("CHK"),
+    )
+  assert reason == "CHK is already the code of \"Checkout redesign\"."
+  let assert Error(demand.Invalid(_)) =
+    demand.change_code(connection, "d-offline", "chk")
+
+  // The proposal steps around a code in use, and a delivered Demand frees
+  // its code.
+  let assert Ok(id) =
+    demand.create(connection, "Checkout", "Retail", today(connection), 1, None)
+  assert references_of(connection, id) == ["CHE-1"]
+  exec(connection, "update demand set state = 'delivered' where id = 'd-checkout'")
+  let assert Ok(Nil) = demand.change_code(connection, "d-offline", "CHK")
+}
+
+pub fn a_new_code_changes_every_reference_of_the_demand_test() {
+  use connection <- with_seeded_database()
+  let assert Ok(Nil) = demand.change_code(connection, "d-offline", "sync")
+  let references = references_of(connection, "d-offline")
+  assert list.contains(references, "SYNC-1")
+  assert list.contains(references, "SYNC-10")
+  assert list.contains(references, "SYNC-4 · iOS")
+  assert !list.any(references, string.starts_with(_, "OFF"))
+  assert references_of(connection, "d-checkout") |> list.contains("CHK-9")
+  let assert Error(demand.Invalid(_)) =
+    demand.change_code(connection, "d-unknown", "ZZ")
 }
 
 fn put_in_last_blue_bin(connection: sqlight.Connection, piece: String) -> Nil {
@@ -122,7 +197,7 @@ fn put_in_last_blue_bin(connection: sqlight.Connection, piece: String) -> Nil {
 pub fn the_last_deployed_piece_delivers_the_demand_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "Search", "Retail", today(connection), 2)
+    demand.create(connection, "Search", "Retail", today(connection), 2, None)
   let pieces = "p-" <> string.drop_start(id, 2)
   let state = "select state from demand where id = '" <> id <> "'"
   let delivered =
@@ -170,7 +245,7 @@ pub fn deploying_a_piece_releases_it_at_the_same_moment_test() {
 pub fn a_piece_deployed_with_hold_waits_for_its_release_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "Search", "Retail", today(connection), 1)
+    demand.create(connection, "Search", "Retail", today(connection), 1, None)
   let piece = "p-" <> string.drop_start(id, 2) <> "-1"
   put_in_last_blue_bin(connection, piece)
   let assert Ok(flowed) = flow.deploy(connection, piece, hold: True)
@@ -199,7 +274,7 @@ pub fn a_piece_deployed_with_hold_waits_for_its_release_test() {
 pub fn releasing_the_held_pieces_delivers_the_demand_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "Search", "Retail", today(connection), 2)
+    demand.create(connection, "Search", "Retail", today(connection), 2, None)
   let pieces = "p-" <> string.drop_start(id, 2)
   put_in_last_blue_bin(connection, pieces <> "-1")
   let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: True)
@@ -221,7 +296,7 @@ pub fn releasing_the_held_pieces_delivers_the_demand_test() {
 pub fn only_a_piece_held_for_release_can_be_released_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "Search", "Retail", today(connection), 2)
+    demand.create(connection, "Search", "Retail", today(connection), 2, None)
   let pieces = "p-" <> string.drop_start(id, 2)
   put_in_last_blue_bin(connection, pieces <> "-1")
   let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: True)
@@ -237,7 +312,7 @@ pub fn only_a_piece_held_for_release_can_be_released_test() {
 pub fn a_demand_is_delivered_at_the_release_of_its_last_piece_test() {
   use connection <- with_seeded_database()
   let assert Ok(id) =
-    demand.create(connection, "Search", "Retail", today(connection), 2)
+    demand.create(connection, "Search", "Retail", today(connection), 2, None)
   let pieces = "p-" <> string.drop_start(id, 2)
   put_in_last_blue_bin(connection, pieces <> "-1")
   let assert Ok(_) = flow.deploy(connection, pieces <> "-1", hold: False)
@@ -266,6 +341,7 @@ fn office() -> calendar.Calendar {
 fn a_demand(asked: Int, deployed: Int, elapsed: Int, due_on: String) -> Demand {
   Demand(
     id: "d-test",
+    code: "TST",
     label: "Test",
     client: "Client",
     due_on:,
@@ -331,16 +407,16 @@ pub fn the_on_time_share_counts_the_demands_delivered_in_the_period_test() {
   exec(
     connection,
     "insert into demand values
-       ('d-early', 'Early', 'A', '2026-09-01', '2026-10-10', 1, 'delivered'),
-       ('d-late', 'Late', 'B', '2026-09-01', '2026-10-03', 1, 'delivered'),
-       ('d-before', 'Before', 'C', '2026-08-01', '2026-09-30', 1, 'delivered');
+       ('d-early', 'Early', 'A', '2026-09-01', '2026-10-10', 1, 'delivered', 'EA'),
+       ('d-late', 'Late', 'B', '2026-09-01', '2026-10-03', 1, 'delivered', 'LA'),
+       ('d-before', 'Before', 'C', '2026-08-01', '2026-09-30', 1, 'delivered', 'BE');
      insert into piece
        (id, demand_id, reference, state, deployed_at, released_at) values
-       ('p-early', 'd-early', 'US-1', 'deployed',
+       ('p-early', 'd-early', 'EA-1', 'deployed',
         '2026-10-09T15:00:00Z', '2026-10-10T15:00:00Z'),
-       ('p-late', 'd-late', 'US-1', 'deployed',
+       ('p-late', 'd-late', 'LA-1', 'deployed',
         '2026-10-02T10:00:00Z', '2026-10-05T10:00:00Z'),
-       ('p-before', 'd-before', 'US-1', 'deployed',
+       ('p-before', 'd-before', 'BE-1', 'deployed',
         '2026-09-20T10:00:00Z', '2026-09-20T10:00:00Z');",
   )
   let assert Ok(found) = measures.load(connection, "2026-10-01", "2026-10-31")
@@ -400,10 +476,10 @@ pub fn an_empty_start_keeps_one_work_station_and_the_calendar_test() {
 
   // The empty Line runs: a Demand enters, its first Piece is pulled.
   let assert Ok(_) =
-    demand.create(connection, "Search", "Retail", today(connection), 2)
+    demand.create(connection, "Search", "Retail", today(connection), 2, None)
   let assert Ok(id) = option.to_result(station.id, Nil)
   let assert Ok(pulled) = flow.pull(connection, id, None, None)
-  assert pulled.piece == "S-1"
+  assert pulled.piece == "SEA-1"
 }
 
 pub fn the_demo_reset_follows_an_empty_start_test() {

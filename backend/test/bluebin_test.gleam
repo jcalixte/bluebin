@@ -28,6 +28,7 @@ fn a_demand(
 ) -> Demand {
   Demand(
     id: "d-test",
+    code: "TST",
     label: "Test",
     client: "Client",
     due_on: "2026-12-31",
@@ -167,7 +168,7 @@ pub fn a_piece_in_a_blue_bin_names_its_work_station_test() {
        where state = 'in_bin' and station_id is null",
     )
     == 0
-  // The seed parks US-9 in the trunk and three Sub-Pieces in the Branches.
+  // The seed parks CHK-9 in the trunk and three Sub-Pieces in the Branches.
   assert count(connection, "select count(*) from piece where state = 'in_bin'")
     == 4
 }
@@ -200,7 +201,7 @@ pub fn a_pull_spends_a_kanban_and_sends_one_upstream_test() {
   // Tech Conception holds a Kanban; Analysis has a Piece to finish first.
   let assert Ok(_) = flow.finish(connection, "ws-analysis", "p-billing-2", None)
   let assert Ok(flowed) = flow.pull(connection, "ws-conception", None, None)
-  assert flowed.piece == "US-2"
+  assert flowed.piece == "BIL-2"
   assert flowed.deviations == []
   assert flowed.kanbans_sent_to == ["ws-analysis"]
   assert kanbans(connection, "ws-conception") == 0
@@ -222,14 +223,14 @@ pub fn the_first_work_station_pulls_out_of_the_backlog_test() {
 
 pub fn each_branch_pulls_its_own_sub_piece_at_the_split_test() {
   use connection <- with_seeded_database()
-  // The seed parks US-9 in Tech Conception's Blue Bin.
+  // The seed parks CHK-9 in Tech Conception's Blue Bin.
   let assert Ok(ios) = flow.pull(connection, "ws-ios", None, None)
-  assert ios.piece == "US-9 · iOS"
+  assert ios.piece == "CHK-9 · iOS"
   assert state_of(connection, "p-checkout-9") == "in_bin"
   assert ios.kanbans_sent_to == []
 
   let assert Ok(web) = flow.pull(connection, "ws-web", None, None)
-  assert web.piece == "US-9 · Web"
+  assert web.piece == "CHK-9 · Web"
   assert flow.pull(connection, "ws-web", None, Some("again"))
     == Error(flow.NothingToPull)
 }
@@ -275,7 +276,7 @@ pub fn a_branch_pulls_inside_itself_test() {
 
   let assert Ok(flowed) =
     flow.pull(connection, "ws-qa-ios", None, Some("Blocking the demo"))
-  assert flowed.piece == "US-8 · iOS"
+  assert flowed.piece == "CHK-8 · iOS"
   assert flowed.deviations
     == [flow.PullWithAnOpenRework, flow.PullWithoutKanban]
   assert flowed.kanbans_sent_to == ["ws-ios"]
@@ -290,7 +291,7 @@ pub fn a_branch_pulls_inside_itself_test() {
 
 pub fn the_assembly_waits_for_every_sub_piece_test() {
   use connection <- with_seeded_database()
-  // US-4: Web and Android parts wait in QA, the iOS part is still in hand.
+  // OFF-4: Web and Android parts wait in QA, the iOS part is still in hand.
   assert flow.pull(connection, "ws-uat", None, None)
     == Error(flow.NothingToAssemble)
   assert state_of(connection, "p-offline-4-web") == "in_bin"
@@ -302,7 +303,7 @@ pub fn the_assembly_joins_the_sub_pieces_and_sends_each_branch_a_kanban_test() {
     flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
 
   let assert Ok(flowed) = flow.pull(connection, "ws-uat", None, None)
-  assert flowed.piece == "US-4"
+  assert flowed.piece == "OFF-4"
   assert list.sort(flowed.kanbans_sent_to, string.compare)
     == ["ws-qa-android", "ws-qa-ios", "ws-qa-web"]
   assert state_of(connection, "p-offline-4") == "in_flow"
@@ -326,7 +327,7 @@ pub fn finishing_a_piece_puts_it_in_a_blue_bin_test() {
   use connection <- with_seeded_database()
   let assert Ok(flowed) =
     flow.finish(connection, "ws-analysis", "p-billing-2", None)
-  assert flowed.piece == "US-2"
+  assert flowed.piece == "BIL-2"
   assert flowed.deviations == []
   assert state_of(connection, "p-billing-2") == "in_bin"
   assert kanbans_over_empty_blue_bins(connection) == 0
@@ -394,7 +395,7 @@ pub fn every_action_writes_one_flow_event_test() {
 
 pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
   use connection <- with_seeded_database()
-  // In the seed, Alice made US-4's iOS part.
+  // In the seed, Alice made OFF-4's iOS part.
   let assert Ok(_) = flow.repair_rework(connection, "rw-1")
   let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-alice"), None)
   assert state_of(connection, "p-checkout-9-ios") == "in_flow"
@@ -407,9 +408,9 @@ pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
       "ws-ios",
       "  The retry banner never goes away  ",
     )
-  assert raised.piece == "US-4 · iOS"
+  assert raised.piece == "OFF-4 · iOS"
   assert raised.assignee == Some("Alice")
-  assert raised.paused == Some("US-9 · iOS")
+  assert raised.paused == Some("CHK-9 · iOS")
   assert state_of(connection, "p-checkout-9-ios") == "paused"
   // A pause for Rework is a real loss of capacity: it counts in the
   // suggested Blue Bins (DESIGN.md R11).
@@ -431,7 +432,7 @@ pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
   assert state_of(connection, "p-offline-4-ios") == "in_flow"
 
   let assert Ok(repaired) = flow.repair_rework(connection, raised.id)
-  assert repaired.resumed == Some("US-9 · iOS")
+  assert repaired.resumed == Some("CHK-9 · iOS")
   assert state_of(connection, "p-checkout-9-ios") == "in_flow"
   assert flow.repair_rework(connection, raised.id) == Error(flow.UnknownRework)
 }
@@ -447,7 +448,7 @@ pub fn a_defect_belongs_to_a_work_station_the_piece_crossed_test() {
       "Broken",
     )
     == Error(flow.NotUpstream)
-  // US-4's iOS part never went through Web.
+  // OFF-4's iOS part never went through Web.
   assert flow.raise_rework(
       connection,
       "ws-qa-ios",
@@ -464,7 +465,7 @@ pub fn a_defect_belongs_to_a_work_station_the_piece_crossed_test() {
       "   ",
     )
     == Error(flow.EmptyDescription)
-  // UAT is downstream of iOS but does not hold US-4's iOS part.
+  // UAT is downstream of iOS but does not hold OFF-4's iOS part.
   assert flow.raise_rework(
       connection,
       "ws-uat",
@@ -618,7 +619,7 @@ pub fn a_team_member_repairs_their_rework_before_pulling_test() {
 
 pub fn a_new_piece_waits_behind_the_one_in_hand_test() {
   use connection <- with_seeded_database()
-  // In the seed, Bob holds US-8's Web part: finishing beats starting.
+  // In the seed, Bob holds CHK-8's Web part: finishing beats starting.
   let assert Ok(_) = flow.pull(connection, "ws-web", Some("pe-bob"), None)
   assert state_of(connection, "p-checkout-8-web") == "in_flow"
   assert state_of(connection, "p-checkout-9-web") == "paused"
@@ -662,7 +663,7 @@ fn pieces_of(
 
 pub fn a_new_piece_upstream_waits_behind_the_one_downstream_test() {
   use connection <- with_seeded_database()
-  // Marc takes US-2 from Analysis into Tech Conception, downstream.
+  // Marc takes BIL-2 from Analysis into Tech Conception, downstream.
   let assert Ok(_) = flow.finish(connection, "ws-analysis", "p-billing-2", None)
   let assert Ok(_) =
     flow.pull(connection, "ws-conception", Some("pe-marc"), None)
@@ -679,7 +680,7 @@ pub fn a_new_piece_upstream_waits_behind_the_one_downstream_test() {
 
 pub fn a_new_piece_downstream_goes_before_the_one_upstream_test() {
   use connection <- with_seeded_database()
-  // A Piece for Tech Conception, while Marc still holds US-2 in Analysis.
+  // A Piece for Tech Conception, while Marc still holds BIL-2 in Analysis.
   let assert Ok(_) = flow.pull(connection, "ws-analysis", None, None)
   let assert Ok([ready]) =
     sqlight.query(
@@ -748,7 +749,7 @@ pub fn a_piece_in_hand_goes_to_another_team_member_of_the_work_station_test() {
     )
     == Error(flow.NotOfStation)
   assert assignee(connection, "piece", "p-checkout-8-web") == "pe-lila"
-  // US-9 sits in a Blue Bin, in nobody's hands.
+  // CHK-9 sits in a Blue Bin, in nobody's hands.
   assert flow.reassign(
       connection,
       flow.PieceAssignment,
@@ -837,7 +838,7 @@ pub fn a_work_station_stopped_by_its_rework_gets_help_only_from_the_two_test() {
   // QA iOS found the defect, iOS made it: both Help the Rework (F19).
   let assert assignment.HelpTheRework(
     rework: "rw-1",
-    piece: "US-4 · iOS",
+    piece: "OFF-4 · iOS",
     assignee: "Alice",
     station_id: "ws-qa-ios",
     ..,
@@ -861,7 +862,7 @@ pub fn a_work_station_stopped_by_its_rework_gets_help_only_from_the_two_test() {
 
 pub fn the_holder_of_a_piece_under_rework_helps_its_repair_test() {
   use connection <- with_seeded_database()
-  // In the seed, Yasmine holds US-4 at QA iOS while Alice repairs it.
+  // In the seed, Yasmine holds OFF-4 at QA iOS while Alice repairs it.
   let assert assignment.HelpTheRework(rework: "rw-1", assignee: "Alice", ..) =
     next_of(connection, "pe-yasmine")
   // Once repaired, she finishes it.
@@ -1458,7 +1459,7 @@ pub fn a_database_of_another_schema_version_is_refused_test() {
 
 pub fn a_new_database_gets_the_schema_once_test() {
   use connection <- with_seeded_database()
-  assert count(connection, "pragma user_version") == 3
+  assert count(connection, "pragma user_version") == 4
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from line_label") == 1
   assert count(connection, "select count(*) from working_calendar") == 1
@@ -1476,21 +1477,21 @@ fn help_left(connection: sqlight.Connection, cause: String) -> Int {
 
 pub fn helpers_join_a_rework_and_its_repair_ends_their_help_test() {
   use connection <- with_seeded_database()
-  // Karim holds US-9 at iOS; Alice repairs rw-1 on US-4, held by QA iOS.
+  // Karim holds CHK-9 at iOS; Alice repairs rw-1 on OFF-4, held by QA iOS.
   let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
   assert state_of(connection, "p-checkout-9-ios") == "in_flow"
 
-  // Yasmine, of the Work Station that found the defect, helps: US-4 is in
+  // Yasmine, of the Work Station that found the defect, helps: OFF-4 is in
   // her own hands, and stays active.
   let assert Ok(helped) = flow.help_the_rework(connection, "rw-1", "pe-yasmine")
-  assert helped.piece == "US-4 · iOS"
+  assert helped.piece == "OFF-4 · iOS"
   assert helped.assignee == "Alice"
   assert helped.paused == []
   assert state_of(connection, "p-offline-4-ios") == "in_flow"
 
-  // Karim, of the Work Station that made it, helps: his US-9 pauses (F62).
+  // Karim, of the Work Station that made it, helps: his CHK-9 pauses (F62).
   let assert Ok(helped) = flow.help_the_rework(connection, "rw-1", "pe-karim")
-  assert helped.paused == ["US-9 · iOS"]
+  assert helped.paused == ["CHK-9 · iOS"]
   assert state_of(connection, "p-checkout-9-ios") == "paused"
   assert count(
       connection,
@@ -1524,8 +1525,8 @@ pub fn a_helper_stops_and_their_piece_resumes_test() {
   assert state_of(connection, "p-checkout-9-ios") == "paused"
 
   let assert Ok(stopped) = flow.stop_helping(connection, "pe-karim")
-  assert stopped.piece == "US-4 · iOS"
-  assert stopped.resumed == Some("US-9 · iOS")
+  assert stopped.piece == "OFF-4 · iOS"
+  assert stopped.resumed == Some("CHK-9 · iOS")
   assert state_of(connection, "p-checkout-9-ios") == "in_flow"
   assert help_left(connection, "stopped") == 1
   assert flow.stop_helping(connection, "pe-karim") == Error(flow.NotHelping)
@@ -1579,7 +1580,7 @@ pub fn a_pull_by_a_helper_ends_the_help_test() {
   assert state_of(connection, "p-checkout-9-ios") == "in_flow"
 }
 
-pub fn a_version_2_database_migrates_to_version_3_test() {
+pub fn a_version_2_database_migrates_to_the_latest_version_test() {
   use connection <- with_seeded_database()
   let pieces = count(connection, "select count(*) from piece")
   let events = count(connection, "select count(*) from flow_event")
@@ -1590,10 +1591,16 @@ pub fn a_version_2_database_migrates_to_version_3_test() {
       with: [],
       expecting: decode.at([0], decode.string),
     )
-  exec(connection, "drop table helper; pragma user_version = 2;")
+  exec(
+    connection,
+    "drop table helper;
+     alter table demand drop column code;
+     alter table piece drop column number;
+     pragma user_version = 2;",
+  )
 
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
-  assert count(connection, "pragma user_version") == 3
+  assert count(connection, "pragma user_version") == 4
   assert count(connection, "select count(*) from piece") == pieces
   assert count(connection, "select count(*) from flow_event") == events
   assert count(connection, "select count(*) from sqlite_master
@@ -1607,6 +1614,50 @@ pub fn a_version_2_database_migrates_to_version_3_test() {
   // A version with no step is refused, not read.
   exec(connection, "pragma user_version = 1;")
   let assert Error(_) = db.prepare(connection, db.Demo)
+}
+
+/// Version 3 named each Piece from the initials of the Piece label: the
+/// migration gives each Demand a code and writes the references again.
+pub fn a_version_3_database_gets_demand_codes_test() {
+  use connection <- with_seeded_database()
+  exec(
+    connection,
+    "update piece set reference = 'US-' || number
+      where parent_id is null;
+     update piece set reference = 'US-' || number || ' · ' || branch
+      where parent_id is not null;
+     insert into demand (id, label, client, started_on, due_on, pieces_asked,
+                         state)
+     values ('d-old', 'Old checkout', 'Retail', '2026-01-01', '2026-02-01', 1,
+             'delivered');
+     alter table demand drop column code;
+     alter table piece drop column number;
+     pragma user_version = 3;",
+  )
+
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
+  assert count(connection, "pragma user_version") == 4
+  let code_of = fn(id) {
+    let assert Ok([code]) =
+      sqlight.query(
+        "select code from demand where id = ?1",
+        on: connection,
+        with: [sqlight.text(id)],
+        expecting: decode.at([0], decode.string),
+      )
+    code
+  }
+  assert code_of("d-checkout") == "CR"
+  assert code_of("d-offline") == "OM"
+  assert code_of("d-billing") == "BE"
+  // Only the active Demands need different codes.
+  assert code_of("d-old") == "OC"
+  assert count(connection, "select count(*) from piece
+      where id = 'p-checkout-9' and reference = 'CR-9'") == 1
+  assert count(connection, "select count(*) from piece
+      where id = 'p-offline-4-ios' and reference = 'OM-4 · iOS'") == 1
+  assert count(connection, "select count(*) from piece
+      where reference like 'US-%'") == 0
 }
 
 pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
@@ -1623,7 +1674,7 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
     "\"assigneeId\":\"pe-alice\",\"helpers\":[],\"canHelp\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"},{\"id\":\"pe-yasmine\",\"name\":\"Yasmine\"}]",
   )
 
-  // Karim helps: he shows on the Rework and on US-4 in Yasmine's hands (F64).
+  // Karim helps: he shows on the Rework and on OFF-4 in Yasmine's hands (F64).
   let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
   let assert Ok(payload) = line.load(connection)
   let text = json.to_string(payload)
@@ -1633,18 +1684,18 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
   )
   assert string.contains(
     text,
-    "\"piece\":\"US-4 · iOS\",\"demand\":\"Offline mode\",\"teamMember\":\"Yasmine\",\"teamMemberId\":\"pe-yasmine\",\"paused\":false,\"underRework\":true,\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}]",
+    "\"piece\":\"OFF-4 · iOS\",\"demand\":\"Offline mode\",\"teamMember\":\"Yasmine\",\"teamMemberId\":\"pe-yasmine\",\"paused\":false,\"underRework\":true,\"helpers\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"}]",
   )
 }
 
 pub fn finishing_a_piece_under_rework_accepts_its_repair_test() {
   use connection <- with_seeded_database()
-  // Karim helps rw-1 on US-4 while his US-9 waits.
+  // Karim helps rw-1 on OFF-4 while his CHK-9 waits.
   let assert Ok(_) = flow.pull(connection, "ws-ios", Some("pe-karim"), None)
   let assert Ok(_) = flow.help_the_rework(connection, "rw-1", "pe-karim")
   assert state_of(connection, "p-checkout-9-ios") == "paused"
 
-  // QA iOS finishes US-4: the Rework closes, as if repaired.
+  // QA iOS finishes OFF-4: the Rework closes, as if repaired.
   let assert Ok(_) =
     flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
   assert state_of(connection, "p-offline-4-ios") == "in_bin"

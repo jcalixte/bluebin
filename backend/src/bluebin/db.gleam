@@ -1,3 +1,4 @@
+import bluebin/demand_code
 import gleam/dynamic/decode
 import gleam/function
 import gleam/int
@@ -15,7 +16,7 @@ pub const workspaces_directory = "data/workspaces"
 /// The schema of a new database. Raise `schema_version` when it changes, and
 /// add a step to `migrations` when the change only adds; a database whose
 /// version has no step is refused (ADR-0006).
-const schema_version = 3
+const schema_version = 4
 
 /// Parents before children. `foreign_keys` holds only on the connection that
 /// runs this schema and the seed, and only outside a transaction: `ready`
@@ -32,7 +33,8 @@ create table demand (
   started_on   text not null,
   due_on       text not null,
   pieces_asked integer not null,
-  state        text not null default 'active'
+  state        text not null default 'active',
+  code         text
 );
 
 create table team_member (
@@ -69,7 +71,8 @@ create table piece (
   parent_id   text references piece(id),
   branch      text,
   urgent      integer,
-  entered_at  text
+  entered_at  text,
+  number      integer
 );
 
 create table flow_event (
@@ -183,6 +186,24 @@ create table helper (
 );
 ",
   ),
+  // The Demand Code replaces the Piece label initials ("US") in the Piece
+  // Reference. `backfill_codes` then gives each Demand its code and writes
+  // the references again.
+  #(
+    3,
+    "
+alter table demand add column code text;
+alter table piece add column number integer;
+update piece
+   set number = (select count(*) from piece o
+                  where o.demand_id = piece.demand_id and o.parent_id is null
+                    and o.rowid <= piece.rowid)
+ where parent_id is null;
+update piece
+   set number = (select p.number from piece p where p.id = piece.parent_id)
+ where parent_id is not null;
+",
+  ),
 ]
 
 /// The Pieces already past a Work Station get a pass, after the seed.
@@ -230,28 +251,28 @@ group by w.position;
 
 const seed_demands_sql =
   "
-insert into demand (id, label, client, started_on, due_on, pieces_asked, state) values
-  ('d-checkout', 'Checkout redesign', 'Retail',    date('now', '-10 day'), date('now', '+11 day'), 12, 'active'),
-  ('d-offline',  'Offline mode',      'Field Ops', date('now', '-15 day'), date('now', '+5 day'),  10, 'active'),
-  ('d-billing',  'Billing export',    'Finance',   date('now', '-3 day'),  date('now', '+25 day'),  8, 'active');
+insert into demand (id, label, client, started_on, due_on, pieces_asked, state, code) values
+  ('d-checkout', 'Checkout redesign', 'Retail',    date('now', '-10 day'), date('now', '+11 day'), 12, 'active', 'CHK'),
+  ('d-offline',  'Offline mode',      'Field Ops', date('now', '-15 day'), date('now', '+5 day'),  10, 'active', 'OFF'),
+  ('d-billing',  'Billing export',    'Finance',   date('now', '-3 day'),  date('now', '+25 day'),  8, 'active', 'BIL');
 
 with recursive n(i) as (select 1 union all select i + 1 from n where i < 12)
-insert into piece (id, demand_id, reference, state, deployed_at)
-select 'p-checkout-' || i, 'd-checkout', 'US-' || i,
+insert into piece (id, demand_id, reference, number, state, deployed_at)
+select 'p-checkout-' || i, 'd-checkout', '', i,
   case when i <= 7 then 'deployed' when i <= 9 then 'in_flow' else 'backlog' end,
   case when i <= 7 then strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-' || (8 - i) || ' day') end
 from n;
 
 with recursive n(i) as (select 1 union all select i + 1 from n where i < 10)
-insert into piece (id, demand_id, reference, state, deployed_at)
-select 'p-offline-' || i, 'd-offline', 'US-' || i,
+insert into piece (id, demand_id, reference, number, state, deployed_at)
+select 'p-offline-' || i, 'd-offline', '', i,
   case when i <= 3 then 'deployed' when i <= 5 then 'in_flow' else 'backlog' end,
   case when i <= 3 then strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-' || (12 - 3 * i) || ' day') end
 from n;
 
 with recursive n(i) as (select 1 union all select i + 1 from n where i < 8)
-insert into piece (id, demand_id, reference, state, deployed_at)
-select 'p-billing-' || i, 'd-billing', 'US-' || i,
+insert into piece (id, demand_id, reference, number, state, deployed_at)
+select 'p-billing-' || i, 'd-billing', '', i,
   case when i = 1 then 'deployed' when i = 2 then 'in_flow' else 'backlog' end,
   case when i = 1 then strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day') end
 from n;
@@ -303,7 +324,7 @@ update piece set station_id = 'ws-analysis', assignee = 'pe-marc',
                  since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 hour')
  where id = 'p-billing-2';
 
--- US-9 waits in Tech Conception's Blue Bin; no Branch has pulled its part yet.
+-- CHK-9 waits in Tech Conception's Blue Bin; no Branch has pulled its part yet.
 update piece set state = 'in_bin', station_id = 'ws-conception',
                  since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-4 hour')
  where id = 'p-checkout-9';
@@ -315,19 +336,19 @@ update piece set state = 'split', station_id = null,
                  since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-1 day')
  where id in ('p-checkout-8', 'p-offline-4');
 
-insert into piece (id, demand_id, reference, state, station_id, assignee,
+insert into piece (id, demand_id, reference, number, state, station_id, assignee,
                    since, parent_id, branch) values
-  ('p-checkout-8-web', 'd-checkout', 'US-8 · Web', 'in_flow', 'ws-web', 'pe-bob',
+  ('p-checkout-8-web', 'd-checkout', '', 8, 'in_flow', 'ws-web', 'pe-bob',
    strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-6 hour'), 'p-checkout-8', 'Web'),
-  ('p-checkout-8-ios', 'd-checkout', 'US-8 · iOS', 'in_bin', 'ws-ios', null,
+  ('p-checkout-8-ios', 'd-checkout', '', 8, 'in_bin', 'ws-ios', null,
    strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hour'), 'p-checkout-8', 'iOS'),
-  ('p-checkout-8-android', 'd-checkout', 'US-8 · Android', 'in_flow', 'ws-android', 'pe-nina',
+  ('p-checkout-8-android', 'd-checkout', '', 8, 'in_flow', 'ws-android', 'pe-nina',
    strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-5 hour'), 'p-checkout-8', 'Android'),
-  ('p-offline-4-web', 'd-offline', 'US-4 · Web', 'in_bin', 'ws-qa-web', null,
+  ('p-offline-4-web', 'd-offline', '', 4, 'in_bin', 'ws-qa-web', null,
    strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour'), 'p-offline-4', 'Web'),
-  ('p-offline-4-ios', 'd-offline', 'US-4 · iOS', 'in_flow', 'ws-qa-ios', 'pe-yasmine',
+  ('p-offline-4-ios', 'd-offline', '', 4, 'in_flow', 'ws-qa-ios', 'pe-yasmine',
    strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-3 hour'), 'p-offline-4', 'iOS'),
-  ('p-offline-4-android', 'd-offline', 'US-4 · Android', 'in_bin', 'ws-qa-android', null,
+  ('p-offline-4-android', 'd-offline', '', 4, 'in_bin', 'ws-qa-android', null,
    strftime('%Y-%m-%dT%H:%M:%SZ', 'now', '-2 hour'), 'p-offline-4', 'Android');
 
 -- A Work Station never holds more Kanbans than it has Blue Bins left once its
@@ -353,9 +374,9 @@ select strftime('%Y-%m-%dT%H:%M:%SZ', since, '-1 day'),
 -- Each deployed Piece crossed the whole Line: the trunk, one Sub-Piece
 -- per Branch, the Assembly and UAT. Hours count back from its Deployment and
 -- stretch a little from one Piece to the next, so the measures vary.
-insert into piece (id, demand_id, reference, state, parent_id, branch)
-select p.id || '-' || lower(b.branch), p.demand_id,
-       p.reference || ' · ' || b.branch, 'assembled', p.id, b.branch
+insert into piece (id, demand_id, reference, number, state, parent_id, branch)
+select p.id || '-' || lower(b.branch), p.demand_id, '', p.number,
+       'assembled', p.id, b.branch
   from piece p,
        (select 'Web' as branch union all select 'iOS' union all select 'Android') b
  where p.state = 'deployed';
@@ -416,7 +437,7 @@ insert into flow_event (at, kind, payload)
 select created_at, 'kanban_sent', json_object('station', station_id)
   from kanban;
 
--- QA iOS found a defect in the iOS part of US-4; the Rework is against the
+-- QA iOS found a defect in the iOS part of OFF-4; the Rework is against the
 -- Work Station that made it.
 insert into rework (id, piece_id, station_id, description, opened_at)
 values ('rw-1', 'p-offline-4-ios', 'ws-ios',
@@ -533,6 +554,10 @@ fn migrate(
         step <> "\npragma user_version = " <> int.to_string(version + 1) <> ";",
         connection,
       ))
+      use _ <- result.try(case version {
+        3 -> backfill_codes(connection)
+        _ -> Ok(Nil)
+      })
       migrate(connection, version + 1)
     }
     False, Error(Nil) ->
@@ -545,6 +570,40 @@ fn migrate(
         offset: -1,
       ))
   }
+}
+
+/// Gives each Demand the code Bluebin proposes from its label, unique among
+/// the active Demands, then writes every Piece Reference again.
+fn backfill_codes(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
+  use demands <- result.try(sqlight.query(
+    "select id, label, state = 'active' from demand
+      order by state = 'active' desc, rowid",
+    on: connection,
+    with: [],
+    expecting: {
+      use id <- decode.field(0, decode.string)
+      use label <- decode.field(1, decode.string)
+      use active <- decode.field(2, sqlight.decode_bool())
+      decode.success(#(id, label, active))
+    },
+  ))
+  use _ <- result.try(
+    list.try_fold(demands, [], fn(taken, demand) {
+      let #(id, label, active) = demand
+      let code = demand_code.propose(label, taken)
+      use _ <- result.map(sqlight.query(
+        "update demand set code = ?2 where id = ?1",
+        on: connection,
+        with: [sqlight.text(id), sqlight.text(code)],
+        expecting: decode.success(Nil),
+      ))
+      case active {
+        True -> [code, ..taken]
+        False -> taken
+      }
+    }),
+  )
+  sqlight.exec(demand_code.write_references_sql <> ";", connection)
 }
 
 fn user_version(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
@@ -571,7 +630,8 @@ fn seed(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
     "work_station",
     seed_line_sql <> seed_passes_sql,
   ))
-  seed_when_empty(connection, "line_step", seed_steps_sql)
+  use _ <- result.try(seed_when_empty(connection, "line_step", seed_steps_sql))
+  sqlight.exec(demand_code.write_references_sql <> ";", connection)
 }
 
 pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
