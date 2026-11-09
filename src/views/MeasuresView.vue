@@ -1,10 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import CompareCell, { type Verdict } from "../components/CompareCell.vue"
+import RunChart from "../components/RunChart.vue"
 import VerdictPill from "../components/VerdictPill.vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
 import { useLabels } from "../composables/useLabels"
-import { isValidPeriod, periodDays, useMeasures, type Period } from "../composables/useMeasures"
+import {
+  periodDays,
+  periodProblem,
+  useMeasures,
+  type Period,
+  type PeriodProblem,
+} from "../composables/useMeasures"
 import type { DemandMeasures, Duration, StationMeasures, TimeView } from "../types"
 
 const {
@@ -14,6 +21,12 @@ const {
   mode,
   changeAt,
   days,
+  startedOn,
+  today,
+  weekCount,
+  weeks,
+  weeksError,
+  weeksLoading,
   measures,
   error,
   loading,
@@ -41,6 +54,7 @@ const compareModes = [
 ] as const
 
 const dayOptions = [7, 14, 28]
+const weekOptions = [12, 26, 52]
 
 const chosenChange = computed(() => changes.value.find((one) => one.at === changeAt.value))
 
@@ -53,6 +67,25 @@ const otherChanges = computed(() =>
 )
 
 const lengths = computed(() => [periodDays(before), periodDays(after)])
+
+const problems = computed(() =>
+  [before, after].map((one) => periodProblem(one, startedOn.value, today)),
+)
+
+function problemText(problem: PeriodProblem) {
+  return {
+    missing: "Pick a start date and an end date.",
+    order: "Pick a start date on or before the end date.",
+    future: "Pick days up to today: the future has no measure yet.",
+    before_start: `Pick days from ${dayLabel(startedOn.value ?? today)}: the Line started then.`,
+  }[problem]
+}
+
+/** Why the periods around the change are shorter than asked. */
+const shortenedBy = computed(() => {
+  if (lengths.value[1] >= days.value) return null
+  return after.to === today ? "recent" : "line_start"
+})
 
 const ruleLabels: Record<string, string> = {
   pull_without_kanban: "Pull without a Kanban",
@@ -404,9 +437,16 @@ const deviationList = computed(() =>
             >
           </p>
           <p aria-live="polite" class="text-sm text-warning-ink empty:hidden">
-            <template v-if="lengths[1] < days">
+            <template v-if="problems[0] === 'before_start'">
+              This change is on the first day of the Line: no day before it to compare with.
+            </template>
+            <template v-else-if="shortenedBy === 'recent'">
               The change is {{ lengths[1] }} {{ lengths[1] === 1 ? "day" : "days" }} old: each
               period has {{ lengths[1] }} {{ lengths[1] === 1 ? "day" : "days" }} so far.
+            </template>
+            <template v-else-if="shortenedBy === 'line_start'">
+              The Line started {{ lengths[0] }} {{ lengths[0] === 1 ? "day" : "days" }} before the
+              change: each period has {{ lengths[0] }} {{ lengths[0] === 1 ? "day" : "days" }}.
             </template>
             <template v-if="otherChanges.length > 0">
               Another Line change falls in these periods ({{
@@ -431,23 +471,35 @@ const deviationList = computed(() =>
                 <div class="flex flex-wrap gap-3">
                   <label class="flex flex-col gap-1 text-sm">
                     <span class="opacity-70">From</span>
-                    <input v-model="one.period.from" type="date" class="input w-auto" />
+                    <input
+                      v-model="one.period.from"
+                      type="date"
+                      class="input w-auto"
+                      :min="startedOn ?? undefined"
+                      :max="today"
+                    />
                   </label>
                   <label class="flex flex-col gap-1 text-sm">
                     <span class="opacity-70">To (included)</span>
-                    <input v-model="one.period.to" type="date" class="input w-auto" />
+                    <input
+                      v-model="one.period.to"
+                      type="date"
+                      class="input w-auto"
+                      :min="startedOn ?? undefined"
+                      :max="today"
+                    />
                   </label>
                 </div>
                 <p aria-live="polite" class="mt-2 text-sm text-warning-ink empty:hidden">
-                  <template v-if="!isValidPeriod(one.period)">
-                    Pick a start date on or before the end date.
+                  <template v-if="problems[index]">
+                    {{ problemText(problems[index]!) }}
                   </template>
                 </p>
               </fieldset>
             </template>
           </div>
           <p
-            v-if="isValidPeriod(before) && isValidPeriod(after) && lengths[0] !== lengths[1]"
+            v-if="!problems[0] && !problems[1] && lengths[0] !== lengths[1]"
             class="text-sm text-warning-ink"
           >
             The periods have different lengths ({{ lengths[0] }} and {{ lengths[1] }} days): the
@@ -457,7 +509,10 @@ const deviationList = computed(() =>
       </div>
     </div>
 
-    <p v-if="loading && !measures" class="flex items-center gap-3 opacity-70">
+    <p
+      v-if="loading && !measures && !problems[0] && !problems[1]"
+      class="flex items-center gap-3 opacity-70"
+    >
       <span class="loading loading-spinner loading-sm" />
       Loading the measures…
     </p>
@@ -539,6 +594,40 @@ const deviationList = computed(() =>
         {{ periodLabel(measures.before) }}. On-time delivery counts the {{ labels.demands }}
         delivered in the period by their due date.
       </p>
+
+      <div class="card border border-base-300 bg-base-100 shadow-sm">
+        <div class="card-body gap-3 p-5">
+          <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 class="card-title text-base">Lead Time, week by week</h3>
+              <p class="text-sm opacity-70">
+                Average per Piece released, Monday to Sunday. Vertical lines: Line changes.
+              </p>
+            </div>
+            <label class="flex flex-col gap-1 text-sm">
+              <span class="opacity-70">Weeks shown</span>
+              <select v-model="weekCount" class="select select-sm w-auto">
+                <option v-for="count in weekOptions" :key="count" :value="count">
+                  {{ count }} weeks
+                </option>
+              </select>
+            </label>
+          </div>
+          <div v-if="weeksError" class="alert alert-error">
+            <span>The weeks did not load: {{ weeksError }}</span>
+          </div>
+          <p v-else-if="weeksLoading && weeks.length === 0" class="opacity-70">
+            Loading the weeks…
+          </p>
+          <RunChart
+            v-else
+            :weeks="weeks"
+            :view="view"
+            :changes="changes"
+            :chosen-at="mode === 'change' ? changeAt : null"
+          />
+        </div>
+      </div>
 
       <div class="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div class="card border border-base-300 bg-base-100 shadow-sm">

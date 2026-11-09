@@ -7,6 +7,7 @@ import gleam/dict
 import gleam/dynamic/decode
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/order
 import gleam/string
 import sqlight
 
@@ -421,4 +422,62 @@ pub fn a_pause_for_helping_counts_in_the_suggestion_like_rework_test() {
       30 * hour,
     )
   assert pass.held == []
+}
+
+pub fn the_weeks_cover_the_period_up_to_today_test() {
+  use connection <- seeded()
+  let assert Ok(history) = measures.weekly(connection, 8)
+  let weeks = history.weeks
+  assert list.length(weeks) == 8
+  let assert Ok(first) = list.first(weeks)
+  let assert Ok(last) = list.last(weeks)
+  // Mondays to Sundays, back to back, the current week last.
+  assert one(connection, "select strftime('%w', '" <> first.from <> "')") == "1"
+  assert one(
+      connection,
+      "select iif(date('now') between '"
+        <> last.from
+        <> "' and '"
+        <> last.to
+        <> "', 'yes', 'no')",
+    )
+    == "yes"
+  list.window_by_2(weeks)
+  |> list.each(fn(pair) {
+    assert one(connection, "select date('" <> { pair.0 }.to <> "', '+1 day')")
+      == { pair.1 }.from
+  })
+  // A Piece counts in the week of its release, once.
+  let assert Ok(all) = measures.load(connection, first.from, last.to)
+  assert list.fold(weeks, 0, fn(total, week) { total + week.pieces })
+    == list.length(all.pieces)
+  assert list.length(all.pieces) > 0
+}
+
+pub fn the_line_starts_at_its_first_event_test() {
+  use connection <- seeded()
+  let assert Ok(history) = measures.weekly(connection, 52)
+  assert history.started_on
+    == one(connection, "select date(min(at)) from flow_event")
+  assert string.compare(
+      history.started_on,
+      one(connection, "select date('now')"),
+    )
+    == order.Lt
+  // No Piece is released before the Line starts.
+  list.each(history.weeks, fn(week) {
+    case string.compare(week.to, history.started_on) == order.Lt {
+      True -> {
+        assert week.pieces == 0
+      }
+      False -> Nil
+    }
+  })
+}
+
+pub fn an_empty_line_starts_today_test() {
+  use connection <- db.with_connection_at(":memory:")
+  let assert Ok(Nil) = db.prepare(connection, db.Empty)
+  let assert Ok(history) = measures.weekly(connection, 4)
+  assert history.started_on == one(connection, "select date('now')")
 }

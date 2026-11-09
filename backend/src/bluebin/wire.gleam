@@ -297,6 +297,27 @@ pub type Design {
   )
 }
 
+/// The run chart (F38): the Line's first day, and its last weeks.
+pub type WeekHistory {
+  WeekHistory(
+    /// The day of the first event of the Line, `YYYY-MM-DD` (UTC): no measure before it.
+    started_on: String,
+    weeks: List(WeekMeasures),
+  )
+}
+
+/// One week of the run chart (F38), Monday to Sunday (UTC).
+pub type WeekMeasures {
+  WeekMeasures(
+    from: String,
+    to: String,
+    /// Pieces released in the week.
+    pieces: Int,
+    /// Average per Piece released; null with no Piece released.
+    lead_time: Option(Duration),
+  )
+}
+
 /// One save of the Design that changes the flow: the pivot of a before/after comparison (F38).
 pub type LineChange {
   LineChange(

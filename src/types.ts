@@ -46,6 +46,8 @@ export type {
   TeamMember,
   TeamMemberName,
   TeamMemberView,
+  WeekHistory,
+  WeekMeasures,
   WorkStation,
   WorkingCalendar,
   Workspace,

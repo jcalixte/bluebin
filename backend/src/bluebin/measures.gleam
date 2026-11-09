@@ -543,6 +543,78 @@ pub fn load(
   ))
 }
 
+/// The first day of the Line, and the last `weeks` weeks, Monday to Sunday
+/// (UTC), the current week last: the points of the run chart (F38). The log is read once for all the weeks.
+pub fn weekly(
+  connection: sqlight.Connection,
+  weeks: Int,
+) -> Result(wire.WeekHistory, MeasuresError) {
+  use periods <- result.try(
+    query(
+      connection,
+      "with recursive week(n, monday) as (
+      select 1, date('now', '-6 days', 'weekday 1', ?1)
+      union all
+      select n + 1, date(monday, '+7 days') from week where n < ?2
+    )
+    select monday, date(monday, '+6 days'),
+           cast(strftime('%s', monday) as integer),
+           cast(strftime('%s', monday, '+7 days') as integer)
+    from week order by n",
+      [
+        sqlight.text("-" <> int.to_string(7 * { weeks - 1 }) <> " days"),
+        sqlight.int(weeks),
+      ],
+      {
+        use from <- decode.field(0, decode.string)
+        use to <- decode.field(1, decode.string)
+        use start <- decode.field(2, decode.int)
+        use end <- decode.field(3, decode.int)
+        decode.success(Period(from:, to:, start:, end:))
+      },
+    ),
+  )
+  // Every Line sends its first Kanbans when it starts, so its log is never
+  // empty for long; until then, it starts today.
+  use started <- result.try(query(
+    connection,
+    "select date(coalesce(min(at), 'now')) from flow_event",
+    [],
+    decode.at([0], decode.string),
+  ))
+  let started_on = list.first(started) |> result.unwrap("")
+  use now <- result.try(db.now(connection) |> result.replace_error(StoreFailed))
+  use #(calendar, _, pieces, children, passes) <- result.try(load_passes(
+    connection,
+    now,
+  ))
+  use reworks <- result.try(query(connection, reworks_sql, [], timed_decoder()))
+  let passes_by_unit = group(passes, fn(pass) { pass.unit })
+  let reworks_by_unit =
+    group(reworks, fn(rework) { rework.0 })
+    |> dict.map_values(fn(_, found) { list.map(found, fn(one) { one.1 }) })
+  list.map(periods, fn(period) {
+    let context =
+      Context(
+        calendar:,
+        period:,
+        now:,
+        children:,
+        passes_by_unit:,
+        reworks_by_unit:,
+      )
+    let released = piece_measures(context, pieces)
+    wire.WeekMeasures(
+      from: period.from,
+      to: period.to,
+      pieces: list.length(released),
+      lead_time: average_lead(list.map(released, fn(piece) { piece.span })),
+    )
+  })
+  |> wire.WeekHistory(started_on:, weeks: _)
+  |> Ok
+}
+
 /// What the measures of one `load` share. The passes and the Rework touches
 /// are grouped by Piece or Sub-Piece once, so no measure rescans them.
 type Context {

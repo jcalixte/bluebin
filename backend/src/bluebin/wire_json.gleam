@@ -293,6 +293,22 @@ pub fn design(value: wire.Design) -> json.Json {
   ])
 }
 
+pub fn week_history(value: wire.WeekHistory) -> json.Json {
+  json.object([
+    #("startedOn", json.string(value.started_on)),
+    #("weeks", json.array(value.weeks, week_measures)),
+  ])
+}
+
+pub fn week_measures(value: wire.WeekMeasures) -> json.Json {
+  json.object([
+    #("from", json.string(value.from)),
+    #("to", json.string(value.to)),
+    #("pieces", json.int(value.pieces)),
+    #("leadTime", json.nullable(value.lead_time, duration)),
+  ])
+}
+
 pub fn line_change(value: wire.LineChange) -> json.Json {
   json.object([
     #("at", json.string(value.at)),

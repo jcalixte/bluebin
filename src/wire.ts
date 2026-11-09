@@ -259,6 +259,23 @@ export type Design = {
   steps: DesignStep[]
 }
 
+/** The run chart (F38): the Line's first day, and its last weeks. */
+export type WeekHistory = {
+  /** The day of the first event of the Line, `YYYY-MM-DD` (UTC): no measure before it. */
+  startedOn: string
+  weeks: WeekMeasures[]
+}
+
+/** One week of the run chart (F38), Monday to Sunday (UTC). */
+export type WeekMeasures = {
+  from: string
+  to: string
+  /** Pieces released in the week. */
+  pieces: number
+  /** Average per Piece released; null with no Piece released. */
+  leadTime: Duration | null
+}
+
 /** One save of the Design that changes the flow: the pivot of a before/after comparison (F38). */
 export type LineChange = {
   /** When the Design was saved, `YYYY-MM-DDTHH:MM:SSZ` (UTC). */

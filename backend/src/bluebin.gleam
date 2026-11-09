@@ -811,6 +811,7 @@ fn route(
       next_thing(team_member, database)
     _, ["api", "steps", position] -> rename_step(request, position, database)
     _, ["api", "measures"] -> measures_of(request, database)
+    _, ["api", "measures", "weeks"] -> weekly_measures(request, database)
     _, ["api", "line-changes"] -> line_changes(database)
     http.Put, ["api", "calendar"] -> save_calendar(request, database)
     _, ["api", "calendar"] -> working_calendar(database)
@@ -1025,6 +1026,19 @@ fn add_team_member(request: wisp.Request, database: String) -> wisp.Response {
     Error(design.Invalid(reason)) -> wisp.bad_request(reason)
     Error(design.StoreFailed) -> wisp.internal_server_error()
   }
+}
+
+/// `weeks` from 4 to 52; 12 by default.
+fn weekly_measures(request: wisp.Request, database: String) -> wisp.Response {
+  let weeks =
+    wisp.get_query(request)
+    |> list.key_find("weeks")
+    |> result.try(int.parse)
+    |> result.unwrap(12)
+    |> int.clamp(4, 52)
+  use connection <- read(database)
+  measures.weekly(connection, weeks)
+  |> result.map(wire_json.week_history)
 }
 
 fn line_changes(database: String) -> wisp.Response {

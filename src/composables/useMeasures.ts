@@ -1,6 +1,6 @@
 import { onMounted, reactive, ref, watch } from "vue"
 import { lineFetch } from "../api"
-import type { LineChange, Measures } from "../types"
+import type { LineChange, Measures, WeekHistory, WeekMeasures } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
 import { useWorkingCalendar } from "./useWorkingCalendar"
@@ -26,18 +26,31 @@ export function periodDays(period: Period) {
 
 /**
  * Two periods of the same length on each side of the day of a change: After starts that
- * day. A recent change shortens both, so the totals stay comparable.
+ * day. A recent change, or one soon after the Line started, shortens both, so the totals
+ * stay comparable.
  */
-export function periodsAround(day: string, days: number, today: string) {
-  const length = Math.max(1, Math.min(days, periodDays({ from: day, to: today })))
+export function periodsAround(day: string, days: number, today: string, started: string | null) {
+  const before = started === null ? days : periodDays({ from: started, to: day }) - 1
+  const length = Math.max(1, Math.min(days, before, periodDays({ from: day, to: today })))
   return {
     before: { from: dayOf(time(day) - length * dayMs), to: dayOf(time(day) - dayMs) },
     after: { from: day, to: dayOf(time(day) + (length - 1) * dayMs) },
   }
 }
 
-export function isValidPeriod(period: Period) {
-  return period.from !== "" && period.to !== "" && period.from <= period.to
+export type PeriodProblem = "missing" | "order" | "future" | "before_start"
+
+/** Why a period cannot be measured: it must be inside the Line's days, up to today. */
+export function periodProblem(
+  period: Period,
+  started: string | null,
+  today: string,
+): PeriodProblem | null {
+  if (period.from === "" || period.to === "") return "missing"
+  if (period.from > period.to) return "order"
+  if (period.to > today) return "future"
+  if (started !== null && period.from < started) return "before_start"
+  return null
 }
 
 async function fetchMeasures(period: Period) {
@@ -47,6 +60,14 @@ async function fetchMeasures(period: Period) {
     throw new Error(`API answered ${response.status}`)
   }
   return (await response.json()) as Measures
+}
+
+async function fetchWeeks(count: number) {
+  const response = await lineFetch(`/api/measures/weeks?weeks=${count}`)
+  if (!response.ok) {
+    throw new Error(`API answered ${response.status}`)
+  }
+  return (await response.json()) as WeekHistory
 }
 
 async function fetchLineChanges() {
@@ -65,6 +86,11 @@ export function useMeasures() {
   const mode = ref<CompareMode>("custom")
   const changeAt = ref<string | null>(null)
   const days = ref(7)
+  const weekCount = ref(12)
+  const weeks = ref<WeekMeasures[]>([])
+  /** The Line's first day; unknown until the weeks load. */
+  const startedOn = ref<string | null>(null)
+  const today = daysAgo(0)
   let ready = false
   let shown = ""
 
@@ -80,8 +106,21 @@ export function useMeasures() {
     (value) => (measures.value = value),
   )
 
+  const {
+    error: weeksError,
+    loading: weeksLoading,
+    load: loadWeeks,
+  } = useLoad(
+    () => fetchWeeks(weekCount.value),
+    (value) => {
+      weeks.value = value.weeks
+      startedOn.value = value.startedOn
+    },
+  )
+
   async function load() {
-    if (!ready || !isValidPeriod(before) || !isValidPeriod(after)) return
+    const problem = [before, after].some((one) => periodProblem(one, startedOn.value, today))
+    if (!ready || problem) return
     shown = JSON.stringify([before, after])
     await read()
   }
@@ -99,28 +138,43 @@ export function useMeasures() {
   function aroundChange() {
     const chosen = changes.value.find((one) => one.at === changeAt.value)
     if (mode.value !== "change" || !chosen) return
-    const periods = periodsAround(chosen.at.slice(0, 10), days.value, daysAgo(0))
+    const periods = periodsAround(chosen.at.slice(0, 10), days.value, today, startedOn.value)
     Object.assign(before, periods.before)
     Object.assign(after, periods.after)
   }
 
-  const { calendar, calendarError, saveCalendar } = useWorkingCalendar(load)
+  /** On a Line younger than the default periods, its days so far split in two halves. */
+  function fitDefaults() {
+    if (startedOn.value === null || periodProblem(before, startedOn.value, today) === null) return
+    const half = Math.floor(periodDays({ from: startedOn.value, to: today }) / 2)
+    if (half < 1) return
+    Object.assign(before, {
+      from: startedOn.value,
+      to: dayOf(time(startedOn.value) + (half - 1) * dayMs),
+    })
+    Object.assign(after, { from: dayOf(time(today) - (half - 1) * dayMs), to: today })
+  }
+
+  const { calendar, calendarError, saveCalendar } = useWorkingCalendar(() =>
+    Promise.all([load(), loadWeeks()]),
+  )
 
   watch([before, after], periodsChanged)
   watch([mode, changeAt, days], aroundChange)
+  watch(weekCount, loadWeeks)
   onMounted(async () => {
-    await loadChanges()
+    await Promise.all([loadChanges(), loadWeeks()])
     const latest = changes.value[0]
     if (latest) {
       mode.value = "change"
       changeAt.value = latest.at
       aroundChange()
-    }
+    } else fitDefaults()
     ready = true
     await load()
   })
   useLiveUpdates(async () => {
-    await loadChanges()
+    await Promise.all([loadChanges(), loadWeeks()])
     aroundChange()
     await load()
   })
@@ -132,6 +186,12 @@ export function useMeasures() {
     mode,
     changeAt,
     days,
+    startedOn,
+    today,
+    weekCount,
+    weeks,
+    weeksError,
+    weeksLoading,
     measures,
     error,
     loading,
