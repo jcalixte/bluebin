@@ -200,7 +200,9 @@ async function pickAgain() {
           <ul class="mt-2 divide-y divide-base-300 rounded-box border border-base-300 text-sm">
             <li class="flex items-baseline justify-between gap-3 px-3 py-2">
               <span>You</span>
-              <span class="text-right opacity-70">The owner, and each Team Member left</span>
+              <span class="text-right opacity-70"
+                >The owner, and each Team Member no Guest plays</span
+              >
             </li>
             <li
               v-for="one in roster"
