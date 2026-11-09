@@ -110,7 +110,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
         </div>
       </div>
 
-      <div class="grid items-start gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div class="grid items-start gap-6 xl:grid-cols-2">
         <div v-if="sequence.length > 0" class="card border border-base-300 bg-base-100 shadow-sm">
           <div class="card-body gap-3 p-5">
             <h3 class="card-title text-base">In order</h3>
@@ -167,7 +167,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
               <table class="table table-sm">
                 <thead>
                   <tr>
-                    <th>Demand</th>
+                    <th class="sticky left-0 bg-base-100">Demand</th>
                     <th
                       v-for="cell in backlog.mix[0]?.cells ?? []"
                       :key="cell.day"
@@ -175,12 +175,12 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                     >
                       {{ dateLabel(cell.day, { weekday: "short", day: "numeric" }) }}
                     </th>
-                    <th class="border-l border-base-300 text-center">Total</th>
+                    <th class="sticky right-0 border-l border-base-300 bg-base-100 text-center">Total</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="row in backlog.mix" :key="row.demand">
-                    <th class="font-medium">{{ row.label }}</th>
+                    <th class="sticky left-0 bg-base-100 font-medium">{{ row.label }}</th>
                     <td v-for="cell in row.cells" :key="cell.day" class="text-center">
                       <span
                         class="badge badge-sm whitespace-nowrap tabular-nums"
@@ -190,7 +190,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                         {{ cell.real }} / {{ cell.planned }}
                       </span>
                     </td>
-                    <td class="border-l border-base-300 text-center">
+                    <td class="sticky right-0 border-l border-base-300 bg-base-100 text-center">
                       <span
                         v-if="row.total"
                         class="badge badge-sm whitespace-nowrap font-semibold tabular-nums"
