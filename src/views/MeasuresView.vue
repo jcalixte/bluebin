@@ -153,6 +153,10 @@ function dayLabel(day: string) {
   })
 }
 
+function dayCount(count: number) {
+  return `${count} ${count === 1 ? "day" : "days"}`
+}
+
 function periodLabel(period: Period) {
   return `${dayLabel(period.from)} – ${dayLabel(period.to)}`
 }
@@ -428,14 +432,31 @@ const deviationList = computed(() =>
           <ul class="list-inside list-disc text-sm">
             <li v-for="item in chosenChange.items" :key="item">{{ item }}</li>
           </ul>
-          <p class="text-sm tabular-nums">
-            <span class="font-medium">Before</span> {{ periodLabel(before) }}
-            <span class="opacity-60">compared with</span>
-            <span class="font-medium">After</span> {{ periodLabel(after) }}
-            <span class="opacity-70"
-              >· {{ lengths[1] }} {{ lengths[1] === 1 ? "day" : "days" }} each</span
-            >
-          </p>
+          <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-x-3 text-sm">
+            <div class="rounded-box border border-base-300 px-4 py-3">
+              <p class="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span class="font-semibold">Before</span>
+                <span v-if="!problems[0]" class="text-xs opacity-70">{{
+                  dayCount(lengths[0])
+                }}</span>
+              </p>
+              <p class="mt-1 font-medium">{{ periodLabel(before) }}</p>
+            </div>
+            <div class="flex flex-col items-center gap-1" aria-hidden="true">
+              <span class="w-px flex-1 bg-base-content opacity-70" />
+              <span class="text-xs font-medium whitespace-nowrap">Change</span>
+              <span class="w-px flex-1 bg-base-content opacity-70" />
+            </div>
+            <div class="rounded-box border border-base-300 px-4 py-3">
+              <p class="flex flex-wrap items-baseline justify-between gap-x-2">
+                <span class="font-semibold">After</span>
+                <span class="text-xs opacity-70">
+                  {{ dayCount(lengths[1]) }}{{ after.to === today ? " so far" : "" }}
+                </span>
+              </p>
+              <p class="mt-1 font-medium">{{ periodLabel(after) }}</p>
+            </div>
+          </div>
           <p aria-live="polite" class="text-sm text-warning-ink empty:hidden">
             <template v-if="problems[0] === 'before_start'">
               This change is on the first day of the Line: no day before it to compare with.
@@ -457,34 +478,32 @@ const deviationList = computed(() =>
         </template>
 
         <template v-else>
-          <div class="flex flex-row flex-wrap items-start gap-x-8 gap-y-4">
+          <div class="grid gap-4 md:grid-cols-2">
             <template v-for="(one, index) in periods" :key="one.name">
-              <span
-                v-if="index > 0"
-                class="hidden self-center pt-6 text-sm font-medium opacity-60 md:block"
-                aria-hidden="true"
-              >
-                compared with
-              </span>
-              <fieldset class="min-w-0">
-                <legend class="mb-2 text-sm font-semibold">{{ one.name }}</legend>
+              <fieldset class="min-w-0 rounded-box border border-base-300 px-4 pt-2 pb-4">
+                <legend class="px-1 text-sm">
+                  <span class="font-semibold">{{ one.name }}</span>
+                  <span v-if="!problems[index]" class="ml-2 text-xs opacity-70">
+                    {{ dayCount(lengths[index]!) }}
+                  </span>
+                </legend>
                 <div class="flex flex-wrap gap-3">
-                  <label class="flex flex-col gap-1 text-sm">
+                  <label class="flex min-w-40 flex-1 flex-col gap-1 text-sm">
                     <span class="opacity-70">From</span>
                     <input
                       v-model="one.period.from"
                       type="date"
-                      class="input w-auto"
+                      class="input w-full"
                       :min="startedOn ?? undefined"
                       :max="today"
                     />
                   </label>
-                  <label class="flex flex-col gap-1 text-sm">
+                  <label class="flex min-w-40 flex-1 flex-col gap-1 text-sm">
                     <span class="opacity-70">To (included)</span>
                     <input
                       v-model="one.period.to"
                       type="date"
-                      class="input w-auto"
+                      class="input w-full"
                       :min="startedOn ?? undefined"
                       :max="today"
                     />
