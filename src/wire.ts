@@ -339,6 +339,8 @@ export type Rework = {
   foundById: string | null
   assignee: string | null
   assigneeId: string | null
+  /** Its assignee repairs it now; their other open Reworks wait. */
+  started: boolean
   helpers: TeamMemberName[]
   /** Who may join as Helper now: the two Work Stations concerned, while someone repairs. */
   canHelp: TeamMemberName[]

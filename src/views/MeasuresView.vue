@@ -362,10 +362,7 @@ const deviationList = computed(() =>
     <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
         <h2 class="text-xl font-semibold">Measures</h2>
-        <p class="text-sm opacity-70">
-          Lead Time, Touch Time and Stagnation Time of the Pieces released, before and after a
-          change
-        </p>
+        <p class="text-sm opacity-70">How the Line flows before and after a change</p>
       </div>
       <div class="tabs tabs-box tabs-sm bg-base-100" role="group" aria-label="Time view">
         <button
@@ -690,9 +687,7 @@ const deviationList = computed(() =>
           <h3 class="card-title text-base">Per Demand</h3>
           <p class="text-sm opacity-70">Averages per Piece released.</p>
           <p class="text-xs opacity-60">
-            Each cell: After ({{ periodLabel(measures.after) }}) on top, Before ({{
-              periodLabel(measures.before)
-            }}) below. Blue: better than before.
+            Each cell: After on top, Before below. Blue: better than before.
           </p>
           <p v-if="demands.length === 0" class="opacity-70">No Piece released.</p>
           <div v-else class="overflow-x-auto">
@@ -732,13 +727,11 @@ const deviationList = computed(() =>
           <h3 class="card-title text-base">Per Work Station</h3>
           <p class="text-sm opacity-70">
             Station Lead Time and Touch Time are averages per pass. Replenishment Time is the 85th
-            percentile of the passes, from the pull in to the Blue Bin, and shows from 5 passes.
-            Starvation Time and Andon Time are totals of the period.
+            percentile of the passes, from the pull in to the Blue Bin, and shows when there are 5
+            passes or more. Starvation Time and Andon Time are totals of the period.
           </p>
           <p class="text-xs opacity-60">
-            Each cell: After ({{ periodLabel(measures.after) }}) on top, Before ({{
-              periodLabel(measures.before)
-            }}) below. Blue: better than before.
+            Each cell: After on top, Before below. Blue: better than before.
           </p>
           <p v-if="stations.length === 0" class="opacity-70">No Work Station.</p>
           <div v-else class="overflow-x-auto">

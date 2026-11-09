@@ -14,6 +14,7 @@ import DemandsView from "./views/DemandsView.vue"
 import DesignView from "./views/DesignView.vue"
 import MeasuresView from "./views/MeasuresView.vue"
 import NextThingView from "./views/NextThingView.vue"
+import TeamView from "./views/TeamView.vue"
 import LineView from "./views/LineView.vue"
 import { useAccount } from "./composables/useAccount"
 import { useLabels } from "./composables/useLabels"
@@ -24,6 +25,7 @@ const views = [
   { id: "demands", label: "Demands", path: "/demands" },
   { id: "backlog", label: "Backlog", path: "/backlog" },
   { id: "line", label: "Line", path: "/line" },
+  { id: "team", label: "Team", path: "/team" },
   { id: "next", label: "My next thing", path: "/next" },
   { id: "measures", label: "Measures", path: "/measures" },
   { id: "design", label: "Design", path: "/design" },
@@ -197,6 +199,7 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
       <DemandsView v-if="current.id === 'demands'" />
       <BacklogView v-else-if="current.id === 'backlog'" />
       <LineView v-else-if="current.id === 'line'" />
+      <TeamView v-else-if="current.id === 'team'" />
       <MeasuresView v-else-if="current.id === 'measures'" />
       <DesignView v-else-if="current.id === 'design'" />
       <NextThingView v-else />

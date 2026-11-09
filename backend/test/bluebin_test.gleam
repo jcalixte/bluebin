@@ -1692,7 +1692,8 @@ pub fn a_version_3_database_gets_demand_codes_test() {
 
 pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
   use connection <- with_seeded_database()
-  // Alice repairs rw-1: Karim (iOS) and Yasmine (QA iOS) can help (F61).
+  // Alice repairs rw-1, so it shows as started: Karim (iOS) and Yasmine
+  // (QA iOS) can help (F61).
   let assert Ok(payload) = load_line(connection)
   // The warning of a pull at QA iOS finds its Reworks by this id (F14).
   assert string.contains(
@@ -1701,7 +1702,7 @@ pub fn the_line_shows_who_helps_a_rework_and_who_can_test() {
   )
   assert string.contains(
     json.to_string(payload),
-    "\"assigneeId\":\"pe-alice\",\"helpers\":[],\"canHelp\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"},{\"id\":\"pe-yasmine\",\"name\":\"Yasmine\"}]",
+    "\"assigneeId\":\"pe-alice\",\"started\":true,\"helpers\":[],\"canHelp\":[{\"id\":\"pe-karim\",\"name\":\"Karim\"},{\"id\":\"pe-yasmine\",\"name\":\"Yasmine\"}]",
   )
 
   // Karim helps: he shows on the Rework and on OFF-4 in Yasmine's hands (F64).

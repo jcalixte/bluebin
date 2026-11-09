@@ -646,6 +646,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F62 | Pause the **Helper**'s active **Assignment** when they join; when the help ends, make their paused **Assignment** nearest to **Deployment** active again | → | 100 %, with no manual step | G8 |
 | F63 | End the help at the latest when its cause ends (**Rework** closed, or **Piece** put in a **Blue Bin**), and let the **Helper** stop before | → | 0 **Helpers** after the cause ends; stop in 1 click | G8 |
 | F64 | Show the **Helpers** of a **Piece** in the **Line** view, on the **Rework** card, and in the **Helper**'s own **Assignments** | ↑ | 100 % of **Helpers** visible, with no click | G7 |
+| F65 | Show every **Team Member** of the **Line** with all their **Assignments** (active, paused, waiting **Rework**), what they help, and the **Pieces** and **Rework** nobody holds, so the team sees where work piles up and reassigns it (F21) | ↑ | all **Team Members** on 1 screen, ≤ 2 s after a flow event | G7 |
 
 ---
 
@@ -657,7 +658,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 - **G4** Jidoka, stop and fix _W:8_ — F12–F16, F42, F61
 - **G5** A **Team Member** knows the next thing to do _W:9_ — F17–F22
 - **G6** Levelled **Product Mix** _W:7_ — F23–F26
-- **G7** **Line** at a glance _W:8_ — F27–F29, F64
+- **G7** **Line** at a glance _W:8_ — F27–F29, F64, F65
 - **G8** Recording costs seconds _W:8_ — F30–F33, F62, F63
 - **G9** Flow problems as numbers _W:8_ — F34–F38, F54
 - **G10** Design and change without code _W:6_ — F39–F41

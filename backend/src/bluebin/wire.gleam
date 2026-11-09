@@ -380,6 +380,8 @@ pub type Rework {
     found_by_id: Option(String),
     assignee: Option(String),
     assignee_id: Option(String),
+    /// Its assignee repairs it now; their other open Reworks wait.
+    started: Bool,
     helpers: List(TeamMemberName),
     /// Who may join as Helper now: the two Work Stations concerned, while someone repairs.
     can_help: List(TeamMemberName),

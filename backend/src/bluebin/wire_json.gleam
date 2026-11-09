@@ -380,6 +380,7 @@ pub fn rework(value: wire.Rework) -> json.Json {
     #("foundById", json.nullable(value.found_by_id, json.string)),
     #("assignee", json.nullable(value.assignee, json.string)),
     #("assigneeId", json.nullable(value.assignee_id, json.string)),
+    #("started", json.bool(value.started)),
     #("helpers", json.array(value.helpers, team_member_name)),
     #("canHelp", json.array(value.can_help, team_member_name)),
   ])

@@ -62,6 +62,7 @@ pub type Rework {
     found_by_id: Option(String),
     assignee: Option(String),
     assignee_id: Option(String),
+    started: Bool,
   )
 }
 
@@ -201,6 +202,7 @@ fn wire_station(station: Station, rows: Rows) -> wire.WorkStation {
         found_by_id: item.found_by_id,
         assignee: item.assignee,
         assignee_id: item.assignee_id,
+        started: item.started,
         helpers: wire_helpers(rows_of(rows.helpers_of_rework, item.id)),
         can_help: wire_helpers(rows_of(rows.can_help, item.id)),
       )
@@ -426,6 +428,7 @@ fn query_rework(
     use assignee <- decode.field(5, decode.optional(decode.string))
     use assignee_id <- decode.field(6, decode.optional(decode.string))
     use found_by_id <- decode.field(7, decode.optional(decode.string))
+    use started <- decode.field(8, decode.int)
     decode.success(Rework(
       station_id:,
       id:,
@@ -435,6 +438,7 @@ fn query_rework(
       found_by_id:,
       assignee:,
       assignee_id:,
+      started: started > 0,
     ))
   }
   sqlight.query(
@@ -442,7 +446,7 @@ fn query_rework(
             coalesce((select w.name from work_station w where w.id = r.raised_by),
                      'downstream'),
             (select pe.name from team_member pe where pe.id = r.assignee),
-            r.assignee, r.raised_by
+            r.assignee, r.raised_by, r.started_at is not null
      from rework r
      join piece p on p.id = r.piece_id
      where r.closed_at is null
