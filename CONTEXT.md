@@ -208,6 +208,14 @@ _Avoid_: tenant, organization, board
 One Line that lives only in the visitor's page, with no sign-in and nothing saved, where the visitor plays the owner or any Team Member and changes who at any time.
 _Avoid_: demo, sandbox, playground, Public Workspace
 
+**Host**:
+The visitor whose page runs a Simulation that Guests join from its link; the Host plays the owner of the Line and each Team Member that no Guest picks.
+_Avoid_: server, admin, organizer
+
+**Guest**:
+A visitor who joins the Simulation of a Host from its link and plays one Team Member that no other Guest plays.
+_Avoid_: player, participant, member
+
 **Shared Line**:
 A Line that anyone can look at from its link, signed in or not.
 _Avoid_: public Line, open Line
@@ -279,6 +287,7 @@ _Avoid_: hidden Line, secret Line
 - A linked **Team Member** shows the first and last name of its **Account**; the owner names only the **Team Members** with no **Account**
 - A **Workspace** has exactly one owner **Account**; its owner and each **Account** that is a **Team Member** in one of its **Lines** can open it
 - A **Simulation** belongs to no **Workspace** and no **Account**; it starts from the demo data, follows the same rules as any **Line**, and ends when its page closes
+- A **Simulation** has one **Host** and any number of **Guests**; each **Guest** plays exactly one **Team Member**, and the **Simulation** ends for every **Guest** when the page of its **Host** closes
 - Only the owner of a **Workspace** makes, renames, empties or redesigns its **Lines** (**Work Stations**, **Team Members**, **Blue Bins**, labels), and makes each one **Shared** or **Private**
 - A **Team Member** with an **Account** does the daily flow of their **Line** (pull, **Andon**, **Rework**, **Deviation**, **Assignment**, **Release**) and adds **Demands**
 - A linked **Team Member** acts only through their own **Account**; the owner acts for the **Team Members** with no **Account**

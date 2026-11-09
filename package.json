@@ -8,6 +8,7 @@
     "dev:sim": "vite --mode simulation",
     "sim": "cd sim && gleam build",
     "sim:test": "cd sim && NODE_OPTIONS=--import=./test/sql_js.mjs gleam test",
+    "test": "node --test 'src/**/*.test.ts'",
     "build": "vue-tsc -b && vite build",
     "build:sim": "vue-tsc -b && vite build --mode simulation",
     "preview": "vite preview",
@@ -19,6 +20,7 @@
   "dependencies": {
     "daisyui": "^5.7.50",
     "sql.js": "^1.15.2",
+    "trystero": "0.26.0",
     "vue": "^3.5.44"
   },
   "devDependencies": {

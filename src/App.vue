@@ -19,7 +19,7 @@ import LineView from "./views/LineView.vue"
 import { useAccount } from "./composables/useAccount"
 import { useLabels } from "./composables/useLabels"
 import { homeLine, useWorkspaces } from "./composables/useWorkspaces"
-import { appUrl, restartSimulation, simulation } from "./simulation/state"
+import { appUrl, guest, restartSimulation, simulation } from "./simulation/state"
 
 const views = [
   { id: "demands", label: "Demands", path: "/demands" },
@@ -177,7 +177,14 @@ onBeforeUnmount(() => removeEventListener("popstate", onPopState))
     </header>
 
     <main class="mx-auto max-w-[110rem] px-6 py-8">
-      <p v-if="simulation" role="status" class="alert alert-info mb-6">
+      <p v-if="guest" role="status" class="alert alert-info mb-6">
+        <span>
+          This Line lives in the page of the host, who plays the owner and each Team Member that no
+          Guest picks. When the host closes it, the Simulation ends. For a Line your team keeps,
+          <a :href="appUrl" class="link font-medium">sign in to Bluebin</a>.
+        </span>
+      </p>
+      <p v-else-if="simulation" role="status" class="alert alert-info mb-6">
         <span>
           This Line lives only in this page: nothing is saved, and a reload starts it again. Play as
           any Team Member, or as the owner to change the Design. For a Line your team keeps,

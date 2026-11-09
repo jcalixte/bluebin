@@ -190,6 +190,18 @@ app, on `try.bluebin.app`, with no forward-auth labels: it reads no real Line,
 so it needs no sign-in. The main `Dockerfile` compiles `sim/` too, because
 vue-tsc checks the Simulation code.
 
+**Invite…** shares the Simulation, peer to peer: the page that invites is the
+Host and keeps the only copy of the Line; each page that opens its link
+(`/line#join=<room>.<password>`) is a Guest, picks one Team Member and sends
+every Line call to the Host over WebRTC ([`share.ts`](./src/simulation/share.ts)).
+The Host answers as that Team Member, plays the owner and every Team Member no
+Guest picks, and tells each Guest to read again after a change. A Guest loads
+no SQLite. [Trystero](https://github.com/dmotz/trystero) finds the peers
+through public Nostr relays, which carry only offers encrypted with the
+password, so there is still no server. No TURN server: two browsers that cannot
+connect directly (some company networks) cannot play together.
+`pnpm test` runs the seat rules ([`seats.ts`](./src/simulation/seats.ts)).
+
 <!-- docs:start -->
 
 ## Documentation
