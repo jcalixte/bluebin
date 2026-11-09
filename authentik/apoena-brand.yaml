@@ -47,10 +47,19 @@ entries:
     attrs:
       failure_result: true
   - model: authentik_flows.flowstagebinding
+    id: mfa-binding
     identifiers:
       target: !KeyOf flow
       stage: !Find [authentik_stages_authenticator_validate.authenticatorvalidatestage, [name, default-authentication-mfa-validation]]
       order: 30
+  # A passkey sign-in (passkey.yaml) is already strong: skip the second factor.
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf mfa-binding
+      policy: !Find [authentik_policies_expression.expressionpolicy, [name, default-authentication-flow-authenticator-validate-stage]]
+      order: 10
+    attrs:
+      failure_result: true
   - model: authentik_flows.flowstagebinding
     identifiers:
       target: !KeyOf flow

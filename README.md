@@ -150,6 +150,13 @@ flow, so an authentik upgrade cannot bring back "Welcome to authentik!".
 authentik loads the SVGs from the public Gitea raw URLs of `main`, so push them before you import. Custom CSS cannot load web
 fonts, so Cascadia Mono and Inter show only where the OS has them.
 
+Passkeys come first at sign-in (authentik 2025.12 or later): import
+[`authentik/passkey.yaml`](./authentik/passkey.yaml) after the flows. When the
+username field gets focus, the browser offers the user's passkeys; the password
+stays as fallback, and a passkey sign-in skips the second factor. A passkey
+belongs to one host, so make it on `auth.bluebin.app` for Bluebin: user settings
+(`/if/user/#/settings`) > MFA Devices > Enroll > WebAuthn device.
+
 `akadmin` makes each link with **Invite…** in the header: `POST /api/invitations`
 asks authentik for a single-use invitation to `bluebin-invitation`, valid one
 week. The API trusts `X-authentik-username` only with `BLUEBIN_SSO=on`, and
