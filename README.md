@@ -181,8 +181,8 @@ It is the same SPA, built with `--mode simulation`. It runs the API's own Line
 routes and role guard (`bluebin.simulate`), compiled to JavaScript by the Gleam
 package [`sim/`](./sim), on an in-memory SQLite: sql.js stands in for
 `node:sqlite`, which sqlight imports on JavaScript (the Vite alias in
-`vite.config.ts`). The real build drops SQLite and the Gleam code. The holidays
-of the Working Calendar come from Nager.Date, straight from the browser.
+`vite.config.ts`). The real build drops SQLite and the Gleam code. The Working
+Calendar of the Simulation has no holidays: its card hides them.
 
 [`Dockerfile.simulation`](./Dockerfile.simulation) makes a static nginx image
 of it ([`simulation.nginx.conf`](./simulation.nginx.conf)). It is its own Coolify

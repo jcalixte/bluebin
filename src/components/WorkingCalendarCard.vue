@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from "vue"
 import type { WorkingCalendar } from "../types"
 import { fetchCountries, fetchPublicHolidays, type Country } from "../publicHolidays"
+import { simulation } from "../simulation/state"
 
 const props = defineProps<{
   calendar: WorkingCalendar
@@ -49,6 +50,7 @@ const importing = ref(false)
 const importError = ref<string | null>(null)
 
 onMounted(async () => {
+  if (simulation) return
   try {
     countries.value = await fetchCountries()
   } catch (cause) {
@@ -139,7 +141,7 @@ async function submit() {
         </label>
       </div>
 
-      <fieldset>
+      <fieldset v-if="!simulation">
         <legend class="mb-2 text-sm font-medium">Holidays</legend>
         <p v-if="draft.holidays.length === 0" class="mb-2 text-sm opacity-70">No holidays.</p>
         <ul v-else class="mb-2 flex flex-col gap-2">

@@ -1,16 +1,7 @@
-import { simulation } from "./simulation/state"
 import type { Holiday } from "./types"
 
 /** The server asks Nager.Date (https://date.nager.at) and keeps its answers a month. */
 const api = "/api/holidays"
-/** The Simulation has no server: it asks Nager.Date itself, which allows any origin. */
-const nager = "https://date.nager.at/api/v3"
-
-/** `/countries` or `/2026/FR`, at the server or, in the Simulation, at Nager.Date. */
-function urlOf(path: string): string {
-  if (!simulation) return `${api}${path}`
-  return path === "/countries" ? `${nager}/AvailableCountries` : `${nager}/PublicHolidays${path}`
-}
 
 export type Country = { countryCode: string; name: string }
 
@@ -22,7 +13,7 @@ type NagerHoliday = {
 }
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(urlOf(path)).catch(() => {
+  const response = await fetch(`${api}${path}`).catch(() => {
     throw new Error("Cannot reach the server.")
   })
   if (response.status === 404) {
