@@ -19,8 +19,7 @@ const teamMemberId = ref(
  * A Member sees only their own work, so they pick no name; the owner sees their own work first,
  * then any Team Member's. In the Simulation, "Play as" makes the visitor that Member.
  */
-const { current, role, canActAs } = useWorkspaces()
-const pinned = computed(() => role.value === "member" && !!current.value?.teamMember)
+const { current, canActAs, ownWorkOnly: pinned } = useWorkspaces()
 
 /** Who looks may not act as the Team Member picked: then no action shows. */
 const acting = computed(() => canActAs(teamMemberId.value))

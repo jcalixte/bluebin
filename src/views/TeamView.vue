@@ -1,9 +1,24 @@
 <script setup lang="ts">
 import { computed } from "vue"
+import { pageUrl } from "../api"
 import { useLine } from "../composables/useLine"
+import { useWorkspaces } from "../composables/useWorkspaces"
 import type { Rework, WorkStation } from "../types"
 
 const { line, error, loading } = useLine()
+const { current, ownWorkOnly } = useWorkspaces()
+
+/** My next thing of a Team Member, when who looks may open it. */
+function nextUrl(teamMember: string): string | null {
+  if (ownWorkOnly.value && teamMember !== current.value?.teamMember) return null
+  return `${pageUrl("/next")}?teamMember=${encodeURIComponent(teamMember)}`
+}
+
+/** Opens the tab in this page, as the header tabs do: App.vue follows `popstate`. */
+function openNext(url: string) {
+  history.pushState(null, "", url)
+  dispatchEvent(new PopStateEvent("popstate"))
+}
 
 type Card = {
   key: string
@@ -184,7 +199,18 @@ function state(card: Card) {
       >
         <div class="flex items-baseline justify-between gap-3 md:block">
           <div class="min-w-0">
-            <h3 class="truncate font-semibold">{{ row.name }}</h3>
+            <h3 class="truncate font-semibold">
+              <a
+                v-if="nextUrl(row.id)"
+                :href="nextUrl(row.id)!"
+                class="link link-hover rounded-field"
+                :title="`Open My next thing of ${row.name}`"
+                @click.exact.prevent="openNext(nextUrl(row.id)!)"
+              >
+                {{ row.name }}
+              </a>
+              <template v-else>{{ row.name }}</template>
+            </h3>
             <p class="truncate text-xs opacity-70">{{ row.stations.join(" · ") }}</p>
           </div>
           <p class="shrink-0 text-sm md:hidden">

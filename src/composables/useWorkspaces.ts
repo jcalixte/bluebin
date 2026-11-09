@@ -61,6 +61,12 @@ function canActAs(teamMember?: string): boolean {
   return teamMember === undefined || teamMember === current.value?.teamMember
 }
 
+/**
+ * A Member sees only their own My next thing; the owner, who looks, and a Member with no Team
+ * Member see any Team Member's.
+ */
+const ownWorkOnly = computed(() => role.value === "member" && !!current.value?.teamMember)
+
 type Home = { owner: string | null; id: string; teamMember: string }
 
 /**
@@ -81,5 +87,16 @@ export function homeLine(all: Workspace[], owner: string | null, line: string): 
 /** Not inside a Line: the Line menu and the role of this page's Line. */
 export function useWorkspaces() {
   loading ??= fetchWorkspaces()
-  return { workspaces, workspace, current, role, canAct, canActAs, loaded, problem, ready: loading }
+  return {
+    workspaces,
+    workspace,
+    current,
+    role,
+    canAct,
+    canActAs,
+    ownWorkOnly,
+    loaded,
+    problem,
+    ready: loading,
+  }
 }
