@@ -54,3 +54,90 @@ export type Workspace = {
   own: boolean
   lines: LineEntry[]
 }
+
+/** Hours, in each view; the whole Duration is null when there is nothing to average. */
+export type Duration = {
+  calendar: number | null
+  working: number | null
+}
+
+/** Averages per Piece released in the period. */
+export type PieceMeasures = {
+  count: number
+  leadTime: Duration | null
+  touchTime: Duration | null
+  stagnationTime: Duration | null
+  backlogTime: Duration | null
+}
+
+export type DemandMeasures = {
+  id: string
+  label: string
+  client: string
+  pieces: number
+  /** The Demand's own Lead Time: null until its last Piece is released. */
+  demandLeadTime: Duration | null
+  leadTime: Duration | null
+  touchTime: Duration | null
+  stagnationTime: Duration | null
+}
+
+/** `stationLeadTime` and `touchTime` are averages per pass; `starvationTime` and `andonTime` are totals. */
+export type StationMeasures = {
+  id: string
+  name: string
+  branch: string | null
+  position: number
+  passes: number
+  stationLeadTime: Duration | null
+  touchTime: Duration | null
+  /** 85th percentile of the passes that went in the Blue Bin in the period; null under 5 passes. */
+  replenishmentTime: Duration | null
+  /** A fraction in 0..1. */
+  touchShare: number | null
+  starvationTime: Duration | null
+  /** The time an Andon stopped the Work Station inside the period. */
+  andonTime: Duration | null
+  /** The Andons raised on the Work Station inside the period. */
+  andons: number
+  pulls: number
+  deviations: number
+}
+
+export type RecordedDeviation = {
+  at: string
+  rule: string
+  station: string
+  stationName: string
+  piece: string | null
+  reason: string
+}
+
+export type OnTime = {
+  delivered: number
+  onTime: number
+}
+
+/** The Deviations recorded in the period: how many per rule, most first, then each one. */
+export type DeviationMeasures = {
+  byRule: RuleCount[]
+  list: RecordedDeviation[]
+}
+
+export type RuleCount = {
+  rule: string
+  count: number
+}
+
+export type Measures = {
+  from: string
+  to: string
+  pieces: PieceMeasures
+  demands: DemandMeasures[]
+  stations: StationMeasures[]
+  /** The time at least one Work Station is stopped by an Andon; stops at the same time count once. */
+  andonTime: Duration | null
+  /** Demands delivered in the period, and those delivered by their due date. */
+  onTime: OnTime
+  deviations: DeviationMeasures
+}

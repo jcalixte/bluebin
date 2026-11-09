@@ -81,3 +81,96 @@ pub type Workspace {
     lines: List(LineEntry),
   )
 }
+
+/// Hours, in each view; the whole Duration is null when there is nothing to average.
+pub type Duration {
+  Duration(calendar: Option(Float), working: Option(Float))
+}
+
+/// Averages per Piece released in the period.
+pub type PieceMeasures {
+  PieceMeasures(
+    count: Int,
+    lead_time: Option(Duration),
+    touch_time: Option(Duration),
+    stagnation_time: Option(Duration),
+    backlog_time: Option(Duration),
+  )
+}
+
+pub type DemandMeasures {
+  DemandMeasures(
+    id: String,
+    label: String,
+    client: String,
+    pieces: Int,
+    /// The Demand's own Lead Time: null until its last Piece is released.
+    demand_lead_time: Option(Duration),
+    lead_time: Option(Duration),
+    touch_time: Option(Duration),
+    stagnation_time: Option(Duration),
+  )
+}
+
+/// `stationLeadTime` and `touchTime` are averages per pass; `starvationTime` and `andonTime` are totals.
+pub type StationMeasures {
+  StationMeasures(
+    id: String,
+    name: String,
+    branch: Option(String),
+    position: Int,
+    passes: Int,
+    station_lead_time: Option(Duration),
+    touch_time: Option(Duration),
+    /// 85th percentile of the passes that went in the Blue Bin in the period; null under 5 passes.
+    replenishment_time: Option(Duration),
+    /// A fraction in 0..1.
+    touch_share: Option(Float),
+    starvation_time: Option(Duration),
+    /// The time an Andon stopped the Work Station inside the period.
+    andon_time: Option(Duration),
+    /// The Andons raised on the Work Station inside the period.
+    andons: Int,
+    pulls: Int,
+    deviations: Int,
+  )
+}
+
+pub type RecordedDeviation {
+  RecordedDeviation(
+    at: String,
+    rule: String,
+    station: String,
+    station_name: String,
+    piece: Option(String),
+    reason: String,
+  )
+}
+
+pub type OnTime {
+  OnTime(delivered: Int, on_time: Int)
+}
+
+/// The Deviations recorded in the period: how many per rule, most first, then each one.
+pub type DeviationMeasures {
+  DeviationMeasures(by_rule: List(RuleCount), list: List(RecordedDeviation))
+}
+
+pub type RuleCount {
+  RuleCount(rule: String, count: Int)
+}
+
+pub type Measures {
+  Measures(
+    from: String,
+    to: String,
+    pieces: PieceMeasures,
+    demands: List(DemandMeasures),
+    stations: List(StationMeasures),
+    /// The time at least one Work Station is stopped by an Andon; stops at the same time count once.
+    andon_time: Option(Duration),
+    /// Demands delivered in the period, and those delivered by their due date.
+    on_time: OnTime,
+    deviations: DeviationMeasures,
+  )
+}

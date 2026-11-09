@@ -1,5 +1,7 @@
 import bluebin/calendar.{type Calendar}
 import bluebin/db
+import bluebin/wire
+import bluebin/wire_json
 import gleam/dict.{type Dict}
 import gleam/dynamic/decode
 import gleam/float
@@ -445,24 +447,13 @@ pub type DemandMeasure {
   )
 }
 
-pub type DeviationRow {
-  DeviationRow(
-    at: String,
-    rule: String,
-    station: String,
-    station_name: String,
-    piece: Option(String),
-    reason: String,
-  )
-}
-
 pub type Measures {
   Measures(
     period: Period,
     pieces: List(PieceMeasure),
     demands: List(DemandMeasure),
     stations: List(StationMeasure),
-    deviations: List(DeviationRow),
+    deviations: List(wire.RecordedDeviation),
     /// The time at least one Work Station is stopped: stops at the same time
     /// count once.
     andon: Int,
@@ -742,7 +733,7 @@ fn station_measures(
   passes: List(Pass),
   events: List(Event),
   stops: List(#(String, Interval)),
-  deviations: List(DeviationRow),
+  deviations: List(wire.RecordedDeviation),
 ) -> List(StationMeasure) {
   let passes_by_station = group(passes, fn(pass) { pass.station })
   let stops_by_station =
@@ -997,14 +988,14 @@ fn demand_decoder() -> decode.Decoder(DemandRow) {
   decode.success(DemandRow(id:, label:, client:))
 }
 
-fn deviation_decoder() -> decode.Decoder(DeviationRow) {
+fn deviation_decoder() -> decode.Decoder(wire.RecordedDeviation) {
   use at <- decode.field(0, decode.string)
   use rule <- decode.field(1, decode.string)
   use station <- decode.field(2, decode.string)
   use station_name <- decode.field(3, decode.string)
   use piece <- decode.field(4, decode.optional(decode.string))
   use reason <- decode.field(5, decode.string)
-  decode.success(DeviationRow(
+  decode.success(wire.RecordedDeviation(
     at:,
     rule:,
     station:,
@@ -1016,180 +1007,141 @@ fn deviation_decoder() -> decode.Decoder(DeviationRow) {
 
 pub fn to_json(measures: Measures) -> json.Json {
   let pieces = measures.pieces
-  json.object([
-    #("from", json.string(measures.period.from)),
-    #("to", json.string(measures.period.to)),
-    #(
-      "pieces",
-      json.object([
-        #("count", json.int(list.length(pieces))),
-        ..spans_json(list.map(pieces, fn(piece) { piece.span }))
-        |> list.append([
-          #(
-            "backlogTime",
-            average_lead(
-              list.filter_map(pieces, fn(piece) {
-                option.to_result(piece.backlog, Nil)
-              }),
-            ),
-          ),
-        ])
-      ]),
+  let piece_spans = list.map(pieces, fn(piece) { piece.span })
+  wire.Measures(
+    from: measures.period.from,
+    to: measures.period.to,
+    pieces: wire.PieceMeasures(
+      count: list.length(pieces),
+      lead_time: average_lead(piece_spans),
+      touch_time: average_touch(piece_spans),
+      stagnation_time: average_stagnation(piece_spans),
+      backlog_time: average_lead(
+        list.filter_map(pieces, fn(piece) {
+          option.to_result(piece.backlog, Nil)
+        }),
+      ),
     ),
-    #(
-      "demands",
-      json.array(measures.demands, fn(demand) {
-        json.object([
-          #("id", json.string(demand.id)),
-          #("label", json.string(demand.label)),
-          #("client", json.string(demand.client)),
-          #("pieces", json.int(list.length(demand.pieces))),
-          #(
-            "demandLeadTime",
-            json.nullable(demand.lead, fn(span) {
-              duration(Some(lead(span)), Some(lead_working(span)))
-            }),
-          ),
-          ..spans_json(list.map(demand.pieces, fn(piece) { piece.span }))
-        ])
-      }),
+    demands: list.map(measures.demands, fn(demand) {
+      let spans = list.map(demand.pieces, fn(piece) { piece.span })
+      wire.DemandMeasures(
+        id: demand.id,
+        label: demand.label,
+        client: demand.client,
+        pieces: list.length(demand.pieces),
+        demand_lead_time: option.map(demand.lead, fn(span) {
+          duration(Some(lead(span)), Some(lead_working(span)))
+        }),
+        lead_time: average_lead(spans),
+        touch_time: average_touch(spans),
+        stagnation_time: average_stagnation(spans),
+      )
+    }),
+    stations: list.map(measures.stations, fn(station) {
+      let touch = list.fold(station.passes, 0, fn(t, span) { t + span.touch })
+      let leads = list.fold(station.passes, 0, fn(t, span) { t + lead(span) })
+      wire.StationMeasures(
+        id: station.id,
+        name: station.name,
+        branch: station.branch,
+        position: station.position,
+        passes: list.length(station.passes),
+        station_lead_time: average_lead(station.passes),
+        touch_time: average_touch(station.passes),
+        replenishment_time: p85_duration(station.replenishments),
+        touch_share: case leads {
+          0 -> None
+          _ -> Some(hundredth(int.to_float(touch) /. int.to_float(leads)))
+        },
+        starvation_time: Some(duration(
+          Some(station.starvation),
+          Some(station.starvation_working),
+        )),
+        andon_time: Some(duration(
+          Some(station.andon),
+          Some(station.andon_working),
+        )),
+        andons: station.andons,
+        pulls: station.pulls,
+        deviations: station.deviations,
+      )
+    }),
+    andon_time: Some(duration(
+      Some(measures.andon),
+      Some(measures.andon_working),
+    )),
+    on_time: wire.OnTime(
+      delivered: measures.delivered,
+      on_time: measures.on_time,
     ),
-    #(
-      "stations",
-      json.array(measures.stations, fn(station) {
-        let touch = list.fold(station.passes, 0, fn(t, span) { t + span.touch })
-        let leads = list.fold(station.passes, 0, fn(t, span) { t + lead(span) })
-        json.object([
-          #("id", json.string(station.id)),
-          #("name", json.string(station.name)),
-          #("branch", json.nullable(station.branch, json.string)),
-          #("position", json.int(station.position)),
-          #("passes", json.int(list.length(station.passes))),
-          #("stationLeadTime", average_lead(station.passes)),
-          #("touchTime", average_touch(station.passes)),
-          #("replenishmentTime", p85_duration(station.replenishments)),
-          #("touchShare", case leads {
-            0 -> json.null()
-            _ ->
-              json.float(hundredth(int.to_float(touch) /. int.to_float(leads)))
-          }),
-          #(
-            "starvationTime",
-            duration(Some(station.starvation), Some(station.starvation_working)),
-          ),
-          #(
-            "andonTime",
-            duration(Some(station.andon), Some(station.andon_working)),
-          ),
-          #("andons", json.int(station.andons)),
-          #("pulls", json.int(station.pulls)),
-          #("deviations", json.int(station.deviations)),
-        ])
-      }),
+    deviations: wire.DeviationMeasures(
+      by_rule: by_rule(measures.deviations),
+      list: measures.deviations,
     ),
-    #("andonTime", duration(Some(measures.andon), Some(measures.andon_working))),
-    #(
-      "onTime",
-      json.object([
-        #("delivered", json.int(measures.delivered)),
-        #("onTime", json.int(measures.on_time)),
-      ]),
-    ),
-    #(
-      "deviations",
-      json.object([
-        #(
-          "byRule",
-          json.array(by_rule(measures.deviations), fn(row) {
-            json.object([
-              #("rule", json.string(row.0)),
-              #("count", json.int(row.1)),
-            ])
-          }),
-        ),
-        #(
-          "list",
-          json.array(measures.deviations, fn(row) {
-            json.object([
-              #("at", json.string(row.at)),
-              #("rule", json.string(row.rule)),
-              #("station", json.string(row.station)),
-              #("stationName", json.string(row.station_name)),
-              #("piece", json.nullable(row.piece, json.string)),
-              #("reason", json.string(row.reason)),
-            ])
-          }),
-        ),
-      ]),
-    ),
-  ])
+  )
+  |> wire_json.measures
 }
 
 /// p85 Replenishment Time, or null under `min_passes` passes (F54).
-fn p85_duration(replenishments: List(Replenishment)) -> json.Json {
+fn p85_duration(replenishments: List(Replenishment)) -> Option(wire.Duration) {
   case list.length(replenishments) >= min_passes {
-    False -> json.null()
+    False -> None
     True ->
-      duration(
+      Some(duration(
         p85(list.map(replenishments, fn(one) { one.calendar }))
           |> option.from_result,
         p85(list.map(replenishments, fn(one) { one.working }))
           |> option.from_result,
-      )
+      ))
   }
 }
 
-fn spans_json(spans: List(Span)) -> List(#(String, json.Json)) {
-  [
-    #("leadTime", average_lead(spans)),
-    #("touchTime", average_touch(spans)),
-    #(
-      "stagnationTime",
-      average(spans, fn(span) { #(span.stagnation, span.stagnation_working) }),
-    ),
-  ]
-}
-
-fn average_lead(spans: List(Span)) -> json.Json {
+fn average_lead(spans: List(Span)) -> Option(wire.Duration) {
   average(spans, fn(span) { #(lead(span), lead_working(span)) })
 }
 
-fn average_touch(spans: List(Span)) -> json.Json {
+fn average_touch(spans: List(Span)) -> Option(wire.Duration) {
   average(spans, fn(span) { #(span.touch, span.touch) })
 }
 
-fn average(spans: List(Span), measure: fn(Span) -> #(Int, Int)) -> json.Json {
+fn average_stagnation(spans: List(Span)) -> Option(wire.Duration) {
+  average(spans, fn(span) { #(span.stagnation, span.stagnation_working) })
+}
+
+fn average(
+  spans: List(Span),
+  measure: fn(Span) -> #(Int, Int),
+) -> Option(wire.Duration) {
   case list.length(spans) {
-    0 -> json.null()
+    0 -> None
     count -> {
       let #(calendar, working) =
         list.fold(spans, #(0, 0), fn(total, span) {
           let #(c, w) = measure(span)
           #(total.0 + c, total.1 + w)
         })
-      duration(Some(calendar / count), Some(working / count))
+      Some(duration(Some(calendar / count), Some(working / count)))
     }
   }
 }
 
-fn duration(calendar: Option(Int), working: Option(Int)) -> json.Json {
-  let hours = fn(seconds) {
-    json.float(hundredth(int.to_float(seconds) /. 3600.0))
-  }
-  json.object([
-    #("calendar", json.nullable(calendar, hours)),
-    #("working", json.nullable(working, hours)),
-  ])
+fn duration(calendar: Option(Int), working: Option(Int)) -> wire.Duration {
+  let hours = fn(seconds) { hundredth(int.to_float(seconds) /. 3600.0) }
+  wire.Duration(
+    calendar: option.map(calendar, hours),
+    working: option.map(working, hours),
+  )
 }
 
 fn hundredth(value: Float) -> Float {
   int.to_float(float.round(value *. 100.0)) /. 100.0
 }
 
-fn by_rule(rows: List(DeviationRow)) -> List(#(String, Int)) {
+fn by_rule(rows: List(wire.RecordedDeviation)) -> List(wire.RuleCount) {
   rows
   |> list.group(fn(row) { row.rule })
   |> dict.to_list
   |> list.map(fn(group) { #(group.0, list.length(group.1)) })
   |> list.sort(fn(a, b) { int.compare(b.1, a.1) })
+  |> list.map(fn(row) { wire.RuleCount(rule: row.0, count: row.1) })
 }

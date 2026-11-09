@@ -64,3 +64,97 @@ pub fn workspace(value: wire.Workspace) -> json.Json {
     #("lines", json.array(value.lines, line_entry)),
   ])
 }
+
+pub fn duration(value: wire.Duration) -> json.Json {
+  json.object([
+    #("calendar", json.nullable(value.calendar, json.float)),
+    #("working", json.nullable(value.working, json.float)),
+  ])
+}
+
+pub fn piece_measures(value: wire.PieceMeasures) -> json.Json {
+  json.object([
+    #("count", json.int(value.count)),
+    #("leadTime", json.nullable(value.lead_time, duration)),
+    #("touchTime", json.nullable(value.touch_time, duration)),
+    #("stagnationTime", json.nullable(value.stagnation_time, duration)),
+    #("backlogTime", json.nullable(value.backlog_time, duration)),
+  ])
+}
+
+pub fn demand_measures(value: wire.DemandMeasures) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("label", json.string(value.label)),
+    #("client", json.string(value.client)),
+    #("pieces", json.int(value.pieces)),
+    #("demandLeadTime", json.nullable(value.demand_lead_time, duration)),
+    #("leadTime", json.nullable(value.lead_time, duration)),
+    #("touchTime", json.nullable(value.touch_time, duration)),
+    #("stagnationTime", json.nullable(value.stagnation_time, duration)),
+  ])
+}
+
+pub fn station_measures(value: wire.StationMeasures) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("branch", json.nullable(value.branch, json.string)),
+    #("position", json.int(value.position)),
+    #("passes", json.int(value.passes)),
+    #("stationLeadTime", json.nullable(value.station_lead_time, duration)),
+    #("touchTime", json.nullable(value.touch_time, duration)),
+    #("replenishmentTime", json.nullable(value.replenishment_time, duration)),
+    #("touchShare", json.nullable(value.touch_share, json.float)),
+    #("starvationTime", json.nullable(value.starvation_time, duration)),
+    #("andonTime", json.nullable(value.andon_time, duration)),
+    #("andons", json.int(value.andons)),
+    #("pulls", json.int(value.pulls)),
+    #("deviations", json.int(value.deviations)),
+  ])
+}
+
+pub fn recorded_deviation(value: wire.RecordedDeviation) -> json.Json {
+  json.object([
+    #("at", json.string(value.at)),
+    #("rule", json.string(value.rule)),
+    #("station", json.string(value.station)),
+    #("stationName", json.string(value.station_name)),
+    #("piece", json.nullable(value.piece, json.string)),
+    #("reason", json.string(value.reason)),
+  ])
+}
+
+pub fn on_time(value: wire.OnTime) -> json.Json {
+  json.object([
+    #("delivered", json.int(value.delivered)),
+    #("onTime", json.int(value.on_time)),
+  ])
+}
+
+pub fn deviation_measures(value: wire.DeviationMeasures) -> json.Json {
+  json.object([
+    #("byRule", json.array(value.by_rule, rule_count)),
+    #("list", json.array(value.list, recorded_deviation)),
+  ])
+}
+
+pub fn rule_count(value: wire.RuleCount) -> json.Json {
+  json.object([
+    #("rule", json.string(value.rule)),
+    #("count", json.int(value.count)),
+  ])
+}
+
+pub fn measures(value: wire.Measures) -> json.Json {
+  json.object([
+    #("from", json.string(value.from)),
+    #("to", json.string(value.to)),
+    #("pieces", piece_measures(value.pieces)),
+    #("demands", json.array(value.demands, demand_measures)),
+    #("stations", json.array(value.stations, station_measures)),
+    #("andonTime", json.nullable(value.andon_time, duration)),
+    #("onTime", on_time(value.on_time)),
+    #("deviations", deviation_measures(value.deviations)),
+  ])
+}
