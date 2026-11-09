@@ -1604,7 +1604,7 @@ fn next_thing(team_member: String, database: String) -> wisp.Response {
           andons,
           list.map(view.lists, fn(one) { one.station_id }),
         )
-      Ok(assignment.to_json(view, andon.andons_json(mine)))
+      Ok(assignment.to_json(view, list.map(mine, andon.wire_andon)))
     })
   {
     Ok(body) -> send_json(body, 200)

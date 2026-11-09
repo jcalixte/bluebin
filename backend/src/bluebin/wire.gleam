@@ -449,3 +449,86 @@ pub type Line {
     held_for_release: List(HeldForRelease),
   )
 }
+
+/// `stations` is ordered nearest to Deployment first.
+pub type TeamMember {
+  TeamMember(id: String, name: String, stations: List(String))
+}
+
+/// One Assignment of a Team Member is active; the others wait, paused.
+pub type Assignment {
+  ReworkAssignment(
+    id: String,
+    piece: String,
+    station: String,
+    station_name: String,
+    found_by: String,
+    description: String,
+    active: Bool,
+  )
+  PieceAssignment(
+    id: String,
+    piece: String,
+    station: String,
+    station_name: String,
+    active: Bool,
+  )
+}
+
+pub type NextThing {
+  Continue(assignment: Assignment)
+  TakeRework(
+    rework: String,
+    piece: String,
+    station: String,
+    station_name: String,
+  )
+  TakeKanban(station: String, station_name: String)
+  Helping(
+    rework: String,
+    piece: String,
+    assignee: String,
+    station: String,
+    station_name: String,
+  )
+  HelpTheRework(
+    rework: String,
+    piece: String,
+    assignee: String,
+    station: String,
+    station_name: String,
+  )
+  HelpDownstream(station: String, station_name: String, because: String)
+  Wait
+}
+
+/// A Priority List is ordered Rework first, then the oldest Kanban.
+pub type PriorityItem {
+  ReworkItem(
+    id: String,
+    piece: String,
+    description: String,
+    assignee: Option(String),
+  )
+  KanbanItem(id: String, since: String)
+}
+
+pub type PriorityList {
+  PriorityList(
+    station: String,
+    name: String,
+    team_members: List(TeamMemberName),
+    items: List(PriorityItem),
+  )
+}
+
+pub type TeamMemberView {
+  TeamMemberView(
+    /// The Andons of the Team Member's Work Stations only.
+    andons: List(Andon),
+    team_member: TeamMemberName,
+    next: NextThing,
+    assignments: List(Assignment),
+    priority_lists: List(PriorityList),
+  )
+}

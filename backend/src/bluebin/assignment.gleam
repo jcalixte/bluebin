@@ -1,4 +1,6 @@
 import bluebin/flow
+import bluebin/wire
+import bluebin/wire_json
 import gleam/dynamic/decode
 import gleam/int
 import gleam/json.{type Json}
@@ -125,11 +127,12 @@ pub fn team_members(
 
 pub fn team_members_json(team_members: List(TeamMember)) -> Json {
   json.array(team_members, fn(team_member) {
-    json.object([
-      #("id", json.string(team_member.id)),
-      #("name", json.string(team_member.name)),
-      #("stations", json.array(team_member.stations, json.string)),
-    ])
+    wire.TeamMember(
+      id: team_member.id,
+      name: team_member.name,
+      stations: team_member.stations,
+    )
+    |> wire_json.team_member
   })
 }
 
@@ -601,134 +604,88 @@ fn assignments(
 }
 
 /// `andons` are those of the Team Member's Work Stations (DESIGN.md R2).
-pub fn to_json(view: View, andons: Json) -> Json {
-  json.object([
-    #("andons", andons),
-    #(
-      "teamMember",
-      json.object([
-        #("id", json.string(view.team_member_id)),
-        #("name", json.string(view.name)),
-      ]),
-    ),
-    #("next", next_json(view.next)),
-    #("assignments", json.array(view.assignments, assignment_json)),
-    #(
-      "priorityLists",
-      json.array(view.lists, fn(one) {
-        json.object([
-          #("station", json.string(one.station_id)),
-          #("name", json.string(one.station)),
-          #(
-            "teamMembers",
-            json.array(one.team_members, fn(member) {
-              json.object([
-                #("id", json.string(member.id)),
-                #("name", json.string(member.name)),
-              ])
-            }),
-          ),
-          #("items", json.array(one.items, item_json)),
-        ])
-      }),
-    ),
-  ])
+pub fn to_json(view: View, andons: List(wire.Andon)) -> Json {
+  wire.TeamMemberView(
+    andons:,
+    team_member: wire.TeamMemberName(id: view.team_member_id, name: view.name),
+    next: wire_next(view.next),
+    assignments: list.map(view.assignments, wire_assignment),
+    priority_lists: list.map(view.lists, fn(one) {
+      wire.PriorityList(
+        station: one.station_id,
+        name: one.station,
+        team_members: list.map(one.team_members, fn(member) {
+          wire.TeamMemberName(id: member.id, name: member.name)
+        }),
+        items: list.map(one.items, wire_item),
+      )
+    }),
+  )
+  |> wire_json.team_member_view
 }
 
-fn next_json(next: Next) -> Json {
+fn wire_next(next: Next) -> wire.NextThing {
   case next {
     Continue(assignment) ->
-      json.object([
-        #("kind", json.string("continue")),
-        #("assignment", assignment_json(assignment)),
-      ])
+      wire.Continue(assignment: wire_assignment(assignment))
     TakeRework(id:, piece:, station_id:, station:) ->
-      json.object([
-        #("kind", json.string("take_rework")),
-        #("rework", json.string(id)),
-        #("piece", json.string(piece)),
-        #("station", json.string(station_id)),
-        #("stationName", json.string(station)),
-      ])
+      wire.TakeRework(
+        rework: id,
+        piece:,
+        station: station_id,
+        station_name: station,
+      )
     TakeKanban(station_id:, station:) ->
-      json.object([
-        #("kind", json.string("take_kanban")),
-        #("station", json.string(station_id)),
-        #("stationName", json.string(station)),
-      ])
+      wire.TakeKanban(station: station_id, station_name: station)
     HelpDownstream(station_id:, station:, because:) ->
-      json.object([
-        #("kind", json.string("help_downstream")),
-        #("station", json.string(station_id)),
-        #("stationName", json.string(station)),
-        #("because", json.string(because)),
-      ])
+      wire.HelpDownstream(station: station_id, station_name: station, because:)
     Helping(rework:, piece:, assignee:, station_id:, station:) ->
-      help_json("helping", rework, piece, assignee, station_id, station)
+      wire.Helping(
+        rework:,
+        piece:,
+        assignee:,
+        station: station_id,
+        station_name: station,
+      )
     HelpTheRework(rework:, piece:, assignee:, station_id:, station:) ->
-      help_json("help_the_rework", rework, piece, assignee, station_id, station)
-    Wait -> json.object([#("kind", json.string("wait"))])
+      wire.HelpTheRework(
+        rework:,
+        piece:,
+        assignee:,
+        station: station_id,
+        station_name: station,
+      )
+    Wait -> wire.Wait
   }
 }
 
-fn help_json(
-  kind: String,
-  rework: String,
-  piece: String,
-  assignee: String,
-  station_id: String,
-  station: String,
-) -> Json {
-  json.object([
-    #("kind", json.string(kind)),
-    #("rework", json.string(rework)),
-    #("piece", json.string(piece)),
-    #("assignee", json.string(assignee)),
-    #("station", json.string(station_id)),
-    #("stationName", json.string(station)),
-  ])
-}
-
-fn assignment_json(assignment: Assignment) -> Json {
+fn wire_assignment(assignment: Assignment) -> wire.Assignment {
   case assignment {
     Repair(id:, piece:, station_id:, station:, found_by:, description:, active:) ->
-      json.object([
-        #("kind", json.string("rework")),
-        #("id", json.string(id)),
-        #("piece", json.string(piece)),
-        #("station", json.string(station_id)),
-        #("stationName", json.string(station)),
-        #("foundBy", json.string(found_by)),
-        #("description", json.string(description)),
-        #("active", json.bool(active)),
-      ])
+      wire.ReworkAssignment(
+        id:,
+        piece:,
+        station: station_id,
+        station_name: station,
+        found_by:,
+        description:,
+        active:,
+      )
     Transform(id:, piece:, station_id:, station:, active:) ->
-      json.object([
-        #("kind", json.string("piece")),
-        #("id", json.string(id)),
-        #("piece", json.string(piece)),
-        #("station", json.string(station_id)),
-        #("stationName", json.string(station)),
-        #("active", json.bool(active)),
-      ])
+      wire.PieceAssignment(
+        id:,
+        piece:,
+        station: station_id,
+        station_name: station,
+        active:,
+      )
   }
 }
 
-fn item_json(item: Item) -> Json {
+fn wire_item(item: Item) -> wire.PriorityItem {
   case item {
     ReworkItem(id:, piece:, description:, assignee:) ->
-      json.object([
-        #("kind", json.string("rework")),
-        #("id", json.string(id)),
-        #("piece", json.string(piece)),
-        #("description", json.string(description)),
-        #("assignee", json.nullable(assignee, json.string)),
-      ])
-    KanbanItem(id:, since:) ->
-      json.object([
-        #("kind", json.string("kanban")),
-        #("id", json.string(id)),
-        #("since", json.string(since)),
-      ])
+      wire.ReworkItem(id:, piece:, description:, assignee:)
+    KanbanItem(id:, since:) -> wire.KanbanItem(id:, since:)
   }
 }

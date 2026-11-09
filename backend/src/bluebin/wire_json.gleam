@@ -465,3 +465,124 @@ pub fn line(value: wire.Line) -> json.Json {
     #("heldForRelease", json.array(value.held_for_release, held_for_release)),
   ])
 }
+
+pub fn team_member(value: wire.TeamMember) -> json.Json {
+  json.object([
+    #("id", json.string(value.id)),
+    #("name", json.string(value.name)),
+    #("stations", json.array(value.stations, json.string)),
+  ])
+}
+
+pub fn assignment(value: wire.Assignment) -> json.Json {
+  case value {
+    wire.ReworkAssignment(..) as variant ->
+      json.object([
+        #("kind", json.string("rework")),
+        #("id", json.string(variant.id)),
+        #("piece", json.string(variant.piece)),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+        #("foundBy", json.string(variant.found_by)),
+        #("description", json.string(variant.description)),
+        #("active", json.bool(variant.active)),
+      ])
+    wire.PieceAssignment(..) as variant ->
+      json.object([
+        #("kind", json.string("piece")),
+        #("id", json.string(variant.id)),
+        #("piece", json.string(variant.piece)),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+        #("active", json.bool(variant.active)),
+      ])
+  }
+}
+
+pub fn next_thing(value: wire.NextThing) -> json.Json {
+  case value {
+    wire.Continue(..) as variant ->
+      json.object([
+        #("kind", json.string("continue")),
+        #("assignment", assignment(variant.assignment)),
+      ])
+    wire.TakeRework(..) as variant ->
+      json.object([
+        #("kind", json.string("take_rework")),
+        #("rework", json.string(variant.rework)),
+        #("piece", json.string(variant.piece)),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+      ])
+    wire.TakeKanban(..) as variant ->
+      json.object([
+        #("kind", json.string("take_kanban")),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+      ])
+    wire.Helping(..) as variant ->
+      json.object([
+        #("kind", json.string("helping")),
+        #("rework", json.string(variant.rework)),
+        #("piece", json.string(variant.piece)),
+        #("assignee", json.string(variant.assignee)),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+      ])
+    wire.HelpTheRework(..) as variant ->
+      json.object([
+        #("kind", json.string("help_the_rework")),
+        #("rework", json.string(variant.rework)),
+        #("piece", json.string(variant.piece)),
+        #("assignee", json.string(variant.assignee)),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+      ])
+    wire.HelpDownstream(..) as variant ->
+      json.object([
+        #("kind", json.string("help_downstream")),
+        #("station", json.string(variant.station)),
+        #("stationName", json.string(variant.station_name)),
+        #("because", json.string(variant.because)),
+      ])
+    wire.Wait -> json.object([#("kind", json.string("wait"))])
+  }
+}
+
+pub fn priority_item(value: wire.PriorityItem) -> json.Json {
+  case value {
+    wire.ReworkItem(..) as variant ->
+      json.object([
+        #("kind", json.string("rework")),
+        #("id", json.string(variant.id)),
+        #("piece", json.string(variant.piece)),
+        #("description", json.string(variant.description)),
+        #("assignee", json.nullable(variant.assignee, json.string)),
+      ])
+    wire.KanbanItem(..) as variant ->
+      json.object([
+        #("kind", json.string("kanban")),
+        #("id", json.string(variant.id)),
+        #("since", json.string(variant.since)),
+      ])
+  }
+}
+
+pub fn priority_list(value: wire.PriorityList) -> json.Json {
+  json.object([
+    #("station", json.string(value.station)),
+    #("name", json.string(value.name)),
+    #("teamMembers", json.array(value.team_members, team_member_name)),
+    #("items", json.array(value.items, priority_item)),
+  ])
+}
+
+pub fn team_member_view(value: wire.TeamMemberView) -> json.Json {
+  json.object([
+    #("andons", json.array(value.andons, andon)),
+    #("teamMember", team_member_name(value.team_member)),
+    #("next", next_thing(value.next)),
+    #("assignments", json.array(value.assignments, assignment)),
+    #("priorityLists", json.array(value.priority_lists, priority_list)),
+  ])
+}

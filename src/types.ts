@@ -1,8 +1,9 @@
 // Written by `gleam dev` from backend/src/bluebin/wire.gleam: change it there.
-import type { Andon, Duration, Labels, ReorderEffect } from "./wire"
+import type { Duration, Labels, ReorderEffect } from "./wire"
 
 export type {
   Andon,
+  Assignment,
   Backlog,
   BacklogPiece,
   BlueBin,
@@ -27,15 +28,20 @@ export type {
   Member,
   MixCell,
   MixRow,
+  NextThing,
   Overflow,
   PieceMeasures,
+  PriorityItem,
+  PriorityList,
   RecordedDeviation,
   ReorderEffect,
   Rework,
   StaleAssignment,
   StationMeasures,
   Step,
+  TeamMember,
   TeamMemberName,
+  TeamMemberView,
   WorkStation,
   WorkingCalendar,
   Workspace,
@@ -53,70 +59,6 @@ export type FlowConfirm = {
   confirm: string
   message: string
   effects?: ReorderEffect[]
-}
-
-/** `stations` is ordered nearest to Deployment first. */
-export type TeamMember = {
-  id: string
-  name: string
-  stations: string[]
-}
-
-/** One Assignment of a Team Member is active; the others wait, paused. */
-export type Assignment =
-  | {
-      kind: "rework"
-      id: string
-      piece: string
-      station: string
-      stationName: string
-      active: boolean
-      foundBy: string
-      description: string
-    }
-  | {
-      kind: "piece"
-      id: string
-      piece: string
-      station: string
-      stationName: string
-      active: boolean
-    }
-
-export type NextThing =
-  | { kind: "continue"; assignment: Assignment }
-  | { kind: "take_rework"; rework: string; piece: string; station: string; stationName: string }
-  | { kind: "take_kanban"; station: string; stationName: string }
-  | {
-      kind: "helping" | "help_the_rework"
-      rework: string
-      piece: string
-      assignee: string
-      station: string
-      stationName: string
-    }
-  | { kind: "help_downstream"; station: string; stationName: string; because: string }
-  | { kind: "wait" }
-
-/** A Priority List is ordered Rework first, then the oldest Kanban. */
-export type PriorityItem =
-  | { kind: "rework"; id: string; piece: string; description: string; assignee: string | null }
-  | { kind: "kanban"; id: string; since: string }
-
-export type PriorityList = {
-  station: string
-  name: string
-  teamMembers: { id: string; name: string }[]
-  items: PriorityItem[]
-}
-
-export type TeamMemberView = {
-  teamMember: { id: string; name: string }
-  /** The Andons of the Team Member's Work Stations only. */
-  andons: Andon[]
-  next: NextThing
-  assignments: Assignment[]
-  priorityLists: PriorityList[]
 }
 
 export type TimeView = keyof Duration

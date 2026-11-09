@@ -416,3 +416,105 @@ export type Line = {
   bottlenecks: Bottleneck[]
   heldForRelease: HeldForRelease[]
 }
+
+/** `stations` is ordered nearest to Deployment first. */
+export type TeamMember = {
+  id: string
+  name: string
+  stations: string[]
+}
+
+/** One Assignment of a Team Member is active; the others wait, paused. */
+export type Assignment =
+  | {
+      kind: "rework"
+      id: string
+      piece: string
+      station: string
+      stationName: string
+      foundBy: string
+      description: string
+      active: boolean
+    }
+  | {
+      kind: "piece"
+      id: string
+      piece: string
+      station: string
+      stationName: string
+      active: boolean
+    }
+
+export type NextThing =
+  | {
+      kind: "continue"
+      assignment: Assignment
+    }
+  | {
+      kind: "take_rework"
+      rework: string
+      piece: string
+      station: string
+      stationName: string
+    }
+  | {
+      kind: "take_kanban"
+      station: string
+      stationName: string
+    }
+  | {
+      kind: "helping"
+      rework: string
+      piece: string
+      assignee: string
+      station: string
+      stationName: string
+    }
+  | {
+      kind: "help_the_rework"
+      rework: string
+      piece: string
+      assignee: string
+      station: string
+      stationName: string
+    }
+  | {
+      kind: "help_downstream"
+      station: string
+      stationName: string
+      because: string
+    }
+  | {
+      kind: "wait"
+    }
+
+/** A Priority List is ordered Rework first, then the oldest Kanban. */
+export type PriorityItem =
+  | {
+      kind: "rework"
+      id: string
+      piece: string
+      description: string
+      assignee: string | null
+    }
+  | {
+      kind: "kanban"
+      id: string
+      since: string
+    }
+
+export type PriorityList = {
+  station: string
+  name: string
+  teamMembers: TeamMemberName[]
+  items: PriorityItem[]
+}
+
+export type TeamMemberView = {
+  /** The Andons of the Team Member's Work Stations only. */
+  andons: Andon[]
+  teamMember: TeamMemberName
+  next: NextThing
+  assignments: Assignment[]
+  priorityLists: PriorityList[]
+}

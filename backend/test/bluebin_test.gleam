@@ -905,8 +905,7 @@ pub fn with_nothing_to_take_or_help_a_team_member_waits_test() {
 pub fn the_team_member_payload_carries_the_shape_the_screen_reads_test() {
   use connection <- with_seeded_database()
   let assert Ok(view) = assignment.load(connection, "pe-alice")
-  let text =
-    json.to_string(assignment.to_json(view, json.preprocessed_array([])))
+  let text = json.to_string(assignment.to_json(view, []))
   assert string.contains(text, "\"next\":{\"kind\":\"continue\"")
   assert string.contains(text, "\"kind\":\"rework\",\"id\":\"rw-1\"")
   assert string.contains(text, "\"priorityLists\":[{\"station\":\"ws-ios\"")
