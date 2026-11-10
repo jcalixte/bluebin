@@ -205,7 +205,7 @@ All the Lines of one Account, its owner. Each Line has a name and its own data.
 _Avoid_: tenant, organization, board
 
 **Simulation**:
-One Line that lives only in the visitor's page, with no sign-in and nothing saved, where the visitor plays the owner or any Team Member and changes who at any time.
+One Line, off the real Lines, where a team practises its work (Training Within Industry): it lives only in the visitor's page, with no sign-in and nothing saved, and the visitor plays the owner or any Team Member and changes who at any time.
 _Avoid_: demo, sandbox, playground, Public Workspace
 
 **Host**:
@@ -287,6 +287,7 @@ _Avoid_: hidden Line, secret Line
 - A linked **Team Member** shows the first and last name of its **Account**; the owner names only the **Team Members** with no **Account**
 - A **Workspace** has exactly one owner **Account**; its owner and each **Account** that is a **Team Member** in one of its **Lines** can open it
 - A **Simulation** belongs to no **Workspace** and no **Account**; it starts from the demo data, follows the same rules as any **Line**, and ends when its page closes
+- A **Simulation** is practice off the **Line**: a **Team Member** learns the rules of the **Line** there by doing them, before and beside the real work, and nothing done there counts in a real **Line**
 - A **Simulation** has one **Host** and any number of **Guests**; each **Guest** plays exactly one **Team Member**, and the **Simulation** ends for every **Guest** when its **Host** ends it or closes its page; the **Line** stays with the **Host**
 - Only the owner of a **Workspace** makes, renames, empties or redesigns its **Lines** (**Work Stations**, **Team Members**, **Blue Bins**, labels), and makes each one **Shared** or **Private**
 - A **Team Member** with an **Account** does the daily flow of their **Line** (pull, **Andon**, **Rework**, **Deviation**, **Assignment**, **Release**) and adds **Demands**
@@ -387,6 +388,7 @@ _Avoid_: hidden Line, secret Line
 - "team leader" — resolved: **Team Leader** answers **Andons**; it does not assign work, so pull stays intact.
 - "stop the line" — resolved: an **Andon** stops one **Work Station**; pull then stops the rest of the **Line**, upstream and downstream, by itself.
 - "public Line" — resolved: **Shared Line**. No term uses "public".
+- "demo" for the **Simulation** — resolved: no. The **Simulation** is off-the-line practice, as in Training Within Industry: a team learns the work there by doing it, with the real rules, where a mistake costs nothing. Showing Bluebin to a visitor is a side effect.
 - **Public Workspace** — removed (2026-11-08): the **Simulation** shows Bluebin run to anyone, signed in or not, and no **Line** of a signed-in **Account** starts from the demo data any more.
 - "client" — resolved: **Client** is who asks for a **Demand**; who signs in is an **Account**.
 - Who makes the **Assignment** — resolved: a **Team Member** takes a **Kanban** (pull); **Rework** goes to its author by default; the team can reassign. No team lead pushes work.

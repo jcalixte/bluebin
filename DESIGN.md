@@ -8,7 +8,7 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ## House of Quality
 
-The at-a-glance view of the design: the 14 Goals (§1) against 13 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Rows are grouped, and coloured, by the parts of the TPS house in §1, so they are not in Goal order; cyan marks G14, the **Simulation**, which is outside the house. The blue boxes mark the 3 Functions with the highest weight. In the comparative evaluation, each alternative has its own colour: Bluebin blue, Jira orange, Linear purple, physical board brown. Red and green are kept for OK / NOK status only, so neither house uses them.
+The at-a-glance view of the design: the 14 Goals (§1) against 13 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Rows are grouped, and coloured, by the parts of the TPS house in §1, so they are not in Goal order. The blue boxes mark the 3 Functions with the highest weight. In the comparative evaluation, each alternative has its own colour: Bluebin blue, Jira orange, Linear purple, physical board brown. Red and green are kept for OK / NOK status only, so neither house uses them.
 
 ```tikz
 % =====================================================================
@@ -304,7 +304,6 @@ The at-a-glance view of the design: the 14 Goals (§1) against 13 key Functions 
 \definecolor{bbJidoka}{HTML}{6B46C1}
 \definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
-\definecolor{bbSim}{HTML}{0987A0}
 % Comparative evaluation: one colour per alternative (no red, no green)
 \definecolor{bbAltBluebin}{HTML}{2B6CB0}
 \definecolor{bbAltJira}{HTML}{DD6B20}
@@ -340,9 +339,9 @@ The at-a-glance view of the design: the 14 Goals (§1) against 13 key Functions 
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
 \begin{qfdhouse}
-  % Goal rows coloured by their part of the TPS house; G14 is outside it
+  % Goal rows coloured by their part of the TPS house
   \begin{scope}[on background layer]
-    \foreach \r/\col in {1/bbRoof, 2/bbJit, 3/bbJit, 4/bbJidoka, 5/bbPeople, 6/bbPeople, 7/bbBase, 8/bbBase, 9/bbBase, 10/bbBase, 11/bbBase, 12/bbBase, 13/bbBase, 14/bbSim} {
+    \foreach \r/\col in {1/bbRoof, 2/bbJit, 3/bbJit, 4/bbJidoka, 5/bbPeople, 6/bbPeople, 7/bbBase, 8/bbBase, 9/bbBase, 10/bbBase, 11/bbBase, 12/bbBase, 13/bbBase, 14/bbBase} {
       \fill[\col!14] (\qfdLeftEdge, -\r + 1) rectangle (-\qfdImpW, -\r);
       \fill[\col] (\qfdLeftEdge, -\r + 1) rectangle ({\qfdLeftEdge + 0.12}, -\r);
     }
@@ -362,7 +361,7 @@ The at-a-glance view of the design: the 14 Goals (§1) against 13 key Functions 
                      11/{G9 Flow problems as numbers},
                      12/{G10 Design and change without code},
                      13/{G13 Hold for Release, wait in Lead Time},
-                     14/{G14 Play a Simulation, with Guests}}
+                     14/{G14 Practise off the Line (TWI)}}
     \node[anchor=west, font=\scriptsize, text width=\qfdWhatTextW cm, align=left]
       at ({\qfdLeftEdge + 0.18}, {-\r + 0.5}) {\t};
   % Importance (% of the Goal weights, total 105)
@@ -476,7 +475,7 @@ The right-hand zone scores each Goal 0–5 for four alternatives. The **Bluebin*
 | G11 Sign in, find own work           |    4    |  4   | **5**  |       2        | Linear's "my issues" across teams sets the bar; Jira has SSO and "assigned to me"; at a wall you look for your name |
 | G12 **Line** only to its **Accounts** |    4    | **5** |   4    |       2        | Jira's permission schemes go further than **Shared** or **Private**; a wall shows to everyone who walks by |
 | G13 Hold for **Release**, wait in **Lead Time** | 5 | 3 | 2 | 2 | Jira has fix versions, but its clock stops at "done"; Linear and a wall stop it at **Deployment** too |
-| G14 Play a **Simulation**, with **Guests** | 5 | 1 | 2 | **4** | A paper Kanban game in one room is the real rival: everyone plays, nobody installs; Jira and Linear need an account and a setup first |
+| G14 Practise off the **Line** (TWI)  | 5 | 1 | 2 | **4** | A paper Kanban game in a training room is the classic off-the-line practice: everyone plays, nobody installs; Jira and Linear give at best a sandbox project, with no rules to learn |
 
 What the scores say:
 
@@ -485,7 +484,7 @@ What the scores say:
 3. Jira is the threat on G9 (reports) and G10 (configuration); Linear is the threat on G5 (next thing) and G8 (speed of capture). Each tool is strong on one side only, so our bar is the better of the two on each Goal.
 4. On G8, Linear scores 4, the same as us, and F31 alone keeps us level. If the reason prompt grows past 10 s, Linear leads on the Goal that every **Team Member** touches all day.
 5. G11 and G12 are hygiene: Linear and Jira set the bar, and we aim one point under it. These Goals must not stop a team from choosing Bluebin; they do not make a team choose it.
-6. On G14, the paper game wins in one room. The **Simulation** must win on distance: one link, no install, each **Guest** on their own screen (F67–F69).
+6. On G14, the paper game wins in one training room. The **Simulation** must win on fidelity and distance: the same rules as the real **Line** (F66), one link, no install, and each **Guest** on their own screen as their own **Team Member** (F67–F69).
 
 ---
 
@@ -500,7 +499,6 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 \definecolor{bbJidoka}{HTML}{6B46C1}
 \definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
-\definecolor{bbSim}{HTML}{0987A0}
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
 \begin{tikzpicture}[x=1cm, y=1cm, line join=round,
@@ -545,14 +543,13 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   \node[head=bbBase, anchor=west] at (-0.6, 0.5) {Kaizen};
   \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Line} without code\\G13 The wait of a \textbf{Piece} held for \textbf{Release} counts in its \textbf{Lead Time}};
   \node[ids, anchor=east, align=right] at (14.6, 0.5) {F34--F41, F54,\\F57--F60, F72, F73};
+  \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!4] (-0.8, -1) rectangle (14.8, 0);
+  \node[head=bbBase, anchor=west, align=left] at (-0.6, -0.5) {Training Within\\Industry};
+  \node[body=8.5, anchor=west, align=left] at (3.2, -0.5) {G14 A team practises its work off the \textbf{Line} in a \textbf{Simulation}, by the real rules, alone or as \textbf{Host} with \textbf{Guests}};
+  \node[ids, anchor=east] at (14.6, -0.5) {F66--F71};
   % Deferred
-  \draw[line width=0.6pt, dashed, black!55] (-0.8, -0.25) rectangle (14.8, -1.05);
-  \node[font=\scriptsize\itshape, black!65] at (7, -0.65) {Standardized Work --- deferred (Definition of Done per \textbf{Work Station})};
-  % Outside the house: the Simulation
-  \draw[draw=bbSim!80!black, line width=0.9pt, fill=bbSim!10, rounded corners=4pt] (-0.8, -1.3) rectangle (14.8, -2.3);
-  \node[head=bbSim, anchor=west] at (-0.6, -1.8) {Simulation};
-  \node[body=8.5, anchor=west, align=left] at (3.2, -1.8) {G14 Anyone plays Bluebin in a \textbf{Simulation}, alone or as \textbf{Host} with \textbf{Guests}, with no sign-in};
-  \node[ids, anchor=east] at (14.6, -1.8) {F66--F71};
+  \draw[line width=0.6pt, dashed, black!55] (-0.8, -1.25) rectangle (14.8, -2.05);
+  \node[font=\scriptsize\itshape, black!65] at (7, -1.65) {Standardized Work --- deferred (Definition of Done per \textbf{Work Station})};
 \end{tikzpicture}
 \end{document}
 ```
@@ -579,12 +576,12 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 | G9                                               | Flow problems show as numbers: **Lead Time**, **Stagnation Time**, **Starvation Time**, **Rework Time**                                                                   |   8    | Kick-off conversation              |
 | G10                                              | A **Line** can be designed and changed without code: **Work Stations**, **Branches**, **Blue Bins**, **Team Members**, **Working Calendar**                               |   6    | Kick-off conversation              |
 | G13                                              | A **Team Member** can hold a deployed **Piece** for a later **Release**, and the wait until **Release** shows in the **Lead Time** of the **Piece** and of its **Demand** |   6    | Session decision 2026-11-08        |
-| **Outside the house — Simulation**               |                                                                                                                                                                           |        |                                    |
-| G14                                              | Anyone can play Bluebin in a **Simulation**, alone or as a **Host** with **Guests** who each play one **Team Member**, with no sign-in and nothing to install            |   5    | Session decisions 2026-11-08 (**Simulation**) and 2026-11-09 (**Guests**) |
+| **Foundation — Training Within Industry**        |                                                                                                                                                                           |        |                                    |
+| G14                                              | A team practises its work off the **Line** in a **Simulation**, by the rules of a real **Line**: alone, or as a **Host** with **Guests** who each play one **Team Member**; no sign-in, nothing to install, and nothing counts in a real **Line** |   5    | Session decisions 2026-11-08 (**Simulation**), 2026-11-09 (**Guests**), 2026-11-10 (Training Within Industry) |
 
-User segments: **Team Member** (daily work), Line designer (design and Kaizen), **Client** and Demand owner (Demands and **Takt Time**), visitor who learns or shows Bluebin (**Simulation**).
+User segments: **Team Member** (daily work), Line designer (design and Kaizen), **Client** and Demand owner (Demands and **Takt Time**), trainer and trainees who practise off the **Line** (**Simulation**).
 
-Deferred: **Standardized Work** (foundation). The Definition of Done of each **Work Station** stays out of the app for now. **Trigger to revisit:** **Rework** shows that **Work Stations** disagree on what "done" means.
+Deferred: **Standardized Work** (foundation). The Definition of Done of each **Work Station** stays out of the app for now. G14 is the practice half of Training Within Industry; the standard that Job Instruction teaches waits with **Standardized Work**. **Trigger to revisit:** **Rework** shows that **Work Stations** disagree on what "done" means.
 
 ---
 
@@ -669,8 +666,8 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F63 | End the help at the latest when its cause ends (**Rework** closed, or **Piece** put in a **Blue Bin**), and let the **Helper** stop before | → | 0 **Helpers** after the cause ends; stop in 1 click | G8 |
 | F64 | Show the **Helpers** of a **Piece** in the **Line** view, on the **Rework** card, and in the **Helper**'s own **Assignments** | ↑ | 100 % of **Helpers** visible, with no click | G7 |
 | F65 | Show every **Team Member** of the **Line** with all their **Assignments** (active, paused, waiting **Rework**), what they help, and the **Pieces** and **Rework** nobody holds, so the team sees where work piles up and reassigns it (F21); each name opens that **Team Member**'s next thing (F19), except for a Member who sees only their own work | ↑ | all **Team Members** on 1 screen, ≤ 2 s after a flow event | G7 |
-| **Simulation** | | | | |
-| F66 | Run the **Line** routes and the access guard (C7) in the visitor's page, from the demo data, with no server call; nothing is saved | → | 0 server calls; `pnpm sim:test` passes on the rules of bluebin.app | G14 |
+| **Training Within Industry — Simulation** | | | | |
+| F66 | Run the **Line** routes and the access guard (C7) in the visitor's page, from the demo data, with no server call; nothing is saved, and a **Team Member** practises the real rules | → | 0 server calls; `pnpm sim:test` passes on the rules of bluebin.app | G14 |
 | F67 | Invite **Guests** with one link that opens the **Simulation** of the **Host** | ↓ | link ready ≤ 5 s; 1 click to copy | G14 |
 | F68 | Let each **Guest** pick one **Team Member** that no other **Guest** plays, and show its **Work Stations** and the ones it is **Team Leader** of | → | 0 **Team Members** played by two **Guests** | G14 |
 | F69 | Answer each call of a **Guest** on the **Host**, as its **Team Member** and through the access guard (C7); the **Host** plays the owner and each **Team Member** that no **Guest** picks | ↓ | ≤ 1 s on one network; 0 calls outside the role of that **Team Member** | G14 |
@@ -697,7 +694,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 - **G11** A **Team Member** signs in and finds their own work _W:7_ — F43–F47
 - **G12** A **Line** shows only to the **Accounts** it is meant for _W:6_ — F48–F53
 - **G13** Hold a deployed **Piece** for **Release**, and count the wait in its **Lead Time** _W:6_ — F57–F60 (F56, deploy and release in 1 click, serves G8)
-- **G14** Play Bluebin in a **Simulation**, alone or with **Guests** _W:5_ — F66–F71
+- **G14** Practise the work off the **Line** in a **Simulation** (Training Within Industry), alone or with **Guests** _W:5_ — F66–F71
 
 Core How decisions, shared by many Functions:
 
@@ -958,7 +955,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | T10 | Squash to version 2 and wipe the workspaces (H22), over a migration step (H23, H24) | No migration code; the code says **Deployment** on disk and on the wire | All workspace data on bluebin.app, the **Public Workspace** included, is lost a second time in two days | — |
 | T11 | An additive migration step v2 → v3 (H29), over a third wipe (H28) and a hidden `create table if not exists` (H30) | No data lost for a feature that only adds a table; the version still describes the schema | A migration path to keep and test for each version; "never migrate" becomes "migrate only what adds" | [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md) |
 | T12 | `helping` pauses count in F55 like `rework` (R14), over `held` (dropped) and a separate measure | The suggestion sees all the capacity lost to defects, on every **Work Station** the defect pulls people from | A **Work Station** whose **Team Members** help often gets a higher suggestion; the root cause is the defect, so F16 must show it | — |
-| T13 | The **Simulation** in the page (H31), over a **Public Workspace** on the server (H32) | Anyone plays with no sign-in, and no visitor changes the **Line** of another; no visitor data on a server; try.bluebin.app is a static image | **Line** routes cannot call Erlang-only code; a second build to keep green (`pnpm sim:test`); no holidays (R16); nothing is saved | — |
+| T13 | The **Simulation** in the page (H31), over a **Public Workspace** on the server (H32) | A team practises with no sign-in and no risk to a real **Line**, and no visitor changes the **Line** of another; no visitor data on a server; try.bluebin.app is a static image | **Line** routes cannot call Erlang-only code; a second build to keep green (`pnpm sim:test`); no holidays (R16); nothing is saved | — |
 | T14 | Peer to peer, the **Host** keeps the only copy (H33), over a relay server (H34) and synced copies (H35) | Still no server; one writer and one guard, as on bluebin.app; a **Guest** loads no SQLite | Two browsers that cannot connect directly (no TURN) cannot play together; depends on public Nostr relays; the **Simulation** ends with the page of the **Host** | — |
 
 ### Tensions being watched (unresolved by design)
@@ -996,6 +993,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **Who sees a Shared Line.** [CONTEXT.md](./CONTEXT.md) said every **Account** able to open its **Workspace**, so only the **Team Members** of another **Line** there. Resolved (2026-11-07): anyone with its link, signed in or not, look-only. authentik lets the look-only paths through with no sign-in; with SSO on, a request with no uid then gets no **Workspace** (`401`), so a path that climbs out of `/api/s/` opens nothing.
 - **Diagrams lag G11 and G12.** The TPS house (§1) and the House of Quality did not show G11, G12, F43–F52, F54, F55 or F61–F64, nor the new words of G4 and G5. Resolved (2026-11-10): both redrawn with G11–G14; the House of Quality adds F50 and F69, and §5 is scored again.
 - **The Simulation was not in the design.** It shipped (2026-11-08) and became shared with **Guests** (2026-11-09) with no Goal, Function or Component here, while [CONTEXT.md](./CONTEXT.md) defines **Simulation**, **Host** and **Guest**. Resolved (2026-11-10): G14, F66–F71, H31–H35, C9, C10, R15–R18, T13 and T14.
+- **The Simulation read as a demo.** The first draft of G14 put the **Simulation** outside the TPS house, as a way for anyone to try Bluebin. Resolved (2026-11-10): it is off-the-line practice (Training Within Industry), so G14 sits in the foundation next to **Standardized Work**, and [CONTEXT.md](./CONTEXT.md) says so; showing Bluebin to a visitor is a side effect.
 - **Line Lead Time is in the glossary, not in the measures.** [CONTEXT.md](./CONTEXT.md) (2026-11-09) defines **Line Lead Time**, counts a **Piece** by its **Deployment** for the output of the **Line**, and judges that output against the **Takt Time**. C2 `measures` has neither. Open: F72 and F73, built in the order of §16.
 - **"A user has one workspace for now".** The comment in `backend/src/bluebin/workspace.gleam` and the README's "Sign-in and Workspaces" said the **Workspace** comes only from `X-authentik-uid`. Resolved with C7 and H12: the owner's uid in the URL opens another **Workspace**.
 - **F9 and the automatic pause.** F9 also warned before a second active **Assignment**, but taking an **Assignment** pauses the current one automatically, so a second active one cannot happen. Resolved: F9 covers only the second **Piece** in a **Blue Bin**.
