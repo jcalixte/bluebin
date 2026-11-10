@@ -8,7 +8,7 @@ Strength weights used in matrices: **9** strong, **3** medium, **1** weak, blank
 
 ## House of Quality
 
-The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Row colours match the parts of the TPS house in §1; the blue boxes mark the 3 Functions with the highest weight. In the comparative evaluation, each alternative has its own colour: Bluebin blue, Jira orange, Linear purple, physical board brown. Red and green are kept for OK / NOK status only, so neither house uses them.
+The at-a-glance view of the design: the 14 Goals (§1) against 13 key Functions (§2) chosen for their cross-cutting weight, with the roof conflicts (§6), the derived weights (§5) and, on the right, how Bluebin is meant to score against the three alternatives a team already has (Jira, Linear, a physical board). Rows are grouped, and coloured, by the parts of the TPS house in §1, so they are not in Goal order; cyan marks G14, the **Simulation**, which is outside the house. The blue boxes mark the 3 Functions with the highest weight. In the comparative evaluation, each alternative has its own colour: Bluebin blue, Jira orange, Linear purple, physical board brown. Red and green are kept for OK / NOK status only, so neither house uses them.
 
 ```tikz
 % =====================================================================
@@ -304,6 +304,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \definecolor{bbJidoka}{HTML}{6B46C1}
 \definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
+\definecolor{bbSim}{HTML}{0987A0}
 % Comparative evaluation: one colour per alternative (no red, no green)
 \definecolor{bbAltBluebin}{HTML}{2B6CB0}
 \definecolor{bbAltJira}{HTML}{DD6B20}
@@ -319,11 +320,11 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
   qfdalt4mk/.append style={draw=bbAltBoard, fill=bbAltBoard},
   qfdalt4ln/.append style={draw=bbAltBoard},
 }
-\def\qfdNW{10}
-\def\qfdNH{11}
+\def\qfdNW{14}
+\def\qfdNH{13}
 \def\qfdWhatW{4.6}
 \def\qfdImpW{0.9}
-\def\qfdHdrH{3.6}
+\def\qfdHdrH{3.9}
 \def\qfdWhatsTitle{Goals (TPS house)}
 \def\qfdCmpW{3.8}
 \qfdshowaltfourtrue
@@ -339,30 +340,33 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
 \begin{qfdhouse}
-  % Goal rows coloured by their part of the TPS house
+  % Goal rows coloured by their part of the TPS house; G14 is outside it
   \begin{scope}[on background layer]
-    \foreach \r/\col in {1/bbRoof, 2/bbJit, 3/bbJit, 4/bbJidoka, 5/bbPeople,
-                         6/bbBase, 7/bbBase, 8/bbBase, 9/bbBase, 10/bbBase} {
+    \foreach \r/\col in {1/bbRoof, 2/bbJit, 3/bbJit, 4/bbJidoka, 5/bbPeople, 6/bbPeople, 7/bbBase, 8/bbBase, 9/bbBase, 10/bbBase, 11/bbBase, 12/bbBase, 13/bbBase, 14/bbSim} {
       \fill[\col!14] (\qfdLeftEdge, -\r + 1) rectangle (-\qfdImpW, -\r);
       \fill[\col] (\qfdLeftEdge, -\r + 1) rectangle ({\qfdLeftEdge + 0.12}, -\r);
     }
   \end{scope}
-  % WHATs
+  % WHATs, grouped by part of the house
   \pgfmathsetmacro{\qfdWhatTextW}{\qfdWhatW - 0.3}
   \foreach \r/\t in {1/{G1 Client: Takt Time visible to all},
                      2/{G2 Pull, every Deviation visible},
                      3/{G3 One-piece flow at Takt Time},
                      4/{G4 Jidoka: stop and fix},
                      5/{G5 Team Member knows the next thing},
-                     6/{G6 Levelled Product Mix},
-                     7/{G7 Line at a glance},
-                     8/{G8 Recording costs seconds},
-                     9/{G9 Flow problems as numbers},
-                     10/{G10 Design and change without code}}
+                     6/{G11 Sign in, find own work},
+                     7/{G6 Levelled Product Mix},
+                     8/{G7 Line at a glance},
+                     9/{G8 Recording costs seconds},
+                     10/{G12 Line only to its Accounts},
+                     11/{G9 Flow problems as numbers},
+                     12/{G10 Design and change without code},
+                     13/{G13 Hold for Release, wait in Lead Time},
+                     14/{G14 Play a Simulation, with Guests}}
     \node[anchor=west, font=\scriptsize, text width=\qfdWhatTextW cm, align=left]
       at ({\qfdLeftEdge + 0.18}, {-\r + 0.5}) {\t};
-  % Importance (%)
-  \foreach \r/\imp in {1/12, 2/11, 3/10, 4/10, 5/11, 6/9, 7/10, 8/10, 9/10, 10/7}
+  % Importance (% of the Goal weights, total 105)
+  \foreach \r/\imp in {1/9.5, 2/8.6, 3/7.6, 4/7.6, 5/8.6, 6/6.7, 7/6.7, 8/7.6, 9/7.6, 10/5.7, 11/7.6, 12/5.7, 13/5.7, 14/4.8}
     \node[font=\scriptsize] at ({-\qfdImpW/2}, {-\r + 0.5}) {\imp};
   % HOWs
   \foreach \c/\t in {1/{F2 Takt Gap updated},
@@ -375,76 +379,79 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
                      8/{F28 Live screens},
                      9/{F30 Record a flow event},
                      10/{F34 Exact measures},
-                     11/{F40 Change while running}}
+                     11/{F40 Change while running},
+                     12/{F50 Own Team Member only},
+                     13/{F69 Guest's Team Member}}
     \node[rotate=90, anchor=west, font=\scriptsize] at ({\c - 0.5}, 0.15) {\t};
   % Relations: column/row/strength
-  \foreach \c/\r/\s in {1/1/S, 2/1/S, 7/1/M, 8/1/M, 9/1/M, 10/1/M,
-                        3/2/S, 4/2/S, 6/2/M,
-                        1/3/M, 4/3/M, 7/3/M, 10/3/M, 6/3/W,
-                        5/4/S, 2/4/M, 6/4/M,
-                        6/5/S, 5/5/M, 4/5/M, 8/5/M,
-                        7/6/S, 4/6/M,
-                        8/7/S, 2/7/M, 3/7/M, 4/7/M,
-                        9/8/S, 3/8/W, 6/8/W,
-                        10/9/S, 9/9/M, 11/9/M,
-                        11/10/S, 10/10/W}
+  \foreach \c/\r/\s in {1/1/S, 2/1/S, 7/1/M, 8/1/M, 9/1/M, 10/1/M, 3/2/S, 4/2/S,
+                        6/2/M, 1/3/M, 4/3/M, 6/3/W, 7/3/M, 10/3/M, 2/4/M, 5/4/S,
+                        6/4/M, 4/5/M, 5/5/M, 6/5/S, 8/5/M, 12/5/W, 6/6/M, 8/6/W,
+                        12/6/S, 4/7/M, 7/7/S, 2/8/M, 3/8/M, 4/8/M, 8/8/S, 3/9/W,
+                        6/9/W, 9/9/S, 12/10/S, 9/11/M, 10/11/S, 11/11/M, 10/12/W, 11/12/S,
+                        8/13/M, 9/13/W, 10/13/S, 6/14/W, 8/14/M, 12/14/M, 13/14/S}
     \node[qfdrel/\s] at ({\c - 0.5}, {-\r + 0.5}) {};
   % Roof correlations
-  \node[font=\scriptsize] at (C-1-2)  {$+\!+$};
+  \node[font=\scriptsize] at (C-1-2) {$+\!+$};
   \node[font=\scriptsize] at (C-9-10) {$+\!+$};
-  \node[font=\scriptsize] at (C-6-8)  {$+\!+$};
-  \node[font=\scriptsize] at (C-4-6)  {$+$};
-  \node[font=\scriptsize] at (C-1-8)  {$-$};
-  \node[font=\scriptsize] at (C-2-6)  {$-$};
-  \node[font=\scriptsize] at (C-3-9)  {$-$};
+  \node[font=\scriptsize] at (C-6-8) {$+\!+$};
+  \node[font=\scriptsize] at (C-12-13) {$+\!+$};
+  \node[font=\scriptsize] at (C-4-6) {$+$};
+  \node[font=\scriptsize] at (C-1-8) {$-$};
+  \node[font=\scriptsize] at (C-2-6) {$-$};
+  \node[font=\scriptsize] at (C-3-9) {$-$};
+  \node[font=\scriptsize] at (C-8-13) {$-$};
   \node[font=\scriptsize] at (C-10-11) {$-\!-$};
+  \node[font=\scriptsize] at (C-9-12) {$-\!-$};
   % Basement: target / difficulty / absolute / relative
   \foreach \c/\tgt/\diff/\abs/\rel in
-    {1/{$\leq$1\,min}/2/138/8,
-     2/{$\leq$1\,min}/2/168/10,
-     3/{100\,\%}/2/139/8,
-     4/{$\leq$\,bins}/3/219/13,
-     5/{$\leq$1\,min}/2/123/7,
-     6/{$\leq$2\,s}/3/182/11,
-     7/{$\leq$1\,min}/3/147/9,
-     8/{$\leq$2\,s}/3/159/9,
-     9/{$\leq$5\,s}/4/156/9,
-     10/{exact}/4/163/10,
-     11/{0 lost}/5/93/6} {
+    {1/{$\leq$1\,min}/2/108/7,
+     2/{$\leq$1\,min}/2/131/8,
+     3/{100\,\%}/2/108/7,
+     4/{$\leq$\,bins}/3/169/11,
+     5/{$\leq$1\,min}/2/94/6,
+     6/{$\leq$2\,s}/3/166/10,
+     7/{$\leq$1\,min}/3/112/7,
+     8/{$\leq$2\,s}/3/161/10,
+     9/{$\leq$5\,s}/4/125/8,
+     10/{exact}/4/177/11,
+     11/{0 lost}/5/74/5,
+     12/{0 (403)}/4/135/8,
+     13/{$\leq$1\,s}/4/43/3} {
     \node[font=\tiny] at ({\c - 0.5}, {-\qfdNW - 0.5}) {\tgt};
     \node[font=\scriptsize] at ({\c - 0.5}, {-\qfdNW - 1.5}) {\diff};
     \node[font=\scriptsize] at ({\c - 0.5}, {-\qfdNW - 2.5}) {\abs};
     \node[font=\scriptsize\bfseries] at ({\c - 0.5}, {-\qfdNW - 3.5}) {\rel};
   }
-  % Top 3 Functions by weight (F7, F17, F3)
-  \foreach \c in {4, 6, 2}
+  % Top 3 Functions by weight (F34, F7, F17)
+  \foreach \c in {10, 4, 6}
     \draw[bbJit, line width=1.1pt] ({\c - 1}, {-\qfdNW - 3}) rectangle (\c, {-\qfdNW - 4});
   \foreach \r/\t in {1/Target, 2/Difficulty (1--5), 3/Absolute weight, 4/Relative weight \%}
     \node[anchor=east, font=\scriptsize\itshape] at (-0.1, {-\qfdNW - \r + 0.5}) {\t};
-  % --- Comparative evaluation: Bluebin vs the two alternatives ---
+  % --- Comparative evaluation: Bluebin vs the three alternatives ---
   % Bluebin (target)
-  \draw[qfdalt1ln] \bbEv{1}{5} -- \bbEv{2}{5} -- \bbEv{3}{4} -- \bbEv{4}{5}
-    -- \bbEv{5}{5} -- \bbEv{6}{5} -- \bbEv{7}{4} -- \bbEv{8}{4}
-    -- \bbEv{9}{5} -- \bbEv{10}{5};
-  \foreach \r/\s in {1/5, 2/5, 3/4, 4/5, 5/5, 6/5, 7/4, 8/4, 9/5, 10/5}
+  \draw[qfdalt1ln] \bbEv{1}{5} -- \bbEv{2}{5} -- \bbEv{3}{4} -- \bbEv{4}{5} -- \bbEv{5}{5}
+    -- \bbEv{6}{4} -- \bbEv{7}{5} -- \bbEv{8}{4} -- \bbEv{9}{4} -- \bbEv{10}{4}
+    -- \bbEv{11}{5} -- \bbEv{12}{5} -- \bbEv{13}{5} -- \bbEv{14}{5};
+  \foreach \r/\s in {1/5, 2/5, 3/4, 4/5, 5/5, 6/4, 7/5, 8/4, 9/4, 10/4, 11/5, 12/5, 13/5, 14/5}
     \node[qfdalt1mk] at \bbEv{\r}{\s} {};
   % Jira
-  \draw[qfdalt2ln] \bbEv{1}{1} -- \bbEv{2}{1} -- \bbEv{3}{2} -- \bbEv{4}{2}
-    -- \bbEv{5}{3} -- \bbEv{6}{1} -- \bbEv{7}{2} -- \bbEv{8}{1}
-    -- \bbEv{9}{4} -- \bbEv{10}{3};
-  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/3, 6/1, 7/2, 8/1, 9/4, 10/3}
+  \draw[qfdalt2ln] \bbEv{1}{1} -- \bbEv{2}{1} -- \bbEv{3}{2} -- \bbEv{4}{2} -- \bbEv{5}{3}
+    -- \bbEv{6}{4} -- \bbEv{7}{1} -- \bbEv{8}{2} -- \bbEv{9}{1} -- \bbEv{10}{5}
+    -- \bbEv{11}{4} -- \bbEv{12}{3} -- \bbEv{13}{3} -- \bbEv{14}{1};
+  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/3, 6/4, 7/1, 8/2, 9/1, 10/5, 11/4, 12/3, 13/3, 14/1}
     \node[qfdalt2mk] at \bbEv{\r}{\s} {};
   % Linear
-  \draw[qfdalt3ln] \bbEv{1}{1} -- \bbEv{2}{1} -- \bbEv{3}{2} -- \bbEv{4}{2}
-    -- \bbEv{5}{4} -- \bbEv{6}{1} -- \bbEv{7}{3} -- \bbEv{8}{4}
-    -- \bbEv{9}{3} -- \bbEv{10}{2};
-  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/4, 6/1, 7/3, 8/4, 9/3, 10/2}
+  \draw[qfdalt3ln] \bbEv{1}{1} -- \bbEv{2}{1} -- \bbEv{3}{2} -- \bbEv{4}{2} -- \bbEv{5}{4}
+    -- \bbEv{6}{5} -- \bbEv{7}{1} -- \bbEv{8}{3} -- \bbEv{9}{4} -- \bbEv{10}{4}
+    -- \bbEv{11}{3} -- \bbEv{12}{2} -- \bbEv{13}{2} -- \bbEv{14}{2};
+  \foreach \r/\s in {1/1, 2/1, 3/2, 4/2, 5/4, 6/5, 7/1, 8/3, 9/4, 10/4, 11/3, 12/2, 13/2, 14/2}
     \node[qfdalt3mk] at \bbEv{\r}{\s} {};
   % Physical board + cards
-  \draw[qfdalt4ln] \bbEv{1}{2} -- \bbEv{2}{3} -- \bbEv{3}{3} -- \bbEv{4}{2}
-    -- \bbEv{5}{2} -- \bbEv{6}{3} -- \bbEv{7}{5} -- \bbEv{8}{5}
-    -- \bbEv{9}{1} -- \bbEv{10}{5};
-  \foreach \r/\s in {1/2, 2/3, 3/3, 4/2, 5/2, 6/3, 7/5, 8/5, 9/1, 10/5}
+  \draw[qfdalt4ln] \bbEv{1}{2} -- \bbEv{2}{3} -- \bbEv{3}{3} -- \bbEv{4}{2} -- \bbEv{5}{2}
+    -- \bbEv{6}{2} -- \bbEv{7}{3} -- \bbEv{8}{5} -- \bbEv{9}{5} -- \bbEv{10}{2}
+    -- \bbEv{11}{1} -- \bbEv{12}{5} -- \bbEv{13}{2} -- \bbEv{14}{4};
+  \foreach \r/\s in {1/2, 2/3, 3/3, 4/2, 5/2, 6/2, 7/3, 8/5, 9/5, 10/2, 11/1, 12/5, 13/2, 14/4}
     \node[qfdalt4mk] at \bbEv{\r}{\s} {};
 \end{qfdhouse}
 \end{document}
@@ -452,7 +459,7 @@ The at-a-glance view of the design: the 10 Goals (§1) against 11 key Functions 
 
 ### Where we land
 
-The right-hand zone scores each Goal 0–5 for four alternatives. The **Bluebin** column holds target scores, set before the build. **Jira** and **Linear** get one column each: they fail the lean Goals in the same way, but they differ on the other Goals. Jira gives reports and configuration, with slow capture. Linear gives speed, with an opinionated workflow. **Physical board** is the shop-floor baseline: a wall, cards and a Heijunka box.
+The right-hand zone scores each Goal 0–5 for four alternatives. The **Bluebin** column holds target scores, set before the build (G11–G14 on 2026-11-10). **Jira** and **Linear** get one column each: they fail the lean Goals in the same way, but they differ on the other Goals. Jira gives reports and configuration, with slow capture. Linear gives speed, with an opinionated workflow. **Physical board** is the shop-floor baseline: a wall, cards and a Heijunka box.
 
 | Goal                                 | Bluebin | Jira | Linear | Physical board | Reading                                                                                                          |
 | ------------------------------------ | :-----: | :--: | :----: | :------------: | ---------------------------------------------------------------------------------------------------------------- |
@@ -466,6 +473,10 @@ The right-hand zone scores each Goal 0–5 for four alternatives. The **Bluebin*
 | G8 Recording costs seconds           |    4    |  1   |   4    |     **5**      | Jira is form-heavy; Linear is keyboard-fast and ties us; we pay a click and a reason                             |
 | G9 Flow problems as numbers          |    5    |  4   |   3    |       1        | Jira's reports come closest, but they count tickets with no **Takt Time**                                        |
 | G10 Design and change without code   |    5    |  3   |   2    |     **5**      | A wall is redrawn in a minute; Jira pays an admin for it; Linear refuses; keeping that freedom in software is R1 |
+| G11 Sign in, find own work           |    4    |  4   | **5**  |       2        | Linear's "my issues" across teams sets the bar; Jira has SSO and "assigned to me"; at a wall you look for your name |
+| G12 **Line** only to its **Accounts** |    4    | **5** |   4    |       2        | Jira's permission schemes go further than **Shared** or **Private**; a wall shows to everyone who walks by |
+| G13 Hold for **Release**, wait in **Lead Time** | 5 | 3 | 2 | 2 | Jira has fix versions, but its clock stops at "done"; Linear and a wall stop it at **Deployment** too |
+| G14 Play a **Simulation**, with **Guests** | 5 | 1 | 2 | **4** | A paper Kanban game in one room is the real rival: everyone plays, nobody installs; Jira and Linear need an account and a setup first |
 
 What the scores say:
 
@@ -473,6 +484,8 @@ What the scores say:
 2. The physical board beats us on G7, G8 and G10, the costs of software. They set hard budgets: live screens (§8), recording in 10 s or less (F31), and change-while-running (F40), even though F40 ranks last by weight and first by difficulty.
 3. Jira is the threat on G9 (reports) and G10 (configuration); Linear is the threat on G5 (next thing) and G8 (speed of capture). Each tool is strong on one side only, so our bar is the better of the two on each Goal.
 4. On G8, Linear scores 4, the same as us, and F31 alone keeps us level. If the reason prompt grows past 10 s, Linear leads on the Goal that every **Team Member** touches all day.
+5. G11 and G12 are hygiene: Linear and Jira set the bar, and we aim one point under it. These Goals must not stop a team from choosing Bluebin; they do not make a team choose it.
+6. On G14, the paper game wins in one room. The **Simulation** must win on distance: one link, no install, each **Guest** on their own screen (F67–F69).
 
 ---
 
@@ -487,6 +500,7 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 \definecolor{bbJidoka}{HTML}{6B46C1}
 \definecolor{bbPeople}{HTML}{B83280}
 \definecolor{bbBase}{HTML}{4A5568}
+\definecolor{bbSim}{HTML}{0987A0}
 \begin{document}
 \hyphenpenalty=10000 \exhyphenpenalty=10000
 \begin{tikzpicture}[x=1cm, y=1cm, line join=round,
@@ -506,17 +520,18 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   \node[head=bbJit] at (2, 8.4) {Just-In-Time};
   \node[body=3.6] at (2, 6.9) {G2 Starting work without a \textbf{Kanban} is never silent: each \textbf{Deviation} is visible};
   \node[body=3.6] at (2, 5.2) {G3 Each \textbf{Piece} flows alone at its \textbf{Demand}'s \textbf{Takt Time}};
-  \node[ids] at (2, 3.5) {F6--F11};
+  \node[ids] at (2, 3.5) {F6--F11, F55};
   \draw[box=bbJidoka] (10, 3) rectangle (14, 9);
   \node[head=bbJidoka] at (12, 8.4) {Jidoka};
-  \node[body=3.6] at (12, 6.6) {G4 A defect stops the flow where it is found, and its author repairs it first (\textbf{Rework})};
+  \node[body=3.6] at (12, 6.6) {G4 A defect stops the flow where it is found; its author repairs it first (\textbf{Rework}), helped by the \textbf{Work Station} that found it};
   \node[body=3.6] at (12, 4.8) {\textbf{Andon} button: stop the \textbf{Work Station}, call the \textbf{Team Leader}};
-  \node[ids] at (12, 3.5) {F12--F16, F42};
+  \node[ids] at (12, 3.5) {F12--F16, F42, F61};
   % Centre
   \draw[box=bbPeople, rounded corners=4pt] (4.6, 3.6) rectangle (9.4, 8.4);
   \node[head=bbPeople] at (7, 7.8) {People and teamwork};
-  \node[body=4.4] at (7, 6.3) {G5 A \textbf{Team Member} always knows the next thing to do: an \textbf{Assignment}, a \textbf{Rework}, \textbf{Help Downstream}, or wait};
-  \node[ids] at (7, 4.2) {F17--F22};
+  \node[body=4.4] at (7, 6.6) {G5 A \textbf{Team Member} always knows the next thing to do: an \textbf{Assignment}, a \textbf{Rework}, \textbf{Help the Rework}, \textbf{Help Downstream}, or wait};
+  \node[body=4.4] at (7, 5.0) {G11 Each \textbf{Team Member} signs in and finds their own work in every \textbf{Line}};
+  \node[ids] at (7, 4.0) {F17--F22, F43--F47};
   % Foundation
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!22] (-0.8, 2) rectangle (14.8, 3);
   \node[head=bbBase, anchor=west] at (-0.6, 2.5) {Heijunka};
@@ -524,15 +539,20 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   \node[ids, anchor=east] at (14.6, 2.5) {F23--F26};
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!15] (-0.8, 1) rectangle (14.8, 2);
   \node[head=bbBase, anchor=west, align=left] at (-0.6, 1.5) {Stability and\\visual management};
-  \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Line} is visible at a glance \quad G8 Recording work costs seconds};
-  \node[ids, anchor=east] at (14.6, 1.5) {F27--F33};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Line} is visible at a glance \quad G8 Recording work costs seconds\\G12 A \textbf{Line} shows only to the \textbf{Accounts} it is meant for};
+  \node[ids, anchor=east, align=right] at (14.6, 1.5) {F27--F33, F48--F53,\\F56, F62--F65};
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!8] (-0.8, 0) rectangle (14.8, 1);
   \node[head=bbBase, anchor=west] at (-0.6, 0.5) {Kaizen};
-  \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Line} without code};
-  \node[ids, anchor=east] at (14.6, 0.5) {F34--F41};
+  \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Line} without code\\G13 The wait of a \textbf{Piece} held for \textbf{Release} counts in its \textbf{Lead Time}};
+  \node[ids, anchor=east, align=right] at (14.6, 0.5) {F34--F41, F54,\\F57--F60, F72, F73};
   % Deferred
   \draw[line width=0.6pt, dashed, black!55] (-0.8, -0.25) rectangle (14.8, -1.05);
   \node[font=\scriptsize\itshape, black!65] at (7, -0.65) {Standardized Work --- deferred (Definition of Done per \textbf{Work Station})};
+  % Outside the house: the Simulation
+  \draw[draw=bbSim!80!black, line width=0.9pt, fill=bbSim!10, rounded corners=4pt] (-0.8, -1.3) rectangle (14.8, -2.3);
+  \node[head=bbSim, anchor=west] at (-0.6, -1.8) {Simulation};
+  \node[body=8.5, anchor=west, align=left] at (3.2, -1.8) {G14 Anyone plays Bluebin in a \textbf{Simulation}, alone or as \textbf{Host} with \textbf{Guests}, with no sign-in};
+  \node[ids, anchor=east] at (14.6, -1.8) {F66--F71};
 \end{tikzpicture}
 \end{document}
 ```
@@ -559,8 +579,10 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 | G9                                               | Flow problems show as numbers: **Lead Time**, **Stagnation Time**, **Starvation Time**, **Rework Time**                                                                   |   8    | Kick-off conversation              |
 | G10                                              | A **Line** can be designed and changed without code: **Work Stations**, **Branches**, **Blue Bins**, **Team Members**, **Working Calendar**                               |   6    | Kick-off conversation              |
 | G13                                              | A **Team Member** can hold a deployed **Piece** for a later **Release**, and the wait until **Release** shows in the **Lead Time** of the **Piece** and of its **Demand** |   6    | Session decision 2026-11-08        |
+| **Outside the house — Simulation**               |                                                                                                                                                                           |        |                                    |
+| G14                                              | Anyone can play Bluebin in a **Simulation**, alone or as a **Host** with **Guests** who each play one **Team Member**, with no sign-in and nothing to install            |   5    | Session decisions 2026-11-08 (**Simulation**) and 2026-11-09 (**Guests**) |
 
-User segments: **Team Member** (daily work), Line designer (design and Kaizen), **Client** and Demand owner (Demands and **Takt Time**).
+User segments: **Team Member** (daily work), Line designer (design and Kaizen), **Client** and Demand owner (Demands and **Takt Time**), visitor who learns or shows Bluebin (**Simulation**).
 
 Deferred: **Standardized Work** (foundation). The Definition of Done of each **Work Station** stays out of the app for now. **Trigger to revisit:** **Rework** shows that **Work Stations** disagree on what "done" means.
 
@@ -646,7 +668,17 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | F62 | Pause the **Helper**'s active **Assignment** when they join; when the help ends, make their paused **Assignment** nearest to **Deployment** active again | → | 100 %, with no manual step | G8 |
 | F63 | End the help at the latest when its cause ends (**Rework** closed, or **Piece** put in a **Blue Bin**), and let the **Helper** stop before | → | 0 **Helpers** after the cause ends; stop in 1 click | G8 |
 | F64 | Show the **Helpers** of a **Piece** in the **Line** view, on the **Rework** card, and in the **Helper**'s own **Assignments** | ↑ | 100 % of **Helpers** visible, with no click | G7 |
-| F65 | Show every **Team Member** of the **Line** with all their **Assignments** (active, paused, waiting **Rework**), what they help, and the **Pieces** and **Rework** nobody holds, so the team sees where work piles up and reassigns it (F21) | ↑ | all **Team Members** on 1 screen, ≤ 2 s after a flow event | G7 |
+| F65 | Show every **Team Member** of the **Line** with all their **Assignments** (active, paused, waiting **Rework**), what they help, and the **Pieces** and **Rework** nobody holds, so the team sees where work piles up and reassigns it (F21); each name opens that **Team Member**'s next thing (F19), except for a Member who sees only their own work | ↑ | all **Team Members** on 1 screen, ≤ 2 s after a flow event | G7 |
+| **Simulation** | | | | |
+| F66 | Run the **Line** routes and the access guard (C7) in the visitor's page, from the demo data, with no server call; nothing is saved | → | 0 server calls; `pnpm sim:test` passes on the rules of bluebin.app | G14 |
+| F67 | Invite **Guests** with one link that opens the **Simulation** of the **Host** | ↓ | link ready ≤ 5 s; 1 click to copy | G14 |
+| F68 | Let each **Guest** pick one **Team Member** that no other **Guest** plays, and show its **Work Stations** and the ones it is **Team Leader** of | → | 0 **Team Members** played by two **Guests** | G14 |
+| F69 | Answer each call of a **Guest** on the **Host**, as its **Team Member** and through the access guard (C7); the **Host** plays the owner and each **Team Member** that no **Guest** picks | ↓ | ≤ 1 s on one network; 0 calls outside the role of that **Team Member** | G14 |
+| F70 | Tell every **Guest** to read the **Line** again after each change on the **Host** | ↓ | ≤ 2 s, as F28 | G14 |
+| F71 | Show the **Host** who is in the room, and let the **Host** end the shared **Simulation** for every **Guest** and keep its **Line**; tell each **Guest** whether its **Host** ended it or left | → | 1 confirm; 100 % of **Guests** told | G14 |
+| **Line Lead Time and output (not built)** | | | | |
+| F72 | Measure the **Line Lead Time** of each **Piece** and each **Demand**, from the first pull out of the **Backlog** to **Deployment**, set by the slowest **Sub-Piece** across a **Split**; count a **Piece** in the period of its **Deployment** | → | **Lead Time** = **Backlog** wait + **Line Lead Time** + wait to **Release**, exactly | G9 |
+| F73 | Judge the output of the **Line** in a period against the **Takt Time**: on takt when its deployed **Pieces** reach Σ(**Working Time** in the period ÷ **Takt Time**) over the active **Demands**, behind takt below it; show more as spare capacity, not as a better result | → | 1 verdict for each period, in Measures and in the before/after comparison (F38) | G9 |
 
 ---
 
@@ -659,11 +691,13 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 - **G5** A **Team Member** knows the next thing to do _W:9_ — F17–F22
 - **G6** Levelled **Product Mix** _W:7_ — F23–F26
 - **G7** **Line** at a glance _W:8_ — F27–F29, F64, F65
-- **G8** Recording costs seconds _W:8_ — F30–F33, F62, F63
-- **G9** Flow problems as numbers _W:8_ — F34–F38, F54
+- **G8** Recording costs seconds _W:8_ — F30–F33, F56, F62, F63
+- **G9** Flow problems as numbers _W:8_ — F34–F38, F54, F72, F73 (not built)
 - **G10** Design and change without code _W:6_ — F39–F41
 - **G11** A **Team Member** signs in and finds their own work _W:7_ — F43–F47
 - **G12** A **Line** shows only to the **Accounts** it is meant for _W:6_ — F48–F53
+- **G13** Hold a deployed **Piece** for **Release**, and count the wait in its **Lead Time** _W:6_ — F57–F60 (F56, deploy and release in 1 click, serves G8)
+- **G14** Play Bluebin in a **Simulation**, alone or with **Guests** _W:5_ — F66–F71
 
 Core How decisions, shared by many Functions:
 
@@ -735,6 +769,20 @@ Core How decisions, shared by many Functions:
 - **How H28 — raise to version 3 and wipe the workspaces** (rejected, see T11)
 - **How H30 — `create table if not exists` on each open, version 2 kept** (rejected: the version no longer describes the schema)
 
+- **How H31 — the Line routes of C2 compiled to JavaScript, on an in-memory SQLite in the page** (chosen, see T13)
+  - Serves: F66
+  - The Gleam package `sim/` compiles `bluebin.simulate` (the **Line** routes and C7) to JavaScript; sql.js stands in for `node:sqlite`; `vite --mode simulation` builds it, and the real build drops it
+  - A **Line** route must not call Erlang-only code (`process`, `httpc`, `os`, mist) or `simplifile`: it compiles, then fails when called. Holidays come from `/api/holidays` on C2, so the **Simulation** hides them (R16)
+- **How H32 — a Public Workspace on the server** (rejected, see T13; removed 2026-11-08)
+- **How H33 — peer to peer over WebRTC; the Host keeps the only copy of the Line** (chosen, see T14)
+  - Serves: F67–F71
+  - Trystero finds the peers through public Nostr relays. The link `/line#join=<room>.<password>` carries the password that encrypts the offers, in the URL fragment, so no server sees it
+  - A **Guest** loads no SQLite: each API call of its SPA goes to the **Host** as one request (15 s timeout), and the **Host** answers it with H31 as `Member(<Team Member>)`, so C7 refuses the owner-only routes and acts for no other **Team Member**
+  - Seats (`seats.ts`) map each **Team Member** to one peer: `claim` refuses a **Team Member** that another **Guest** plays or that left the **Line**; a **Guest** that leaves frees its seat; after a change, the seats of removed **Team Members** go
+  - After each change, the **Host** sends `change` and the seats; each **Guest** reads again, as after an SSE event (H5)
+- **How H34 — a relay on a Bluebin server** (rejected, see T14: try.bluebin.app is a static image, and a server would hold the visitors' **Lines**)
+- **How H35 — a copy of the Line on each Guest, kept in sync** (rejected, see T14: many writers, so the rules run in several places and the copies can differ)
+
 Components that realise these How decisions:
 
 - **C1** SPA — Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI
@@ -745,6 +793,8 @@ Components that realise these How decisions:
 - **C6** Accounts store — `data/accounts.db` (H8)
 - **C7** Access guard — `bluebin/access` in C2 (H10)
 - **C8** Forward-auth headers — `X-authentik-email`, `X-authentik-name` (ADR-0003)
+- **C9** Simulation — `sim/` (Gleam to JavaScript) and sql.js, in a static nginx image on try.bluebin.app (H31)
+- **C10** Simulation sharing — `src/simulation/share.ts` and `seats.ts` on Trystero, with C1 `GuestGate` and `SimulationBar` (H33)
 
 Changes to existing components for G11 and G12: C1 gets `/w/<owner-uid>/lines/<id>/<view>` URLs (H12), the **Line** menu grouped by **Workspace**, **Shared** or **Private** in the New Line form and the **Line** menu, an email and "not linked yet" on each **Team Member** in Design, a first sign-in screen for first and last name, and the own **Assignments** after sign-in. C6 gets the **Shared** flag of each **Line** as a dated log (`line_share_change`, the last row wins; existing **Lines** stay **Private**), not C3: a new **Line** schema version would make the old container refuse every **Line** during a rolling deploy. C2 gets the **Account** routes.
 
@@ -756,28 +806,36 @@ Changes to existing components for the comparison around a **Line** change (F38,
 
 Changes to existing components for the run chart (F38): C2 `measures` adds `weekly`, which gives the Line's first day (the day of its first flow event) and, reading the log once, each of the last weeks (Monday to Sunday, UTC) its Pieces released and their average **Lead Time**; C2 API adds `GET /api/measures/weeks?weeks=12` (4 to 52), read access; C1 `RunChart` draws **Lead Time** week by week with a vertical line at each **Line** change and the XmR natural limits (average ± 2.66 × the average moving range) of the full weeks before the chosen change, or of all full weeks with custom dates; it circles a signal (Wheeler rule 1: outside a limit; rule 3: 3 of 4 weeks past halfway to one) and counts the signals since the change. Poka-yoke on the periods: C1 `MeasuresView` limits each date to the days from the Line's first day to today, reads no measure while a period is out of them and says why; around a change, both periods also get shorter so that Before does not start before the Line; on a Line younger than the default periods, its days so far are split in two halves.
 
+Changes to existing components for the Team view (F65): C1 `TeamView` shows each **Team Member** with their **Assignments** and what they help, and the **Pieces** and **Rework** nobody holds; each name links to `/next?teamMember=<id>` and opens in the page, as the header tabs do. C1 `useWorkspaces` holds `ownWorkOnly` (a Member with a **Team Member** in the **Line** sees only their own work), which `NextThingView` and `TeamView` share: for that Member, the names of the other **Team Members** are not links.
+
+Changes to existing components for Simulation sharing (F67–F71): C10 is new. C1 `main.ts` mounts `GuestGate` instead of a local **Line** for a **Guest**; `GuestGate` shows one screen for each state (looking, pick a **Team Member**, host gone, host ended, link failed), with **Look again** and **Play a Simulation alone**; `SimulationBar` adds **Invite…** (the link, "In the room", **End for every Guest…** with an inline confirm); `App.vue` tells a **Guest** that the **Line** lives in the page of the **Host**; `WorkingCalendarCard` hides holidays in the **Simulation** (R16).
+
 ---
 
 ## 5. House — Goals × key Functions
 
-Reduced to the 11 Functions that serve several Goals; the other Functions map to one Goal each (see §4). Importance = Goal weight as a share of the total (81). Cells: 9 strong, 3 medium, 1 weak.
+Reduced to the 13 Functions that serve several Goals; the other Functions map to one Goal each (see §4). Importance = Goal weight as a share of the total (105). Rows follow the parts of the TPS house, as in the House of Quality. Cells: 9 strong, 3 medium, 1 weak.
 
-|           | F2  | F3  | F6  | F7  | F13 | F17 | F23 | F28 | F30 | F34 | F40 |
-| --------- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
-| G1 (12 %) |  9  |  9  |     |     |     |     |  3  |  3  |  3  |  3  |     |
-| G2 (11 %) |     |     |  9  |  9  |     |  3  |     |     |     |     |     |
-| G3 (10 %) |  3  |     |     |  3  |     |  1  |  3  |     |     |  3  |     |
-| G4 (10 %) |     |  3  |     |     |  9  |  3  |     |     |     |     |     |
-| G5 (11 %) |     |     |     |  3  |  3  |  9  |     |  3  |     |     |     |
-| G6 (9 %)  |     |     |     |  3  |     |     |  9  |     |     |     |     |
-| G7 (10 %) |     |  3  |  3  |  3  |     |     |     |  9  |     |     |     |
-| G8 (10 %) |     |     |  1  |     |     |  1  |     |     |  9  |     |     |
-| G9 (10 %) |     |     |     |     |     |     |     |     |  3  |  9  |  3  |
-| G10 (7 %) |     |     |     |     |     |     |     |     |     |  1  |  9  |
-| **Σ**     | 138 | 168 | 139 | 219 | 123 | 182 | 147 | 159 | 156 | 163 | 93  |
-| **Rank**  |  9  |  3  |  8  |  1  | 10  |  2  |  7  |  5  |  6  |  4  | 11  |
+|            | F2 | F3 | F6 | F7 | F13 | F17 | F23 | F28 | F30 | F34 | F40 | F50 | F69 |
+| ---------- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: | :-: |
+| G1 (9.5 %) | 9 | 9 |  |  |  |  | 3 | 3 | 3 | 3 |  |  |  |
+| G2 (8.6 %) |  |  | 9 | 9 |  | 3 |  |  |  |  |  |  |  |
+| G3 (7.6 %) | 3 |  |  | 3 |  | 1 | 3 |  |  | 3 |  |  |  |
+| G4 (7.6 %) |  | 3 |  |  | 9 | 3 |  |  |  |  |  |  |  |
+| G5 (8.6 %) |  |  |  | 3 | 3 | 9 |  | 3 |  |  |  | 1 |  |
+| G11 (6.7 %) |  |  |  |  |  | 3 |  | 1 |  |  |  | 9 |  |
+| G6 (6.7 %) |  |  |  | 3 |  |  | 9 |  |  |  |  |  |  |
+| G7 (7.6 %) |  | 3 | 3 | 3 |  |  |  | 9 |  |  |  |  |  |
+| G8 (7.6 %) |  |  | 1 |  |  | 1 |  |  | 9 |  |  |  |  |
+| G12 (5.7 %) |  |  |  |  |  |  |  |  |  |  |  | 9 |  |
+| G9 (7.6 %) |  |  |  |  |  |  |  |  | 3 | 9 | 3 |  |  |
+| G10 (5.7 %) |  |  |  |  |  |  |  |  |  | 1 | 9 |  |  |
+| G13 (5.7 %) |  |  |  |  |  |  |  | 3 | 1 | 9 |  |  |  |
+| G14 (4.8 %) |  |  |  |  |  | 1 |  | 3 |  |  |  | 3 | 9 |
+| **Σ** | 108 | 131 | 108 | 169 | 94 | 166 | 112 | 161 | 125 | 177 | 74 | 135 | 43 |
+| **Rank** | 9 | 6 | 10 | 2 | 11 | 3 | 8 | 4 | 7 | 1 | 12 | 5 | 13 |
 
-**Top engineering priorities:** F7 (a **Kanban** on each pull) and F17 (**Assignments** updated) carry the pull system and the daily work of every **Team Member**; F3 (**Andon**) and F34 (exact measures) carry the roof and Kaizen. F40 ranks last but is the hardest (R1), so it gets the simplest rule: only empty **Blue Bins** and **Work Stations** can be removed.
+**Top engineering priorities:** F34 (exact measures) ranks first since G13: the wait for **Release** is in every **Lead Time**, so F34 carries the roof, Kaizen and the hold. F7 (a **Kanban** on each pull) and F17 (**Assignments** updated) follow; they carry the pull system and the daily work of every **Team Member**. F28 (live screens) is fourth, because each new screen (Team view, held **Pieces**, **Guests**) adds to it. F50 (act only as your own **Team Member**) is fifth: it carries G11, G12 and the **Guests** of G14, and it is the one strong conflict with F30 (R7). F40 is the hardest (R1), so it gets the simplest rule: only empty **Blue Bins** and **Work Stations** can be removed. F69 ranks last, because G14 has the lowest weight; it stays cheap because it reuses C7 and H31.
 
 ---
 
@@ -801,6 +859,10 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | R12 | F55 suggested **Blue Bins** vs F10 capacity at **Takt Time**                |    ×     | H15 sizes **Blue Bins** as if capacity were enough. A **Work Station** slower than **Takt Time** needs **Team Members** or less work, not more **Blue Bins**: F10 and F29 flag it; the suggestion does not try to                                                                 |
 | R13 | F55 last 20 passes vs F40 change while running                              |    ×     | After a change (a new **Team Member**, a new **Branch**), the suggestion still reads the passes from before it. Accepted: the window renews in 20 passes; the hint shows how many passes it read                                                                                  |
 | R14 | F62 pause a **Helper**'s **Pieces** vs F55 suggested **Blue Bins** | × | The pause names its cause `helping`; F55 keeps it like `rework`, because the capacity was lost to a defect, not to WIP (T12) |
+| R15 | F70 every **Guest** reads again after each change vs F69 ≤ 1 s | × | Each change makes each **Guest** read its open views again from the page of the **Host**. Accepted: a room is one team; watched in §8 |
+| R16 | F66 no server call vs F39 a **Working Calendar** with holidays | × | The **Simulation** hides holidays; its demo **Working Calendar** has none |
+| R17 | F69 the **Host** plays each **Team Member** that no **Guest** picks vs F19 one next thing for each **Team Member** | × | When a **Guest** takes the **Team Member** that the **Host** plays, the **Host** goes back to the owner and is told so |
+| R18 | F67 anyone with the link joins vs F48 hide a **Private Line** | × | Accepted by design: a **Simulation** holds the demo data, not a real **Line**; the link is the only key, and the **Host** can end the sharing (F71) |
 
 ---
 
@@ -808,7 +870,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 
 | ID  | Component                                                                             | Role                                                                                                                                                                                    | Main Functions                   | ADR                                                                         |
 | --- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------- |
-| C1  | SPA: Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI                                | All screens: **Demands** and **Takt Gap**, **Assignments**, **Line** view (wall TV), **Line** designer, measures                                                                        | F1, F19, F25, F27, F35, F38, F39 | —                                                                           |
+| C1  | SPA: Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI                                | All screens: **Demands** and **Takt Gap**, **Assignments**, **Line** view (wall TV), **Line** designer, measures                                                                        | F1, F19, F25, F27, F35, F38, F39, F65 | —                                                                           |
 | C2  | API: Gleam (wisp + mist)                                                              | HTTP actions; pull rules and **Deviations**; **Priority List** and **Assignment** ordering; Heijunka sequencer; measures                                                                | F6–F26, F30–F34, F40             | —                                                                           |
 | C3  | Store: SQLite (sqlight)                                                               | Flow event log and current-state tables, written in one transaction                                                                                                                     | F34, F38, F40                    | [ADR-0002](./docs/adr/0002-flow-event-log-with-current-state.md)            |
 | C4  | Event stream: Server-Sent Events from mist                                            | Pushes each new flow event to the open screens                                                                                                                                          | F2, F3, F15, F17, F28            | —                                                                           |
@@ -816,6 +878,8 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | C6  | Accounts store: `data/accounts.db` (sqlight)                                          | Each **Account** (uid, email, first and last name) and each link (**Workspace**, **Line**, **Team Member**, email), one email per **Line**; the dated log of **Shared** and **Private** | F43–F47                          | [ADR-0004](./docs/adr/0004-account-links-live-in-one-shared-accounts-db.md) |
 | C7  | Access guard: Gleam module `bluebin/access` in C2                                     | Role of the **Account** in the **Line**, per-route role table, `teamMember` check, `404` for a **Private Line** on the API and the live stream                                          | F48–F50, F52, F53                | —                                                                           |
 | C8  | Forward-auth headers: Traefik `authResponseHeaders` in the Coolify custom labels (C5) | Adds `X-authentik-email` and `X-authentik-name`, written by authentik only                                                                                                              | F44, F52                         | [ADR-0003](./docs/adr/0003-link-team-members-to-accounts-by-email.md)       |
+| C9  | Simulation: `sim/` (Gleam to JavaScript) and sql.js, static nginx image (`Dockerfile.simulation`) on try.bluebin.app | The **Line** routes and C7 in the visitor's page, from the demo data; nothing saved | F66 | — |
+| C10 | Simulation sharing: `src/simulation/share.ts` and `seats.ts` on Trystero (WebRTC, Nostr relays) | Invite link, seats, the calls of each **Guest** answered by the **Host**, `change` to every **Guest**, end for every **Guest** | F67–F71 | — |
 
 ---
 
@@ -868,6 +932,15 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | 4 | F61 who can help | 0 **Helpers** against the rules | `flow_test`: refuse a **Team Member** of a third **Work Station**, a **Rework** with no **Assignment**, and a second helped **Piece** | The API refuses with `409`; the SPA hides **Help** |
 | 5 | F14 help from the warning | 1 click | The SPA: pull at the **Work Station** that found an open **Rework**, then "Help <assignee> on <Piece>" | **Help** on the **Rework** card stays, in 2 clicks |
 
+### Simulation sharing (F66–F71)
+
+| Rank | Function | Target | Watched on | If we miss it |
+| :--: | --- | --- | --- | --- |
+| 1 | F69 a **Guest** acts only as its **Team Member** | 0 calls outside its role | `pnpm test` (`seats.test.ts`) and `pnpm sim:test`; the role check is C7 itself | Hide **Invite…**; the **Simulation** alone still works |
+| 2 | F67 a **Guest** finds its **Host** | ≤ 10 s | The "looking" screen of `GuestGate`, tried from two networks | **Look again**, and **Play a Simulation alone** as the main action (built); a TURN server only if teams ask (§9 tensions) |
+| 3 | F69 / F70 answer and update | ≤ 1 s / ≤ 2 s | Time from a **Guest** click to its screen update, with 5 **Guests** | Send the changed data with `change`, so that a **Guest** does not read again |
+| 4 | F66 the rules of bluebin.app | 0 differences | `pnpm sim:test` after each backend change | Hide the action in the **Simulation** until its route runs on both targets |
+
 ## 9. Tradeoffs — Got / Paid / ADR
 
 | ID  | Tradeoff                                                                                                       | Got                                                                                                         | Paid                                                                                      | ADR                                                              |
@@ -885,6 +958,8 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | T10 | Squash to version 2 and wipe the workspaces (H22), over a migration step (H23, H24) | No migration code; the code says **Deployment** on disk and on the wire | All workspace data on bluebin.app, the **Public Workspace** included, is lost a second time in two days | — |
 | T11 | An additive migration step v2 → v3 (H29), over a third wipe (H28) and a hidden `create table if not exists` (H30) | No data lost for a feature that only adds a table; the version still describes the schema | A migration path to keep and test for each version; "never migrate" becomes "migrate only what adds" | [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md) |
 | T12 | `helping` pauses count in F55 like `rework` (R14), over `held` (dropped) and a separate measure | The suggestion sees all the capacity lost to defects, on every **Work Station** the defect pulls people from | A **Work Station** whose **Team Members** help often gets a higher suggestion; the root cause is the defect, so F16 must show it | — |
+| T13 | The **Simulation** in the page (H31), over a **Public Workspace** on the server (H32) | Anyone plays with no sign-in, and no visitor changes the **Line** of another; no visitor data on a server; try.bluebin.app is a static image | **Line** routes cannot call Erlang-only code; a second build to keep green (`pnpm sim:test`); no holidays (R16); nothing is saved | — |
+| T14 | Peer to peer, the **Host** keeps the only copy (H33), over a relay server (H34) and synced copies (H35) | Still no server; one writer and one guard, as on bluebin.app; a **Guest** loads no SQLite | Two browsers that cannot connect directly (no TURN) cannot play together; depends on public Nostr relays; the **Simulation** ends with the page of the **Host** | — |
 
 ### Tensions being watched (unresolved by design)
 
@@ -902,6 +977,10 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **"Released together" has no record of the group** (T9). **Trigger to revisit:** a team asks which **Pieces** went out in one **Release**, for example for release notes.
 - **Help Downstream is not recorded as a Helper.** [CONTEXT.md](./CONTEXT.md) allows it, but F22 points at a **Work Station**, not at a **Piece**, so there is nothing to join yet. **Trigger to revisit:** a team asks who helps downstream, or **Starvation Time** stays high while people wait.
 - **No measure of the help.** **Helpers** add people, not time, so no core measure changes. **Trigger to revisit:** a Kaizen asks how much of a stop had a **Helper**.
+- **No TURN server** (T14). Some company networks block direct WebRTC, so a **Guest** there stays on "looking". **Trigger to revisit:** a team cannot play together on its own network.
+- **Public Nostr relays** (H33). They see only encrypted offers, but they can go down. **Trigger to revisit:** **Guests** do not find a **Host** that is in the room, or a **Simulation** must carry real data.
+- **The Simulation lives in the page of the Host.** A reload or a closed tab ends it for every **Guest**. **Trigger to revisit:** a team asks to keep a **Simulation** for more than one session, for example for a training of several days.
+- **Line Lead Time and output against Takt Time are defined, not measured** (F72, F73). **Trigger to revisit:** the next change to Measures; build §16 first.
 
 ---
 
@@ -915,7 +994,9 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **Flow actions name any Team Member.** Each flow action took the **Team Member** from the request body, so any client acted as anyone. Resolved for the actions that name one (pull, **Andon**, close an **Andon**, **Assignment**): C7 checks it (F50). Open: finish, deliver, **Rework**, repair and make urgent name no **Team Member**, so a **Team Member** can do them on another one's **Piece**; and a linked **Team Member** cannot hand an **Assignment** to someone else, nor can the owner hand one to a linked **Team Member**.
 - **Owner of the public Workspace.** [CONTEXT.md](./CONTEXT.md) said each **Workspace** has one owner **Account**, but the public **Workspace** of visitors who are not signed in had none, and everyone could change it. Resolved: the **Public Workspace** is the **Workspace** of one chosen **Account** (`akadmin`), which alone changes it; everyone else only looks. Its **Shared Lines** open with no sign-in by their look-only link (F53), like every other **Shared Line**. Superseded (2026-11-08): the **Public Workspace** is gone; the **Simulation** ([try.bluebin.app](https://try.bluebin.app)) runs the demo data in the visitor's page, with no server and no database.
 - **Who sees a Shared Line.** [CONTEXT.md](./CONTEXT.md) said every **Account** able to open its **Workspace**, so only the **Team Members** of another **Line** there. Resolved (2026-11-07): anyone with its link, signed in or not, look-only. authentik lets the look-only paths through with no sign-in; with SSO on, a request with no uid then gets no **Workspace** (`401`), so a path that climbs out of `/api/s/` opens nothing.
-- **Diagrams lag G11 and G12.** The TPS house (§1) and the House of Quality do not show G11, G12, F43–F52, F54, F55 or F61–F64, nor the new words of G4 and G5. Open: redraw both after the build.
+- **Diagrams lag G11 and G12.** The TPS house (§1) and the House of Quality did not show G11, G12, F43–F52, F54, F55 or F61–F64, nor the new words of G4 and G5. Resolved (2026-11-10): both redrawn with G11–G14; the House of Quality adds F50 and F69, and §5 is scored again.
+- **The Simulation was not in the design.** It shipped (2026-11-08) and became shared with **Guests** (2026-11-09) with no Goal, Function or Component here, while [CONTEXT.md](./CONTEXT.md) defines **Simulation**, **Host** and **Guest**. Resolved (2026-11-10): G14, F66–F71, H31–H35, C9, C10, R15–R18, T13 and T14.
+- **Line Lead Time is in the glossary, not in the measures.** [CONTEXT.md](./CONTEXT.md) (2026-11-09) defines **Line Lead Time**, counts a **Piece** by its **Deployment** for the output of the **Line**, and judges that output against the **Takt Time**. C2 `measures` has neither. Open: F72 and F73, built in the order of §16.
 - **"A user has one workspace for now".** The comment in `backend/src/bluebin/workspace.gleam` and the README's "Sign-in and Workspaces" said the **Workspace** comes only from `X-authentik-uid`. Resolved with C7 and H12: the owner's uid in the URL opens another **Workspace**.
 - **F9 and the automatic pause.** F9 also warned before a second active **Assignment**, but taking an **Assignment** pauses the current one automatically, so a second active one cannot happen. Resolved: F9 covers only the second **Piece** in a **Blue Bin**.
 
@@ -983,6 +1064,30 @@ Why this order: slice 1 is a pure rename, so the tests prove it alone before any
 | 4 | Help from the stop warning (built) | F14, C1 `DeviationDialog`, C1 `LineView`, C2 `line` | "Help <assignee> on <Piece>" first, "Go on anyway (Deviation)" second; the warning says a free **Blue Bin** does not change the stop | §8 Helpers row 5 |
 
 Why this order: slice 1 holds the rules and the data, and its tests prove them with no UI. The Simulation (try.bluebin.app) runs the same C2 code compiled to JavaScript, so slice 1 must compile on both targets. Slices 2 and 3 make the action reachable. Slice 4 changes the warning last, because its first action needs slice 1.
+
+---
+
+## 15. Build order — Simulation sharing (F66–F71)
+
+| Slice | Name | Functions and components | What ships | Done when |
+| :---: | --- | --- | --- | --- |
+| 1 | Invite and seats (built) | F67, F68, F69, F70, H33, C10 | The invite link and the Trystero room; seats with `claim`, `release` and `keepPresent`; the calls of a **Guest** answered by the **Host** as `Member`; `change` to every **Guest**; `GuestGate` | `pnpm test` passes; a second browser plays one **Team Member** |
+| 2 | End and room (built) | F68, F71, R17 | The **Work Stations** of each **Team Member** and the ones it leads, in `GuestGate`; **End for every Guest…** with an inline confirm; "In the room"; the **Host** told when a **Guest** takes its **Team Member**; one screen for "ended" and one for "gone" | Each **Guest** sees why its **Simulation** stopped |
+| 3 | No third-party call (built) | F66, R16 | `WorkingCalendarCard` hides holidays in the **Simulation**; `publicHolidays.ts` calls only `/api/holidays` | The **Simulation** calls no server |
+
+Why this order: slice 1 is the whole loop, and it changes no rule, because C7 already checks each call. Slices 2 and 3 make it clear to people and keep the promise of no server call.
+
+---
+
+## 16. Build order — Line Lead Time and output (F72, F73, not built)
+
+| Slice | Name | Functions and components | What ships | Done when |
+| :---: | --- | --- | --- | --- |
+| 1 | **Line Lead Time** | F72, C2 `measures`, C1 `MeasuresView` | **Line Lead Time** for each **Piece** and **Demand**, from the first `piece_pulled` to `piece_deployed`, counted by **Deployment**, in **Working Time** by default | `measures_test`: **Lead Time** = **Backlog** wait + **Line Lead Time** + wait to **Release**, also across a **Split** |
+| 2 | Output against **Takt Time** | F73, C2 `measures`, C1 `MeasuresView` | For each period: the **Pieces** that the **Takt Time** asks for, the **Pieces** deployed, and "on takt" or "behind takt"; more shows as spare capacity | `measures_test` on a period with two **Demands**, one of which ends in the period |
+| 3 | In the run chart and the comparison | F38, F72, F73, C1 `RunChart` | **Line Lead Time** week by week, and the verdict for Before and After | A **Line** change shows its effect on the part of **Lead Time** that the **Line** makes |
+
+Why this order: slice 1 gives the number that the **Line** owns, apart from the waits that **Heijunka** and the **Client** set. Slice 2 needs the same count by **Deployment**. Slice 3 only shows what slices 1 and 2 compute.
 
 ---
 
