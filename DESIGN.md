@@ -518,7 +518,7 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   \node[head=bbJit] at (2, 8.4) {Just-In-Time};
   \node[body=3.6] at (2, 6.9) {G2 Starting work without a \textbf{Kanban} is never silent: each \textbf{Deviation} is visible};
   \node[body=3.6] at (2, 5.2) {G3 Each \textbf{Piece} flows alone at its \textbf{Demand}'s \textbf{Takt Time}};
-  \node[ids] at (2, 3.5) {F6--F11, F55};
+  \node[ids] at (2, 3.5) {F6--F11, F55, F76};
   \draw[box=bbJidoka] (10, 3) rectangle (14, 9);
   \node[head=bbJidoka] at (12, 8.4) {Jidoka};
   \node[body=3.6] at (12, 6.6) {G4 A defect stops the flow where it is found; its author repairs it first (\textbf{Rework}), helped by the \textbf{Work Station} that found it};
@@ -538,11 +538,11 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!15] (-0.8, 1) rectangle (14.8, 2);
   \node[head=bbBase, anchor=west, align=left] at (-0.6, 1.5) {Stability and\\visual management};
   \node[body=8.5, anchor=west, align=left] at (3.2, 1.5) {G7 The \textbf{Line} is visible at a glance \quad G8 Recording work costs seconds\\G12 A \textbf{Line} shows only to the \textbf{Accounts} it is meant for};
-  \node[ids, anchor=east, align=right] at (14.6, 1.5) {F27--F33, F48--F53,\\F56, F62--F65};
+  \node[ids, anchor=east, align=right] at (14.6, 1.5) {F27--F33, F48--F53,\\F56, F62--F65, F77};
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!8] (-0.8, 0) rectangle (14.8, 1);
   \node[head=bbBase, anchor=west] at (-0.6, 0.5) {Kaizen};
   \node[body=8.5, anchor=west, align=left] at (3.2, 0.5) {G9 Flow problems show as numbers \quad G10 Design and change the \textbf{Line} without code\\G13 The wait of a \textbf{Piece} held for \textbf{Release} counts in its \textbf{Lead Time}};
-  \node[ids, anchor=east, align=right] at (14.6, 0.5) {F34--F41, F54,\\F57--F60, F72, F73};
+  \node[ids, anchor=east, align=right] at (14.6, 0.5) {F34--F41, F54, F57--F60,\\F72--F75};
   \draw[draw=bbBase!80!black, line width=0.9pt, fill=bbBase!4] (-0.8, -1) rectangle (14.8, 0);
   \node[head=bbBase, anchor=west, align=left] at (-0.6, -0.5) {Training Within\\Industry};
   \node[body=8.5, anchor=west, align=left] at (3.2, -0.5) {G14 A team practises its work off the \textbf{Line} in a \textbf{Simulation}, by the real rules, alone or as \textbf{Host} with \textbf{Guests}};
@@ -574,7 +574,7 @@ User-facing outcomes, weight 1–10, grouped by the parts of the Toyota Producti
 | G12                                              | A **Line** shows only to the **Accounts** it is meant for: a **Private Line** stays private, and only the owner changes a **Line**                                        |   6    | Session decision (2026-11-06)      |
 | **Foundation — Kaizen**                          |                                                                                                                                                                           |        |                                    |
 | G9                                               | Flow problems show as numbers: **Lead Time**, **Stagnation Time**, **Starvation Time**, **Rework Time**                                                                   |   8    | Kick-off conversation              |
-| G10                                              | A **Line** can be designed and changed without code: **Work Stations**, **Branches**, **Blue Bins**, **Team Members**, **Working Calendar**                               |   6    | Kick-off conversation              |
+| G10                                              | A **Line** can be designed and changed without code: **Work Stations**, **Branches** of any length, a **Split** inside a **Branch**, **Blue Bins**, **Team Members**, **Working Calendar** |   6    | Kick-off conversation; session decision 2026-11-11 (**Branch** length, nested **Split**) |
 | G13                                              | A **Team Member** can hold a deployed **Piece** for a later **Release**, and the wait until **Release** shows in the **Lead Time** of the **Piece** and of its **Demand** |   6    | Session decision 2026-11-08        |
 | **Foundation — Training Within Industry**        |                                                                                                                                                                           |        |                                    |
 | G14                                              | A team practises its work off the **Line** in a **Simulation**, by the rules of a real **Line**: alone, or as a **Host** with **Guests** who each play one **Team Member**; no sign-in, nothing to install, and nothing counts in a real **Line** |   5    | Session decisions 2026-11-08 (**Simulation**), 2026-11-09 (**Guests**), 2026-11-10 (Training Within Industry) |
@@ -676,21 +676,26 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | **Line Lead Time and output (not built)** | | | | |
 | F72 | Measure the **Line Lead Time** of each **Piece** and each **Demand**, from the first pull out of the **Backlog** to **Deployment**, set by the slowest **Sub-Piece** across a **Split**; count a **Piece** in the period of its **Deployment** | → | **Lead Time** = **Backlog** wait + **Line Lead Time** + wait to **Release**, exactly | G9 |
 | F73 | Judge the output of the **Line** in a period against the **Takt Time**: on takt when its deployed **Pieces** reach Σ(**Working Time** in the period ÷ **Takt Time**) over the active **Demands**, behind takt below it; show more as spare capacity, not as a better result | → | 1 verdict for each period, in Measures and in the before/after comparison (F38) | G9 |
+| **Branches and nested Splits (not built)** | | | | |
+| F74 | Let each **Branch** hold its own number of **Work Stations**, one or more, with no link to the other **Branches** | → | the software team example (Web: 1 **Work Station**, iOS: 2) saves with no error | G10 |
+| F75 | Let a **Branch** open a nested **Split**, closed by a nested **Assembly** at a later **Work Station** of the same **Branch**; each **Branch** name is unique in the **Line**, so the **Piece Reference** shows only the last **Branch** (CHK-3 · iOS) | → | 1 nested level, no more | G10 |
+| F76 | Apply the pull rules at each **Split** and each **Assembly**, nested or not: one **Kanban** to each **Branch** for each **Assembly** (F7), a warning before an **Assembly** (F8), and the upstream **Blue Bin** stays full until each **Sub-Piece** is pulled | → | **Kanbans** ≤ empty **Blue Bins**, at all times; 100 % warned | G2 |
+| F77 | Show short and nested **Branches** in the **Line** view, readable on the wall TV | → | all **Work Stations** visible at 1920×1080, with no scroll | G7 |
 
 ---
 
 ## 4. Cascade — Goals → Functions → How → Components
 
 - **G1** Client satisfaction, Takt Time visible to everyone _W:10_ — F1–F5
-- **G2** Pull, every **Deviation** visible _W:9_ — F6–F9
+- **G2** Pull, every **Deviation** visible _W:9_ — F6–F9, F76 (not built)
 - **G3** One-piece flow at **Takt Time** _W:8_ — F10–F11, F55
 - **G4** Jidoka, stop and fix _W:8_ — F12–F16, F42, F61
 - **G5** A **Team Member** knows the next thing to do _W:9_ — F17–F22
 - **G6** Levelled **Product Mix** _W:7_ — F23–F26
-- **G7** **Line** at a glance _W:8_ — F27–F29, F64, F65
+- **G7** **Line** at a glance _W:8_ — F27–F29, F64, F65, F77 (not built)
 - **G8** Recording costs seconds _W:8_ — F30–F33, F56, F62, F63
 - **G9** Flow problems as numbers _W:8_ — F34–F38, F54, F72, F73 (not built)
-- **G10** Design and change without code _W:6_ — F39–F41
+- **G10** Design and change without code _W:6_ — F39–F41, F74, F75 (not built)
 - **G11** A **Team Member** signs in and finds their own work _W:7_ — F43–F47
 - **G12** A **Line** shows only to the **Accounts** it is meant for _W:6_ — F48–F53
 - **G13** Hold a deployed **Piece** for **Release**, and count the wait in its **Lead Time** _W:6_ — F57–F60 (F56, deploy and release in 1 click, serves G8)
@@ -780,6 +785,18 @@ Core How decisions, shared by many Functions:
 - **How H34 — a relay on a Bluebin server** (rejected, see T14: try.bluebin.app is a static image, and a server would hold the visitors' **Lines**)
 - **How H35 — a copy of the Line on each Guest, kept in sync** (rejected, see T14: many writers, so the rules run in several places and the copies can differ)
 
+- **How H36 — the grid of steps, with empty cells and a parent Branch** (chosen, see T15)
+  - Serves: F74, F75, F76
+  - The steps stay the columns of the **Line**. A **Branch** can have no **Work Station** at a step: its **Sub-Piece** goes on to its next **Work Station**. The **Branches** of one **Split** are the **Branches** of a run of steps that follow each other; each has one **Work Station** or more in the run, and at most one at each step
+  - Nesting: `work_station.parent_branch` names the outer **Branch** of a nested **Branch** (iOS → Mobile). The outer **Branch** has a **Work Station** before the nested **Split** and one after it, which does the nested **Assembly**; a nested **Branch** has no `parent_branch` of its own (1 level). Each **Branch** name is unique in the **Line**
+  - Upstream of a **Work Station** = the **Work Station** at the nearest earlier step in its own **Branch**, else in its outer **Branch**, else in the trunk. Downstream, for the **Kanbans** (F76), is the same rule read the other way. `flow` no longer finds the upstream by `position` alone
+- **How H37 — a tree: each Branch is its own chain, with no steps** (rejected, see T15)
+- **How H38 — a graph: each Work Station lists its upstream Work Stations** (rejected: it allows shapes that the glossary forbids, and the checks become hard)
+- **How H39 — arrows in the grid cells, a ◆ for a Split and a ● for an Assembly** (chosen)
+  - Serves: F77, in C1 `LineView` and `DesignView`
+  - Each **Work Station** has an arrow from its upstream **Work Station**; an empty cell carries the line through. A ◆ stands where a **Branch** starts and a ● in front of the **Work Station** that does the **Assembly**. Each **Branch** name is on its first arrow, as in its **Piece Reference** (CHK-3 · iOS). In `DesignView`, an empty cell shows a + that adds a **Work Station** to that **Branch** at that step
+- **How H40 — an SVG layer that draws the arrows from the positions of the cards** (rejected: it reads the page layout after each render, and breaks when the wall TV resizes)
+
 Components that realise these How decisions:
 
 - **C1** SPA — Vite + Vue 3 + TypeScript + Tailwind v4 + DaisyUI
@@ -804,6 +821,8 @@ Changes to existing components for the comparison around a **Line** change (F38,
 Changes to existing components for the run chart (F38): C2 `measures` adds `weekly`, which gives the Line's first day (the day of its first flow event) and, reading the log once, each of the last weeks (Monday to Sunday, UTC) its Pieces released and their average **Lead Time**; C2 API adds `GET /api/measures/weeks?weeks=12` (4 to 52), read access; C1 `RunChart` draws **Lead Time** week by week with a vertical line at each **Line** change and the XmR natural limits (average ± 2.66 × the average moving range) of the full weeks before the chosen change, or of all full weeks with custom dates; it circles a signal (Wheeler rule 1: outside a limit; rule 3: 3 of 4 weeks past halfway to one) and counts the signals since the change. Poka-yoke on the periods: C1 `MeasuresView` limits each date to the days from the Line's first day to today, reads no measure while a period is out of them and says why; around a change, both periods also get shorter so that Before does not start before the Line; on a Line younger than the default periods, its days so far are split in two halves.
 
 Changes to existing components for the Team view (F65): C1 `TeamView` shows each **Team Member** with their **Assignments** and what they help, and the **Pieces** and **Rework** nobody holds; each name links to `/next?teamMember=<id>` and opens in the page, as the header tabs do. C1 `useWorkspaces` holds `ownWorkOnly` (a Member with a **Team Member** in the **Line** sees only their own work), which `NextThingView` and `TeamView` share: for that Member, the names of the other **Team Members** are not links.
+
+Changes to existing components for **Branches** of any length and nested **Splits** (F74–F77, not built): C3 gets `work_station.parent_branch` through an additive step v4 → v5 (H29, [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md)); C2 `design` `check_structure` replaces "the same **Branches** as the step before" with the rules of H36, and the save keeps the F40 checks (R19); C2 `flow` finds the upstream and the downstream **Work Station** by **Branch**, then outer **Branch**, then trunk (H36), runs the **Split** and the **Assembly** at both levels through `piece.parent_id` (a **Sub-Piece** of a **Sub-Piece**), and compares the made-by and found-by **Work Stations** of a **Rework** on the same chain; C2 `line` sends `parentBranch` with each **Work Station**; C1 `useDesign` mirrors the H36 checks; C1 `DesignView` shows one row for each **Branch**, a nested **Branch** under its outer **Branch**, and an empty cell with + (H39); C1 `LineView` draws the arrows, ◆ and ● (H39). C9 gets the rules by compiling C2, so `pnpm sim:test` covers them.
 
 Changes to existing components for Simulation sharing (F67–F71): C10 is new. C1 `main.ts` mounts `GuestGate` instead of a local **Line** for a **Guest**; `GuestGate` shows one screen for each state (looking, pick a **Team Member**, host gone, host ended, link failed), with **Look again** and **Play a Simulation alone**; `SimulationBar` adds **Invite…** (the link, "In the room", **End for every Guest…** with an inline confirm); `App.vue` tells a **Guest** that the **Line** lives in the page of the **Host**; `WorkingCalendarCard` hides holidays in the **Simulation** (R16).
 
@@ -860,6 +879,9 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | R16 | F66 no server call vs F39 a **Working Calendar** with holidays | × | The **Simulation** hides holidays; its demo **Working Calendar** has none |
 | R17 | F69 the **Host** plays each **Team Member** that no **Guest** picks vs F19 one next thing for each **Team Member** | × | When a **Guest** takes the **Team Member** that the **Host** plays, the **Host** goes back to the owner and is told so |
 | R18 | F67 anyone with the link joins vs F48 hide a **Private Line** | × | Accepted by design: a **Simulation** holds the demo data, not a real **Line**; the link is the only key, and the **Host** can end the sharing (F71) |
+| R19 | F74 / F75 change the shape of a **Branch** vs F40 change while running | ⊗ | A **Work Station** that holds a **Piece** keeps its **Branch** and its outer **Branch**; a nested **Split** is added or removed only when no **Sub-Piece** of the outer **Branch** is between its **Work Station** before the **Split** and its **Work Station** after it |
+| R20 | F75 nesting vs F39 the software team's **Line** in ≤ 30 min | × | The software team template stays flat; "Split here" shows only on a **Branch** row, never on the trunk |
+| R21 | F77 more rows and arrows vs F28 a **Line** readable on the wall TV | × | 1 nested level (F75); F77 target: 1920×1080 with no scroll |
 
 ---
 
@@ -938,6 +960,15 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | 3 | F69 / F70 answer and update | ≤ 1 s / ≤ 2 s | Time from a **Guest** click to its screen update, with 5 **Guests** | Send the changed data with `change`, so that a **Guest** does not read again |
 | 4 | F66 the rules of bluebin.app | 0 differences | `pnpm sim:test` after each backend change | Hide the action in the **Simulation** until its route runs on both targets |
 
+### Branches and nested Splits (F74–F77, not built)
+
+| Rank | Function | Target | Watched on | If we miss it |
+| :--: | --- | --- | --- | --- |
+| 1 | F76 the pull rules at both levels | **Kanbans** ≤ empty **Blue Bins**, at all times; 100 % warned before an **Assembly** | `flow_test`: a nested **Split** and its **Assembly**, one **Kanban** to each **Branch**, an **Assembly** with a **Sub-Piece** missing | Refuse a nested **Split** on save; F74 (**Branches** of any length) still works |
+| 2 | R19 change while running | 0 **Pieces** lost, 0 **Kanbans** lost | `design_test`: move a **Work Station** that holds a **Piece**; add a nested **Split** while a **Sub-Piece** is inside | Refuse each change of **Branch** shape while a **Piece** is anywhere in the **Split** |
+| 3 | F77 the wall TV | all **Work Stations** visible at 1920×1080, with no scroll | `LineView` in the **Simulation**, with a nested **Line**, at 1920×1080 | Collapse a nested **Branch** into its outer **Branch** row, with a count of its **Sub-Pieces** |
+| 4 | The v4 → v5 step | 0 data lost | `db_test` on a copy of a real workspace | [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md) refuses the step, and the **Line** stays on v4 |
+
 ## 9. Tradeoffs — Got / Paid / ADR
 
 | ID  | Tradeoff                                                                                                       | Got                                                                                                         | Paid                                                                                      | ADR                                                              |
@@ -957,6 +988,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | T12 | `helping` pauses count in F55 like `rework` (R14), over `held` (dropped) and a separate measure | The suggestion sees all the capacity lost to defects, on every **Work Station** the defect pulls people from | A **Work Station** whose **Team Members** help often gets a higher suggestion; the root cause is the defect, so F16 must show it | — |
 | T13 | The **Simulation** in the page (H31), over a **Public Workspace** on the server (H32) | A team practises with no sign-in and no risk to a real **Line**, and no visitor changes the **Line** of another; no visitor data on a server; try.bluebin.app is a static image | **Line** routes cannot call Erlang-only code; a second build to keep green (`pnpm sim:test`); no holidays (R16); nothing is saved | — |
 | T14 | Peer to peer, the **Host** keeps the only copy (H33), over a relay server (H34) and synced copies (H35) | Still no server; one writer and one guard, as on bluebin.app; a **Guest** loads no SQLite | Two browsers that cannot connect directly (no TURN) cannot play together; depends on public Nostr relays; the **Simulation** ends with the page of the **Host** | — |
+| T15 | The grid of steps with empty cells and a parent **Branch** (H36), over a tree with no steps (H37) and a graph (H38) | An additive migration; `DesignView` and `LineView` keep their grid; the columns read as stages on the wall TV | A short **Branch** shows empty cells; the steps keep a name that [CONTEXT.md](./CONTEXT.md) avoids for a **Work Station**, and a column can group **Work Stations** that share no stage | — |
 
 ### Tensions being watched (unresolved by design)
 
@@ -978,6 +1010,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **Public Nostr relays** (H33). They see only encrypted offers, but they can go down. **Trigger to revisit:** **Guests** do not find a **Host** that is in the room, or a **Simulation** must carry real data.
 - **The Simulation lives in the page of the Host.** A reload or a closed tab ends it for every **Guest**. **Trigger to revisit:** a team asks to keep a **Simulation** for more than one session, for example for a training of several days.
 - **Line Lead Time and output against Takt Time are defined, not measured** (F72, F73). **Trigger to revisit:** the next change to Measures; build §16 first.
+- **Named steps in the code, avoided in the glossary** (T15). [CONTEXT.md](./CONTEXT.md) says to avoid "step" and "column", but the **Line** keeps named steps (`line_step`) as its columns. **Trigger to revisit:** a team reads a column as a stage that does not exist, or the empty cells of short **Branches** outnumber the **Work Stations**; then H37.
 
 ---
 
@@ -995,6 +1028,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **The Simulation was not in the design.** It shipped (2026-11-08) and became shared with **Guests** (2026-11-09) with no Goal, Function or Component here, while [CONTEXT.md](./CONTEXT.md) defines **Simulation**, **Host** and **Guest**. Resolved (2026-11-10): G14, F66–F71, H31–H35, C9, C10, R15–R18, T13 and T14.
 - **The Simulation read as a demo.** The first draft of G14 put the **Simulation** outside the TPS house, as a way for anyone to try Bluebin. Resolved (2026-11-10): it is off-the-line practice (Training Within Industry), so G14 sits in the foundation next to **Standardized Work**, and [CONTEXT.md](./CONTEXT.md) says so; showing Bluebin to a visitor is a side effect.
 - **Line Lead Time is in the glossary, not in the measures.** [CONTEXT.md](./CONTEXT.md) (2026-11-09) defines **Line Lead Time**, counts a **Piece** by its **Deployment** for the output of the **Line**, and judges that output against the **Takt Time**. C2 `measures` has neither. Open: F72 and F73, built in the order of §16.
+- **Steps in the code, not in the glossary.** [CONTEXT.md](./CONTEXT.md) lists "step" and "column" as words to avoid for a **Work Station**, but `line_step` gives each column a name, and `LineView` and `DesignView` show it. Left open (2026-11-11): H36 keeps the steps as columns, see T15 and the tension on named steps.
 - **"A user has one workspace for now".** The comment in `backend/src/bluebin/workspace.gleam` and the README's "Sign-in and Workspaces" said the **Workspace** comes only from `X-authentik-uid`. Resolved with C7 and H12: the owner's uid in the URL opens another **Workspace**.
 - **F9 and the automatic pause.** F9 also warned before a second active **Assignment**, but taking an **Assignment** pauses the current one automatically, so a second active one cannot happen. Resolved: F9 covers only the second **Piece** in a **Blue Bin**.
 
@@ -1086,6 +1120,18 @@ Why this order: slice 1 is the whole loop, and it changes no rule, because C7 al
 | 3 | In the run chart and the comparison | F38, F72, F73, C1 `RunChart` | **Line Lead Time** week by week, and the verdict for Before and After | A **Line** change shows its effect on the part of **Lead Time** that the **Line** makes |
 
 Why this order: slice 1 gives the number that the **Line** owns, apart from the waits that **Heijunka** and the **Client** set. Slice 2 needs the same count by **Deployment**. Slice 3 only shows what slices 1 and 2 compute.
+
+---
+
+## 17. Build order — Branches and nested Splits (F74–F77, not built)
+
+| Slice | Name | Functions and components | What ships | Done when |
+| :---: | --- | --- | --- | --- |
+| 1 | **Branches** of any length | F74, F76, C2 `design` and `flow`, C1 `useDesign` and `DesignView` | A **Branch** can skip a step; the upstream is found by **Branch**, not by `position` alone (H36) | `design_test`: the software team example (Web: 1 **Work Station**, iOS: 2) saves; `flow_test`: the **Assembly** pulls the Web **Sub-Piece** from its only **Work Station** |
+| 2 | Arrows | F77, C1 `LineView` and `DesignView` | Arrows, ◆ and ●, the **Branch** name on its first arrow, + in an empty cell (H39) | The **Line** of slice 1 reads at 1920×1080 with no scroll |
+| 3 | Nested **Split** | F75, F76, C3 v4 → v5, C2 `design`, `flow` and `line`, C1 | `parent_branch`, the nested **Split** and its **Assembly**, R19 on save | Budget rows 1, 2 and 4 pass; `pnpm sim:test` passes |
+
+Why this order: slice 1 removes the pain of equal lengths with no migration. Slice 2 makes short **Branches** readable before nesting adds rows. Slice 3 carries the migration and the most risk, and its fallback is to stop after slice 2.
 
 ---
 

@@ -35,11 +35,11 @@ The matter that a Work Station transforms, and that follows the Kanbans through 
 _Avoid_: card, ticket, task, item
 
 **Sub-Piece**:
-A part of a Piece, created by a Split, that must rejoin the other parts before the Piece is complete, for example the iOS part of a User Story.
+A part of a Piece, or of a Sub-Piece, created by a Split, that must rejoin the other parts before the Piece is complete, for example the iOS part of a User Story.
 _Avoid_: subtask, child ticket
 
 **Piece Reference**:
-The short name of a Piece: its Demand Code and its number in its Demand, for example CHK-3, and for a Sub-Piece its Branch too, for example CHK-3 · iOS.
+The short name of a Piece: its Demand Code and its number in its Demand, for example CHK-3, and for a Sub-Piece its last Branch too, for example CHK-3 · iOS.
 _Avoid_: id, ticket number, key, US-3
 
 **Split**:
@@ -47,12 +47,12 @@ The point where a Piece divides into Sub-Pieces that flow in parallel, one per B
 _Avoid_: fork
 
 **Branch**:
-A chain of one or more Work Stations between a Split and its Assembly, that transforms one Sub-Piece.
+A chain of one or more Work Stations between a Split and its Assembly, that transforms one Sub-Piece. It can hold a nested Split.
 _Avoid_: lane, track, path
 
 **Assembly**:
 The explicit action by which the Work Station after the Branches pulls all Sub-Pieces of one Piece together, to make the Piece complete again.
-_Avoid_: restructure, merge, join
+_Avoid_: restructure, merge, join, sub-assembly
 
 **Kanban**:
 A signal that authorizes one Work Station to make one more Piece, sent when a downstream Work Station pulls a Piece out of a Blue Bin.
@@ -257,6 +257,9 @@ _Avoid_: hidden Line, secret Line
 - A manual reorder moves the next **Piece** of one **Demand** to the top of the **Backlog**, behind the **Pieces** already moved there; **Pieces** further back in the same **Demand** keep their order
 - A **Split** opens one **Branch** per **Sub-Piece**; each **Branch** ends at the same **Assembly**
 - A **Branch** can hold several **Work Stations**, for example iOS then QA iOS
+- Each **Branch** has its own number of **Work Stations**: the **Branches** of one **Split** do not need the same length
+- A **Branch** can open a nested **Split**; an **Assembly** at a later **Work Station** of the same **Branch** closes it. A nested **Branch** does not open another **Split**
+- Each **Branch** name is unique in the **Line**, so a **Sub-Piece** shows only its last **Branch**: CHK-3 · iOS, not CHK-3 · Mobile · iOS
 - A **Piece** is complete only when all its **Sub-Pieces** pass the **Assembly**
 - An **Assembly** is possible only when every **Sub-Piece** of the **Piece** is in the last **Blue Bin** of its **Branch**, and needs a **Kanban** of the **Work Station** after the **Branches**
 - One **Assembly** sends one **Kanban** to the last **Work Station** of each **Branch**
@@ -374,6 +377,7 @@ _Avoid_: hidden Line, secret Line
 - **Heijunka** order — resolved: computed as the **Heijunka Sequence**, released only on a **Kanban** (pull, not a timed pitch), with manual reorder allowed.
 - "Heijunka sequencer" — the part of the app that computes the **Heijunka Sequence**; a design name, not a domain term.
 - "branch" — resolved: **Branch** is the chain of **Work Stations** between a **Split** and an **Assembly**; "fork" is avoided.
+- "sub-assembly" — resolved (2026-11-11): the **Assembly** that closes a nested **Split** is an **Assembly**, the same action at a lower level. No new term.
 - **Assembly** — resolved: an explicit action, not a **Work Station**; it has no **Team Members** and no **Blue Bins**.
 - "swarm" — resolved: renamed **Help Downstream**, clearer for the team.
 - Helping a **Rework** vs **Help Downstream** — resolved: two terms. **Help Downstream** starts from a missing **Kanban** and goes downstream; **Help the Rework** starts from an open **Rework** and goes to the **Piece** where the defect was found. It is open to the **Team Members** of the two **Work Stations** concerned (the one that found the defect and the one that made it), not to the whole **Line**: a wider call is an **Andon**.
