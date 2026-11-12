@@ -33,6 +33,7 @@ const {
   addTeamMember,
   removeTeamMember,
   addStepAfter,
+  canRemoveStep,
   removeStep,
   canMove,
   moveStep,
@@ -171,6 +172,16 @@ function arrivalClass(key: string) {
 }
 
 const showProblems = ref(false)
+
+function confirmRemoveStep(index: number) {
+  const count = draft.value?.steps[index]?.stations.length ?? 0
+  if (
+    count === 0 ||
+    confirm(`Remove ${stepName(index)} and its ${count} Work Station${count === 1 ? "" : "s"}?`)
+  ) {
+    removeStep(index)
+  }
+}
 
 function confirmDiscard() {
   if (confirm("Discard all the changes that are not saved?")) {
@@ -347,10 +358,15 @@ function confirmDiscard() {
                       {{ splitLabel(step, index) }}
                     </button>
                     <button
-                      v-if="step.stations.length === 0"
                       type="button"
                       class="btn btn-ghost btn-sm ml-auto"
-                      @click="removeStep(index)"
+                      :disabled="!canRemoveStep(index)"
+                      :title="
+                        canRemoveStep(index)
+                          ? undefined
+                          : 'You cannot remove a step with a Work Station that has work in it'
+                      "
+                      @click="confirmRemoveStep(index)"
                     >
                       Remove step
                     </button>

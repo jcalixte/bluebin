@@ -443,10 +443,14 @@ export function useDesign() {
     return key
   }
 
+  /** A step with a locked Work Station keeps its place on the Line. */
+  function canRemoveStep(index: number) {
+    const step = steps()[index]
+    return !!step && !step.stations.some((station) => station.locked)
+  }
+
   function removeStep(index: number) {
-    if (steps()[index]?.stations.length === 0) {
-      steps().splice(index, 1)
-    }
+    if (canRemoveStep(index)) steps().splice(index, 1)
   }
 
   function canMove(index: number, delta: -1 | 1) {
@@ -559,6 +563,7 @@ export function useDesign() {
     addTeamMember,
     removeTeamMember,
     addStepAfter,
+    canRemoveStep,
     removeStep,
     canMove,
     moveStep,
