@@ -27,12 +27,14 @@ pub type TeamMember {
   TeamMember(id: String, name: String)
 }
 
-/// `id` is None for a Work Station the designer adds.
+/// `id` is None for a Work Station the designer adds. `parent_branch` names
+/// the outer Branch of a Work Station of a nested Branch.
 pub type Station {
   Station(
     id: Option(String),
     name: String,
     branch: Option(String),
+    parent_branch: Option(String),
     blue_bins: Int,
     team_leader: String,
     team_members: List(String),
@@ -151,7 +153,8 @@ fn load_stations(
                           where a.closed_at is null and a.station_id = w.id),
             (select count(*) from piece p
               where p.station_id = w.id and p.state = 'in_bin'),
-            (select count(*) from kanban k where k.station_id = w.id)
+            (select count(*) from kanban k where k.station_id = w.id),
+            w.parent_branch
        from work_station w
       order by w.position, w.rowid",
     [],
@@ -165,12 +168,14 @@ fn load_stations(
       use locked <- decode.field(6, sqlight.decode_bool())
       use in_bins <- decode.field(7, decode.int)
       use kanbans <- decode.field(8, decode.int)
+      use parent_branch <- decode.field(9, decode.optional(decode.string))
       decode.success(#(
         position,
         Station(
           id: Some(id),
           name:,
           branch:,
+          parent_branch:,
           blue_bins:,
           team_leader:,
           team_members: list.filter_map(members, fn(member) {
@@ -211,42 +216,138 @@ pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
       "The last step must be one Work Station without a Branch: it assembles the Branches.",
     ),
   )
+  let placed =
+    list.index_map(steps, fn(step, index) {
+      list.map(step.stations, fn(station) {
+        #(
+          index + 1,
+          option.unwrap(clean(station.branch), ""),
+          clean(station.parent_branch),
+        )
+      })
+    })
+    |> list.flatten
   let runs =
     list.index_map(shapes, fn(shape, index) { #(index + 1, shape) })
     |> list.chunk(fn(entry) { entry.1 == None })
     |> list.filter_map(fn(run) {
       case run {
-        [#(_, Some(_)), ..] ->
+        [#(_, Some(_)), ..] -> {
+          let positions = list.map(run, fn(entry) { entry.0 })
           Ok(#(
-            list.map(run, fn(entry) { entry.0 }),
-            list.flat_map(run, fn(entry) {
-              option.unwrap(entry.1, set.new()) |> set.to_list
-            })
-              |> list.unique,
+            positions,
+            list.filter(placed, fn(entry) { list.contains(positions, entry.0) }),
           ))
+        }
         _ -> Error(Nil)
       }
     })
-  use _ <- result.try(
-    list.try_each(runs, fn(run) {
-      let #(positions, branches) = run
-      case branches {
-        [_, _, ..] -> Ok(Nil)
-        _ ->
-          Error(
-            steps_label(positions)
-            <> " open one Branch only. A Split needs two Branches or more; remove the Branch name to keep one Work Station.",
-          )
-      }
-    }),
-  )
-  let named = list.flat_map(runs, fn(run) { run.1 })
+  use _ <- result.try(list.try_each(runs, check_split))
+  let named =
+    list.flat_map(runs, fn(run) {
+      list.map(run.1, fn(entry) { entry.1 }) |> list.unique
+    })
   case named == list.unique(named) {
     True -> Ok(Nil)
     False ->
       Error(
         "Two Splits have a Branch with the same name. Each Branch name is unique in the Line.",
       )
+  }
+}
+
+/// One Split: two Branches or more, and at most one nested Split in each
+/// Branch, between a Work Station of that Branch before it and one after it,
+/// which does the nested Assembly. A nested Branch does not split again.
+fn check_split(
+  run: #(List(Int), List(#(Int, String, Option(String)))),
+) -> Result(Nil, String) {
+  let #(positions, entries) = run
+  let branches = list.map(entries, fn(entry) { entry.1 }) |> list.unique
+  let parent_of = fn(branch) {
+    list.filter_map(entries, fn(entry) {
+      case entry.1 == branch {
+        True -> Ok(entry.2)
+        False -> Error(Nil)
+      }
+    })
+    |> list.unique
+  }
+  let outer = list.filter(branches, fn(branch) { parent_of(branch) == [None] })
+  use _ <- result.try(case outer {
+    [_, _, ..] -> Ok(Nil)
+    _ ->
+      Error(
+        steps_label(positions)
+        <> " open one Branch only. A Split needs two Branches or more; remove the Branch name to keep one Work Station.",
+      )
+  })
+  list.try_each(branches, fn(branch) {
+    case parent_of(branch) {
+      [None] -> check_nested(entries, branch)
+      [Some(parent)] ->
+        case list.contains(outer, parent) {
+          True -> Ok(Nil)
+          False ->
+            Error(
+              "The Branch \""
+              <> branch
+              <> "\" opens inside \""
+              <> parent
+              <> "\", which is not a Branch of its Split. A nested Branch does not split again.",
+            )
+        }
+      _ ->
+        Error(
+          "The Work Stations of the Branch \""
+          <> branch
+          <> "\" must all be inside the same outer Branch.",
+        )
+    }
+  })
+}
+
+fn check_nested(
+  entries: List(#(Int, String, Option(String))),
+  outer: String,
+) -> Result(Nil, String) {
+  let nested = list.filter(entries, fn(entry) { entry.2 == Some(outer) })
+  let own =
+    list.filter_map(entries, fn(entry) {
+      case entry.1 == outer {
+        True -> Ok(entry.0)
+        False -> Error(Nil)
+      }
+    })
+  let at = list.map(nested, fn(entry) { entry.0 })
+  case list.reduce(at, int.min), list.reduce(at, int.max) {
+    Ok(first), Ok(last) -> {
+      use _ <- result.try(
+        case list.map(nested, fn(entry) { entry.1 }) |> list.unique {
+          [_, _, ..] -> Ok(Nil)
+          _ ->
+            Error(
+              "\""
+              <> outer
+              <> "\" splits into one Branch only. A nested Split needs two Branches or more.",
+            )
+        },
+      )
+      case
+        list.any(own, fn(position) { position < first }),
+        list.any(own, fn(position) { position > last }),
+        list.any(own, fn(position) { position >= first && position <= last })
+      {
+        True, True, False -> Ok(Nil)
+        _, _, _ ->
+          Error(
+            "\""
+            <> outer
+            <> "\" needs one Work Station before its nested Split and one after it, which assembles its nested Branches, and none in between.",
+          )
+      }
+    }
+    _, _ -> Ok(Nil)
   }
 }
 
@@ -509,7 +610,13 @@ fn check_station(
                 <> " Pieces in its Blue Bins. Only an empty Blue Bin can go.",
               )
           })
-          case held.locked && clean(station.branch) != clean(before.branch) {
+          case
+            held.locked
+            && {
+              clean(station.branch) != clean(before.branch)
+              || clean(station.parent_branch) != clean(before.parent_branch)
+            }
+          {
             True ->
               Error(
                 label
@@ -631,7 +738,8 @@ fn save_inside(
       "select exists (select 1 from piece p
                        where p.state = 'in_bin'
                          and exists (select 1 from piece s
-                                      where s.parent_id = p.id))",
+                                      where s.parent_id = p.id
+                                        and s.state != 'assembled'))",
       [],
       decode.at([0], sqlight.decode_bool()),
     )
@@ -824,8 +932,8 @@ fn add_station(
     query(
       connection,
       "insert into work_station
-         (id, name, position, branch, blue_bins, team_leader)
-       values ('ws-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5)
+         (id, name, position, branch, blue_bins, team_leader, parent_branch)
+       values ('ws-' || lower(hex(randomblob(6))), ?1, ?2, ?3, ?4, ?5, ?6)
        returning id",
       [
         sqlight.text(string.trim(station.name)),
@@ -833,6 +941,7 @@ fn add_station(
         sqlight.nullable(sqlight.text, clean(station.branch)),
         sqlight.int(station.blue_bins),
         sqlight.text(station.team_leader),
+        sqlight.nullable(sqlight.text, clean(station.parent_branch)),
       ],
       decode.at([0], decode.string),
     )
@@ -858,6 +967,7 @@ fn change_station(
       ..wanted,
       name: string.trim(wanted.name),
       branch: clean(wanted.branch),
+      parent_branch: clean(wanted.parent_branch),
     )
   let same_team_members =
     list.sort(wanted.team_members, string.compare)
@@ -865,6 +975,7 @@ fn change_station(
   let same =
     wanted.name == before.name
     && wanted.branch == clean(before.branch)
+    && wanted.parent_branch == clean(before.parent_branch)
     && wanted.blue_bins == before.blue_bins
     && wanted.team_leader == before.team_leader
     && same_team_members
@@ -876,7 +987,7 @@ fn change_station(
       connection,
       "update work_station
         set name = ?2, position = ?3, branch = ?4, blue_bins = ?5,
-            team_leader = ?6
+            team_leader = ?6, parent_branch = ?7
       where id = ?1",
       [
         sqlight.text(id),
@@ -885,6 +996,7 @@ fn change_station(
         sqlight.nullable(sqlight.text, wanted.branch),
         sqlight.int(wanted.blue_bins),
         sqlight.text(wanted.team_leader),
+        sqlight.nullable(sqlight.text, wanted.parent_branch),
       ],
     ),
   )
@@ -1255,6 +1367,7 @@ fn station_payload(
     #("name", json.string(string.trim(station.name))),
     #("position", json.int(position)),
     #("branch", json.nullable(clean(station.branch), json.string)),
+    #("parentBranch", json.nullable(clean(station.parent_branch), json.string)),
     #("blueBins", json.int(station.blue_bins)),
     #("teamLeader", json.string(station.team_leader)),
     #("teamMembers", json.array(station.team_members, json.string)),
@@ -1332,6 +1445,7 @@ fn wire_station(
     id: option.unwrap(station.id, ""),
     name: station.name,
     branch: station.branch,
+    parent_branch: station.parent_branch,
     blue_bins: station.blue_bins,
     team_leader: station.team_leader,
     team_members: station.team_members,
@@ -1373,6 +1487,7 @@ pub fn from_input(input: wire.DesignInput) -> Design {
             id: station.id,
             name: station.name,
             branch: station.branch,
+            parent_branch: station.parent_branch,
             blue_bins: station.blue_bins,
             team_leader: station.team_leader,
             team_members: station.team_members,

@@ -5,9 +5,13 @@ import type { DesignTeamMember } from "../types"
 
 const station = defineModel<DraftStation>({ required: true })
 
-const props = defineProps<{ teamMembers: DesignTeamMember[]; taktHours: number }>()
+const props = defineProps<{
+  teamMembers: DesignTeamMember[]
+  taktHours: number
+  canSplitBranch?: boolean
+}>()
 
-defineEmits<{ remove: [] }>()
+defineEmits<{ remove: []; splitBranch: [] }>()
 
 const members = computed(() =>
   props.teamMembers.filter((teamMember) => station.value.teamMembers.includes(teamMember.id)),
@@ -99,6 +103,18 @@ function useSuggestion() {
           :title="station.locked ? 'A Work Station with work in it keeps its Branch' : undefined"
         />
       </label>
+      <p v-if="station.parentBranch" class="-mt-2 text-xs opacity-70">
+        A nested Branch inside {{ station.parentBranch }}
+      </p>
+      <button
+        v-else-if="canSplitBranch"
+        type="button"
+        class="btn btn-ghost btn-xs -mt-2 self-start"
+        title="Two nested Branches open after this Work Station, and a new Work Station of this Branch assembles them."
+        @click="$emit('splitBranch')"
+      >
+        Split this Branch after it
+      </button>
 
       <label class="flex flex-col gap-1 text-sm">
         <span class="font-medium">Blue Bins</span>

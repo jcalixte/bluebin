@@ -273,6 +273,8 @@ pub type DesignStation {
     id: String,
     name: String,
     branch: Option(String),
+    /// The outer Branch of a nested Branch.
+    parent_branch: Option(String),
     blue_bins: Int,
     team_leader: String,
     team_members: List(String),
@@ -394,6 +396,8 @@ pub type WorkStation {
     name: String,
     position: Int,
     branch: Option(String),
+    /// The outer Branch of a nested Branch.
+    parent_branch: Option(String),
     blue_bin_count: Int,
     team_leader: Option(String),
     blue_bins: List(BlueBin),
@@ -613,6 +617,8 @@ pub type DesignStationInput {
     id: Option(String),
     name: String,
     branch: Option(String),
+    /// Absent from an SPA older than nested Splits.
+    parent_branch: Option(String),
     blue_bins: Int,
     team_leader: String,
     team_members: List(String),

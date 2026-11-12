@@ -42,14 +42,16 @@ pub fn load(
   connection: sqlight.Connection,
 ) -> Result(List(Node), sqlight.Error) {
   sqlight.query(
-    "select id, position, branch from work_station order by position, branch",
+    "select id, position, branch, parent_branch from work_station
+      order by position, branch",
     on: connection,
     with: [],
     expecting: {
       use id <- decode.field(0, decode.string)
       use position <- decode.field(1, decode.int)
       use branch <- decode.field(2, decode.optional(decode.string))
-      decode.success(Node(id:, position:, branch:, parent: None))
+      use parent <- decode.field(3, decode.optional(decode.string))
+      decode.success(Node(id:, position:, branch:, parent:))
     },
   )
 }

@@ -691,8 +691,13 @@ fn measured(context: Context, intervals: List(Interval)) -> #(Int, Int) {
   #(calendar_total(intervals), working_total(context.calendar, intervals))
 }
 
+/// The Piece and every Sub-Piece under it, nested ones too.
+fn units(children: Dict(String, List(String)), piece: String) -> List(String) {
+  [piece, ..list.flat_map(lookup(children, piece), units(children, _))]
+}
+
 fn touches(context: Context, piece: String) -> List(Interval) {
-  [piece, ..lookup(context.children, piece)]
+  units(context.children, piece)
   |> list.flat_map(fn(unit) {
     list.append(
       lookup(context.passes_by_unit, unit)

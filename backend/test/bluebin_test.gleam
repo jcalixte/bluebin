@@ -335,6 +335,7 @@ pub fn the_assembly_pulls_each_branch_from_its_own_last_work_station_test() {
         id: None,
         name: "Store iOS",
         branch: Some("iOS"),
+        parent_branch: None,
         blue_bins: 1,
         team_leader: "pe-alice",
         team_members: ["pe-alice"],
@@ -368,6 +369,113 @@ pub fn the_assembly_pulls_each_branch_from_its_own_last_work_station_test() {
   assert assembled.piece == "OFF-4"
   assert list.sort(assembled.kanbans_sent_to, string.compare)
     == list.sort(["ws-qa-android", "ws-qa-web", store_id], string.compare)
+  assert kanbans_over_empty_blue_bins(connection) == 0
+}
+
+fn new_station(
+  name: String,
+  branch: option.Option(String),
+  parent: option.Option(String),
+) -> design.Station {
+  design.Station(
+    id: None,
+    name:,
+    branch:,
+    parent_branch: parent,
+    blue_bins: 1,
+    team_leader: "pe-ines",
+    team_members: ["pe-ines"],
+  )
+}
+
+fn station_named(connection: sqlight.Connection, name: String) -> String {
+  let assert Ok([id]) =
+    sqlight.query(
+      "select id from work_station where name = ?1",
+      on: connection,
+      with: [sqlight.text(name)],
+      expecting: decode.at([0], decode.string),
+    )
+  id
+}
+
+pub fn a_piece_flows_through_a_nested_split_test() {
+  use connection <- with_seeded_database()
+  // After UAT: Doc, and App that splits into Phone and Tablet until App QA.
+  let assert Ok(#(before, _)) = design.load(connection)
+  let added = [
+    design.Step(name: "Make", stations: [
+      new_station("Doc", Some("Doc"), None),
+      new_station("App", Some("App"), None),
+    ]),
+    design.Step(name: "Devices", stations: [
+      new_station("Phone", Some("Phone"), Some("App")),
+      new_station("Tablet", Some("Tablet"), Some("App")),
+    ]),
+    design.Step(name: "App QA", stations: [
+      new_station("App QA", Some("App"), None),
+    ]),
+    design.Step(name: "Release", stations: [new_station("Release", None, None)]),
+  ]
+  let assert Ok(_) =
+    design.save(
+      connection,
+      design.Design(..before, steps: list.append(before.steps, added)),
+    )
+  let doc = station_named(connection, "Doc")
+  let app = station_named(connection, "App")
+  let phone = station_named(connection, "Phone")
+  let tablet = station_named(connection, "Tablet")
+  let app_qa = station_named(connection, "App QA")
+  let release = station_named(connection, "Release")
+
+  let assert Ok(_) =
+    flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
+  let assert Ok(_) = flow.pull(connection, "ws-uat", None, None)
+  let assert Ok(_) = flow.finish(connection, "ws-uat", "p-offline-4", None)
+
+  let assert Ok(at_doc) = flow.pull(connection, doc, None, None)
+  assert at_doc.piece == "OFF-4 · Doc"
+  let assert Ok(at_app) = flow.pull(connection, app, None, None)
+  assert at_app.kanbans_sent_to == ["ws-uat"]
+  let assert Ok(_) = flow.finish(connection, app, "p-offline-4-app", None)
+
+  let assert Ok(at_phone) = flow.pull(connection, phone, None, None)
+  assert at_phone.piece == "OFF-4 · Phone"
+  assert at_phone.kanbans_sent_to == []
+  let assert Ok(at_tablet) = flow.pull(connection, tablet, None, None)
+  assert at_tablet.kanbans_sent_to == [app]
+  assert state_of(connection, "p-offline-4-app") == "split"
+  assert flow.pull(connection, app_qa, None, None)
+    == Error(flow.NothingToAssemble)
+
+  let assert Ok(_) =
+    flow.finish(connection, phone, "p-offline-4-app-phone", None)
+  let assert Ok(_) =
+    flow.finish(connection, tablet, "p-offline-4-app-tablet", None)
+  let assert Ok(nested) = flow.pull(connection, app_qa, None, None)
+  assert nested.piece == "OFF-4 · App"
+  assert list.sort(nested.kanbans_sent_to, string.compare)
+    == list.sort([phone, tablet], string.compare)
+
+  // A defect found at App QA, made on the Phone Branch inside it.
+  let assert Ok(_) =
+    flow.raise_rework(
+      connection,
+      app_qa,
+      "p-offline-4-app",
+      phone,
+      "Phone layout breaks",
+    )
+  assert flow.raise_rework(connection, app_qa, "p-offline-4-app", doc, "Docs")
+    == Error(flow.NotUpstream)
+
+  let assert Ok(_) = flow.finish(connection, app_qa, "p-offline-4-app", None)
+  let assert Ok(_) = flow.finish(connection, doc, "p-offline-4-doc", None)
+  let assert Ok(whole) = flow.pull(connection, release, None, None)
+  assert whole.piece == "OFF-4"
+  assert list.sort(whole.kanbans_sent_to, string.compare)
+    == list.sort([app_qa, doc], string.compare)
   assert kanbans_over_empty_blue_bins(connection) == 0
 }
 
@@ -1514,9 +1622,26 @@ pub fn a_database_of_another_schema_version_is_refused_test() {
     == 0
 }
 
+pub fn a_version_4_database_gets_the_parent_branch_column_test() {
+  use connection <- with_seeded_database()
+  let stations = count(connection, "select count(*) from work_station")
+  exec(
+    connection,
+    "alter table work_station drop column parent_branch;
+     pragma user_version = 4;",
+  )
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
+  assert count(connection, "pragma user_version") == 5
+  assert count(
+      connection,
+      "select count(*) from work_station where parent_branch is null",
+    )
+    == stations
+}
+
 pub fn a_new_database_gets_the_schema_once_test() {
   use connection <- with_seeded_database()
-  assert count(connection, "pragma user_version") == 4
+  assert count(connection, "pragma user_version") == 5
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from line_label") == 1
   assert count(connection, "select count(*) from working_calendar") == 1
@@ -1651,11 +1776,12 @@ pub fn a_version_2_database_migrates_to_the_latest_version_test() {
     "drop table helper;
      alter table demand drop column code;
      alter table piece drop column number;
+     alter table work_station drop column parent_branch;
      pragma user_version = 2;",
   )
 
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
-  assert count(connection, "pragma user_version") == 4
+  assert count(connection, "pragma user_version") == 5
   assert count(connection, "select count(*) from piece") == pieces
   assert count(connection, "select count(*) from flow_event") == events
   assert count(connection, "select count(*) from sqlite_master
@@ -1686,11 +1812,12 @@ pub fn a_version_3_database_gets_demand_codes_test() {
              'delivered');
      alter table demand drop column code;
      alter table piece drop column number;
+     alter table work_station drop column parent_branch;
      pragma user_version = 3;",
   )
 
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
-  assert count(connection, "pragma user_version") == 4
+  assert count(connection, "pragma user_version") == 5
   let code_of = fn(id) {
     let assert Ok([code]) =
       sqlight.query(

@@ -181,6 +181,10 @@ export function laneRows(
         if (child !== null) order.push(child)
       }
     }
+    // A nested Branch whose outer Branch is gone keeps a row at the bottom.
+    for (const node of inRun) {
+      if (node.branch !== null && !order.includes(node.branch)) order.push(node.branch)
+    }
     for (const position of run) lanes.set(position, order)
     run = []
   }

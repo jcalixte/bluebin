@@ -268,6 +268,7 @@ pub fn design_station(value: wire.DesignStation) -> json.Json {
     #("id", json.string(value.id)),
     #("name", json.string(value.name)),
     #("branch", json.nullable(value.branch, json.string)),
+    #("parentBranch", json.nullable(value.parent_branch, json.string)),
     #("blueBins", json.int(value.blue_bins)),
     #("teamLeader", json.string(value.team_leader)),
     #("teamMembers", json.array(value.team_members, json.string)),
@@ -392,6 +393,7 @@ pub fn work_station(value: wire.WorkStation) -> json.Json {
     #("name", json.string(value.name)),
     #("position", json.int(value.position)),
     #("branch", json.nullable(value.branch, json.string)),
+    #("parentBranch", json.nullable(value.parent_branch, json.string)),
     #("blueBinCount", json.int(value.blue_bin_count)),
     #("teamLeader", json.nullable(value.team_leader, json.string)),
     #("blueBins", json.array(value.blue_bins, blue_bin)),
@@ -691,6 +693,11 @@ pub fn design_station_input_decoder() -> decode.Decoder(wire.DesignStationInput)
     None,
     decode.optional(decode.string),
   )
+  use parent_branch <- decode.optional_field(
+    "parentBranch",
+    None,
+    decode.optional(decode.string),
+  )
   use blue_bins <- decode.field("blueBins", decode.int)
   use team_leader <- decode.field("teamLeader", decode.string)
   use team_members <- decode.field("teamMembers", decode.list(decode.string))
@@ -698,6 +705,7 @@ pub fn design_station_input_decoder() -> decode.Decoder(wire.DesignStationInput)
     id:,
     name:,
     branch:,
+    parent_branch:,
     blue_bins:,
     team_leader:,
     team_members:,

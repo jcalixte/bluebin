@@ -16,7 +16,7 @@ pub const workspaces_directory = "data/workspaces"
 /// The schema of a new database. Raise `schema_version` when it changes, and
 /// add a step to `migrations` when the change only adds; a database whose
 /// version has no step is refused (ADR-0006).
-const schema_version = 4
+const schema_version = 5
 
 /// Parents before children. `foreign_keys` holds only on the connection that
 /// runs this schema and the seed, and only outside a transaction: `ready`
@@ -49,6 +49,7 @@ create table work_station (
   position    integer not null,
   branch      text,
   blue_bins   integer not null,
+  parent_branch text,
   team_leader text references team_member(id)
 );
 
@@ -202,6 +203,7 @@ update piece
  where parent_id is not null;
 ",
   ),
+  #(4, "alter table work_station add column parent_branch text;\n"),
 ]
 
 const seed_passes_sql =

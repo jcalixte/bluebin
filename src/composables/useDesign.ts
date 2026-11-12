@@ -82,6 +82,7 @@ function toPayload(design: DesignShape): DesignInput {
         id: station.id,
         name: station.name.trim(),
         branch: station.branch === null ? null : station.branch.trim(),
+        parentBranch: station.parentBranch === null ? null : station.parentBranch.trim(),
         blueBins: Number(station.blueBins),
         teamLeader: station.teamLeader,
         teamMembers: [...station.teamMembers].sort(),
@@ -104,6 +105,7 @@ function newStation(name: string, branch: string | null): DraftStation {
     id: null,
     name,
     branch,
+    parentBranch: null,
     blueBins: 1,
     teamLeader: "",
     teamMembers: [],
@@ -138,7 +140,7 @@ export function draftNodes(steps: DraftStep[]): ShapeNode[] {
       id: station.key,
       position: index + 1,
       branch: station.branch === null ? null : station.branch.trim(),
-      parentBranch: null,
+      parentBranch: station.parentBranch?.trim() || null,
     })),
   )
 }
@@ -233,8 +235,49 @@ export function designProblems(draft: DesignDraft): string[] {
     const branches = [...new Set(run.flatMap((index) => branchSet(steps[index])))]
     const label =
       run.length === 1 ? `Step ${run[0] + 1}` : `Steps ${run[0] + 1} to ${run[run.length - 1] + 1}`
-    if (branches.length < 2) {
+    const nodes = draftNodes(steps).filter((node) => run.includes(node.position - 1))
+    const parentsOf = (branch: string) => [
+      ...new Set(nodes.filter((node) => node.branch === branch).map((node) => node.parentBranch)),
+    ]
+    const outer = branches.filter((branch) => {
+      const parents = parentsOf(branch)
+      return parents.length === 1 && parents[0] === null
+    })
+    if (outer.length < 2) {
       problems.push(`${label} open one Branch only. Add a Branch, or remove the Branch name.`)
+    }
+    for (const branch of branches) {
+      const parents = parentsOf(branch)
+      if (parents.length > 1) {
+        problems.push(
+          `The Work Stations of the Branch "${branch}" must all be inside one outer Branch.`,
+        )
+      } else if (parents[0] && !outer.includes(parents[0])) {
+        problems.push(
+          `The Branch "${branch}" opens inside "${parents[0]}", which is not a Branch of its Split. A nested Branch does not split again.`,
+        )
+      }
+    }
+    for (const parent of outer) {
+      const nested = nodes.filter((node) => node.parentBranch === parent)
+      if (nested.length === 0) continue
+      if (new Set(nested.map((node) => node.branch)).size < 2) {
+        problems.push(
+          `"${parent}" splits into one Branch only. A nested Split needs two Branches or more.`,
+        )
+      }
+      const first = Math.min(...nested.map((node) => node.position))
+      const last = Math.max(...nested.map((node) => node.position))
+      const own = nodes.filter((node) => node.branch === parent).map((node) => node.position)
+      if (
+        !own.some((at) => at < first) ||
+        !own.some((at) => at > last) ||
+        own.some((at) => at >= first && at <= last)
+      ) {
+        problems.push(
+          `"${parent}" needs one Work Station before its nested Split and one after it, which assembles its nested Branches.`,
+        )
+      }
     }
     named.push(...branches.filter((branch) => branch !== ""))
   }
@@ -388,7 +431,14 @@ export function useDesign() {
   function addStationAt(stepIndex: number, branch: string) {
     const step = steps()[stepIndex]
     if (!step || step.stations.some((station) => station.branch === null)) return null
-    return addStation(step, branch)
+    const parent =
+      steps()
+        .flatMap((one) => one.stations)
+        .find((one) => one.branch?.trim() === branch)?.parentBranch ?? null
+    const key = addStation(step, branch)
+    const added = step.stations.find((one) => one.key === key)
+    if (added) added.parentBranch = parent
+    return key
   }
 
   function removeStep(index: number) {
@@ -439,6 +489,42 @@ export function useDesign() {
     return keys[0]
   }
 
+  /** An outer Branch opens one nested Split at most. */
+  function canSplitBranch(station: DraftStation) {
+    const outer = station.branch?.trim()
+    if (!outer || station.parentBranch !== null) return false
+    return !steps().some((step) => step.stations.some((one) => one.parentBranch?.trim() === outer))
+  }
+
+  /**
+   * A nested Split after this Work Station of an outer Branch: a new step with
+   * two nested Branches, then a new step where the outer Branch assembles them.
+   * The other Branches skip both steps.
+   */
+  function splitBranch(stepIndex: number, stationIndex: number) {
+    const list = steps()
+    const station = list[stepIndex]?.stations[stationIndex]
+    if (!station || !canSplitBranch(station)) return null
+    const outer = station.branch?.trim() ?? ""
+    const step = (): DraftStep => ({
+      key: newKey(),
+      name: freshName(
+        "New step",
+        steps().map((one) => one.name),
+      ),
+      stations: [],
+    })
+    const nested = step()
+    list.splice(stepIndex + 1, 0, nested)
+    const assembly = step()
+    list.splice(stepIndex + 2, 0, assembly)
+    const first = addStation(nested, freshBranch(allBranches(list)))
+    addStation(nested, freshBranch(allBranches(list)))
+    for (const one of nested.stations) one.parentBranch = outer
+    addStation(assembly, outer)
+    return first
+  }
+
   function removeStation(stepIndex: number, stationIndex: number) {
     const step = steps()[stepIndex]
     const station = step?.stations[stationIndex]
@@ -477,5 +563,7 @@ export function useDesign() {
     splitStep,
     removeStation,
     addStationAt,
+    canSplitBranch,
+    splitBranch,
   }
 }

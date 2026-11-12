@@ -121,7 +121,7 @@ pub fn pull(
     shape.FromBacklog | shape.Straight(_) ->
       take_whole(connection, station, source)
     shape.AtSplit(_, branches) ->
-      split_off(connection, station, source, list.length(branches))
+      split_off(connection, station, source, branches)
     shape.Assembly(_) -> assemble(connection, station, source)
   })
   use holder <- result.try(take_in_hand(
@@ -1303,7 +1303,7 @@ fn split_off(
   connection: sqlight.Connection,
   station: Station,
   source: Source,
-  branches: Int,
+  branches: List(String),
 ) -> Result(#(#(String, String), List(String)), FlowError) {
   let branch = option.unwrap(station.branch, "")
   use sub_piece <- result.try(one(
@@ -1328,9 +1328,15 @@ fn split_off(
         set state = 'split', station_id = null,
             since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1
-        and (select count(*) from piece s where s.parent_id = ?1) >= ?2
+        and (select count(*) from piece s
+              where s.parent_id = ?1
+                and s.branch in (select value from json_each(?2)))
+         >= json_array_length(?2)
       returning id",
-    [sqlight.text(source.id), sqlight.int(branches)],
+    [
+      sqlight.text(source.id),
+      sqlight.text(json.to_string(json.array(branches, json.string))),
+    ],
     decode.at([0], decode.string),
   ))
   use sent <- result.try(case left {
@@ -1359,7 +1365,9 @@ fn assemble(
 ) -> Result(#(#(String, String), List(String)), FlowError) {
   use branch_ends <- result.try(rows(
     connection,
-    "select station_id from piece where parent_id = ?1 order by branch",
+    "select station_id from piece
+      where parent_id = ?1 and state != 'assembled'
+      order by branch",
     [sqlight.text(source.id)],
     decode.at([0], decode.string),
   ))
@@ -1370,7 +1378,7 @@ fn assemble(
       "update piece
         set state = 'assembled', station_id = null, assignee = null,
             since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
-      where parent_id = ?1",
+      where parent_id = ?1 and state != 'assembled'",
       [sqlight.text(source.id)],
     ),
   )
@@ -1524,7 +1532,7 @@ fn next_complete_piece(
      where p.state = 'split'
        and not exists (
          select 1 from piece s
-         where s.parent_id = p.id
+         where s.parent_id = p.id and s.state != 'assembled'
            and not (s.state = 'in_bin'
                     and s.station_id in (select value from json_each(?1))))
      order by (select max(s.since) from piece s where s.parent_id = p.id),

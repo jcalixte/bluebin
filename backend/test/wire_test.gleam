@@ -361,6 +361,7 @@ pub fn generated_decoders_decode_request_bodies_test() {
               id: None,
               name: "Web",
               branch: None,
+              parent_branch: None,
               blue_bins: 2,
               team_leader: "pe-ada",
               team_members: ["pe-ada"],

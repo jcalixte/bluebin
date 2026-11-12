@@ -15,6 +15,7 @@ pub type Station {
     name: String,
     position: Int,
     branch: Option(String),
+    parent_branch: Option(String),
     blue_bins: Int,
     team_leader: Option(String),
   )
@@ -171,6 +172,7 @@ fn wire_station(station: Station, rows: Rows) -> wire.WorkStation {
     name: station.name,
     position: station.position,
     branch: station.branch,
+    parent_branch: station.parent_branch,
     blue_bin_count: station.blue_bins,
     team_leader: station.team_leader,
     blue_bins: bin_rows(1, station.blue_bins, in_bins),
@@ -259,18 +261,21 @@ fn query_stations(
     use branch <- decode.field(3, decode.optional(decode.string))
     use blue_bins <- decode.field(4, decode.int)
     use team_leader <- decode.field(5, decode.optional(decode.string))
+    use parent_branch <- decode.field(6, decode.optional(decode.string))
     decode.success(Station(
       id:,
       name:,
       position:,
       branch:,
+      parent_branch:,
       blue_bins:,
       team_leader:,
     ))
   }
   sqlight.query(
     "select w.id, w.name, w.position, w.branch, w.blue_bins,
-            (select p.name from team_member p where p.id = w.team_leader)
+            (select p.name from team_member p where p.id = w.team_leader),
+            w.parent_branch
      from work_station w
      order by w.position, w.branch",
     on: connection,
@@ -293,7 +298,7 @@ fn query_parked(
   sqlight.query(
     "select p.station_id, p.id, p.reference, d.label,
             (select group_concat(s.branch, ', ') from piece s
-             where s.parent_id = p.id)
+             where s.parent_id = p.id and s.state != 'assembled')
      from piece p
      join demand d on d.id = p.demand_id
      where p.state = 'in_bin' and p.station_id is not null

@@ -85,6 +85,7 @@ fn release_step() -> Step {
       id: None,
       name: "Release",
       branch: None,
+      parent_branch: None,
       blue_bins: 2,
       team_leader: "pe-ines",
       team_members: ["pe-ines"],
@@ -98,6 +99,7 @@ fn trunk(name: String) -> Step {
       id: None,
       name:,
       branch: None,
+      parent_branch: None,
       blue_bins: 1,
       team_leader: "pe-ines",
       team_members: ["pe-ines"],
@@ -113,6 +115,7 @@ fn split(name: String, branches: List(String)) -> Step {
         id: None,
         name: name <> " " <> branch,
         branch: Some(branch),
+        parent_branch: None,
         blue_bins: 1,
         team_leader: "pe-ines",
         team_members: ["pe-ines"],
@@ -201,6 +204,89 @@ pub fn a_branch_name_is_unique_in_the_line_test() {
       trunk("B"),
     ])
   assert string.contains(reason, "unique in the Line")
+}
+
+fn nested(name: String, branches: List(#(String, String))) -> Step {
+  Step(
+    name:,
+    stations: list.map(branches, fn(entry) {
+      Station(
+        id: None,
+        name: name <> " " <> entry.0,
+        branch: Some(entry.0),
+        parent_branch: Some(entry.1),
+        blue_bins: 1,
+        team_leader: "pe-ines",
+        team_members: ["pe-ines"],
+      )
+    }),
+  )
+}
+
+fn with_branch(step: Step, branch: String) -> Step {
+  Step(
+    ..step,
+    stations: list.append(step.stations, [
+      Station(
+        id: None,
+        name: step.name <> " " <> branch,
+        branch: Some(branch),
+        parent_branch: None,
+        blue_bins: 1,
+        team_leader: "pe-ines",
+        team_members: ["pe-ines"],
+      ),
+    ]),
+  )
+}
+
+pub fn a_branch_can_open_a_nested_split_test() {
+  // Mobile splits into iOS and Android, and QA Mobile assembles them (F75).
+  assert design.check_structure([
+      trunk("Spec"),
+      split("Build", ["Web", "Mobile"]),
+      nested("Apps", [#("iOS", "Mobile"), #("Android", "Mobile")]),
+      split("QA", ["Web", "Mobile"]),
+      trunk("UAT"),
+    ])
+    == Ok(Nil)
+}
+
+pub fn a_nested_split_needs_its_outer_branch_after_it_test() {
+  let assert Error(reason) =
+    design.check_structure([
+      trunk("Spec"),
+      split("Build", ["Web", "Mobile"]),
+      nested("Apps", [#("iOS", "Mobile"), #("Android", "Mobile")]),
+      trunk("UAT"),
+    ])
+  assert string.contains(reason, "one after it")
+}
+
+pub fn a_nested_split_needs_two_branches_test() {
+  let assert Error(reason) =
+    design.check_structure([
+      trunk("Spec"),
+      split("Build", ["Web", "Mobile"]),
+      nested("Apps", [#("iOS", "Mobile")]) |> with_branch("Web"),
+      split("QA", ["Web", "Mobile"]),
+      trunk("UAT"),
+    ])
+  assert string.contains(reason, "one Branch only")
+}
+
+pub fn a_nested_branch_does_not_split_again_test() {
+  let assert Error(reason) =
+    design.check_structure([
+      trunk("Spec"),
+      split("Build", ["Web", "Mobile"]),
+      nested("Apps", [#("iOS", "Mobile"), #("Android", "Mobile")]),
+      nested("Stores", [#("App Store", "iOS"), #("TestFlight", "iOS")]),
+      nested("Apps 2", [#("iOS", "Mobile"), #("Android", "Mobile")]),
+      split("QA", ["Web", "Mobile"]),
+      trunk("UAT"),
+    ])
+  assert string.contains(reason, "does not split again")
 }
 
 pub fn an_empty_line_is_refused_test() {

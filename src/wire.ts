@@ -237,6 +237,8 @@ export type DesignStation = {
   id: string
   name: string
   branch: string | null
+  /** The outer Branch of a nested Branch. */
+  parentBranch: string | null
   blueBins: number
   teamLeader: string
   teamMembers: string[]
@@ -351,6 +353,8 @@ export type WorkStation = {
   name: string
   position: number
   branch: string | null
+  /** The outer Branch of a nested Branch. */
+  parentBranch: string | null
   blueBinCount: number
   teamLeader: string | null
   blueBins: BlueBin[]
@@ -591,6 +595,8 @@ export type DesignStationInput = {
   id?: string | null
   name: string
   branch?: string | null
+  /** Absent from an SPA older than nested Splits. */
+  parentBranch?: string | null
   blueBins: number
   teamLeader: string
   teamMembers: string[]

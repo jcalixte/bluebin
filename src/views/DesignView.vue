@@ -40,6 +40,8 @@ const {
   splitStep,
   removeStation,
   addStationAt,
+  canSplitBranch,
+  splitBranch,
 } = useDesign()
 
 const { calendar, calendarError, saveCalendar } = useWorkingCalendar()
@@ -97,13 +99,31 @@ function stationRow(step: DraftStep, index: number, station: DraftStation) {
   return first === station && at >= 0 ? 3 + at : 3 + grid.value.rows
 }
 
-/** The lanes of a Split that have no Work Station at this step: an empty cell with a +. */
+/**
+ * The lanes of a Split that have no Work Station at this step: an empty cell
+ * with a +. An outer Branch gets no + inside its nested Split, and a nested
+ * Branch none outside it.
+ */
 function emptyLanes(step: DraftStep, index: number) {
-  return (grid.value.lanes[index] ?? []).flatMap((lane, at) =>
-    lane !== null && !step.stations.some((one) => laneOf(one) === lane)
-      ? [{ lane, row: 3 + at }]
-      : [],
-  )
+  const nodes = draftNodes(draft.value?.steps ?? [])
+  const span = (keep: (node: (typeof nodes)[number]) => boolean) => {
+    const at = nodes.filter(keep).map((node) => node.position - 1)
+    return at.length === 0 ? null : { first: Math.min(...at), last: Math.max(...at) }
+  }
+  return (grid.value.lanes[index] ?? []).flatMap((lane, at) => {
+    if (lane === null || step.stations.some((one) => laneOf(one) === lane)) return []
+    const nested = span((node) => node.parentBranch === lane)
+    if (nested && index >= nested.first && index <= nested.last) return []
+    const parent = nodes.find((node) => node.branch === lane)?.parentBranch ?? null
+    if (parent !== null) {
+      const own = nodes.filter((node) => node.branch === parent).map((node) => node.position - 1)
+      const kids = span((node) => node.parentBranch === parent)
+      const before = Math.max(-1, ...own.filter((one) => kids === null || one < kids.first))
+      const after = Math.min(Infinity, ...own.filter((one) => kids === null || one > kids.last))
+      if (index <= before || index >= after) return []
+    }
+    return [{ lane, row: 3 + at }]
+  })
 }
 
 const lockedMove = "A Work Station with work in it cannot move past another one"
@@ -347,7 +367,9 @@ function confirmDiscard() {
                     :data-column="index"
                     :team-members="draft.teamMembers"
                     :takt-hours="draft.taktTimeHours"
+                    :can-split-branch="canSplitBranch(station)"
                     @remove="removeStation(index, stationIndex)"
+                    @split-branch="showArrival(splitBranch(index, stationIndex))"
                   />
 
                   <button
