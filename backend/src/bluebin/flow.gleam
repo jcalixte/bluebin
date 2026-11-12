@@ -1,6 +1,7 @@
 import bluebin/db
 import bluebin/demand
 import bluebin/heijunka
+import bluebin/shape
 import bluebin/wire
 import gleam/bool
 import gleam/dynamic/decode
@@ -90,9 +91,7 @@ pub fn pull(
       holds_an_open_rework(connection, team_member, station.id)
   })
   use <- bool.guard(repairing, Error(ReworkFirst))
-  use kind <- result.try(pull_kind(connection, station))
-
-  use source <- result.try(next_source(connection, station, kind))
+  use source <- result.try(next_source(connection, station))
 
   use kanban <- result.try(oldest_kanban(connection, station.id))
   use open_rework <- result.try(raised_an_open_rework(connection, station.id))
@@ -118,10 +117,12 @@ pub fn pull(
   ))
   use _ <- result.try(spend_kanban(connection, kanban, station.id))
 
-  use #(pulled, sent) <- result.try(case kind {
-    FromBacklog | Straight -> take_whole(connection, station, source)
-    AtSplit -> split_off(connection, station, source)
-    Assembly -> assemble(connection, station, source)
+  use #(pulled, sent) <- result.try(case station.inflow {
+    shape.FromBacklog | shape.Straight(_) ->
+      take_whole(connection, station, source)
+    shape.AtSplit(_, branches) ->
+      split_off(connection, station, source, list.length(branches))
+    shape.Assembly(_) -> assemble(connection, station, source)
   })
   use holder <- result.try(take_in_hand(
     connection,
@@ -140,8 +141,8 @@ pub fn pull(
 
   use _ <- result.try(record_event(
     connection,
-    case kind {
-      Assembly -> "piece_assembled"
+    case station.inflow {
+      shape.Assembly(_) -> "piece_assembled"
       _ -> "piece_pulled"
     },
     Some(pulled.0),
@@ -502,7 +503,10 @@ pub fn raise_rework(
 
   use found_by <- result.try(load_station(connection, station_id))
   use made_by <- result.try(load_station(connection, made_by_id))
-  use <- bool.guard(!upstream_of(made_by, found_by), Error(NotUpstream))
+  use <- bool.guard(
+    !shape.is_upstream(found_by.nodes, made_by.id, found_by.id),
+    Error(NotUpstream),
+  )
   use piece <- result.try(load_piece_at(
     connection,
     piece_id,
@@ -1148,8 +1152,7 @@ pub fn can_pull(
   use open_rework <- result.try(raised_an_open_rework(connection, station.id))
   use stopped <- result.try(stopped_by_andon(connection, station.id))
   use <- bool.guard(kanban == None || open_rework || stopped, Ok(False))
-  use kind <- result.try(pull_kind(connection, station))
-  case next_source(connection, station, kind) {
+  case next_source(connection, station) {
     Ok(_) -> Ok(True)
     Error(NothingToPull) | Error(NothingToAssemble) -> Ok(False)
     Error(failure) -> Error(failure)
@@ -1235,14 +1238,6 @@ fn stopped_by_andon(
   )
 }
 
-fn upstream_of(made_by: Station, found_by: Station) -> Bool {
-  made_by.position < found_by.position
-  && case made_by.branch, found_by.branch {
-    Some(one), Some(other) -> one == other
-    _, _ -> True
-  }
-}
-
 fn author_of(
   connection: sqlight.Connection,
   piece_id: String,
@@ -1261,7 +1256,13 @@ fn author_of(
       where pp.station_id = ?2
         and (pp.piece_id = ?1
              or pp.piece_id in (select s.id from piece s
-                                 where s.parent_id = ?1))
+                                 where s.parent_id = ?1
+                                    or s.parent_id in (select c.id from piece c
+                                                        where c.parent_id = ?1))
+             or pp.piece_id in (select o.parent_id from piece o where o.id = ?1)
+             or pp.piece_id in (select g.parent_id from piece g
+                                 where g.id = (select o.parent_id from piece o
+                                                where o.id = ?1)))
       order by pp.at desc
       limit 1",
     [sqlight.text(piece_id), sqlight.text(station_id)],
@@ -1269,45 +1270,15 @@ fn author_of(
   )
 }
 
-type Kind {
-  FromBacklog
-  Straight
-  AtSplit
-  Assembly
-}
-
-fn pull_kind(
-  connection: sqlight.Connection,
-  station: Station,
-) -> Result(Kind, FlowError) {
-  case station.upstream {
-    None -> Ok(FromBacklog)
-    Some(upstream) -> {
-      use branches <- result.try(rows(
-        connection,
-        "select branch from work_station where position = ?1",
-        [sqlight.int(upstream)],
-        decode.at([0], decode.optional(decode.string)),
-      ))
-      case station.branch, list.any(branches, option.is_some) {
-        Some(_), False -> Ok(AtSplit)
-        None, True -> Ok(Assembly)
-        _, _ -> Ok(Straight)
-      }
-    }
-  }
-}
-
 fn next_source(
   connection: sqlight.Connection,
   station: Station,
-  kind: Kind,
 ) -> Result(Source, FlowError) {
-  case kind {
-    FromBacklog -> next_backlog_piece(connection)
-    Straight -> next_upstream_piece(connection, station)
-    AtSplit -> next_unsplit_piece(connection, station)
-    Assembly -> next_complete_piece(connection, station)
+  case station.inflow {
+    shape.FromBacklog -> next_backlog_piece(connection)
+    shape.Straight(from) -> next_upstream_piece(connection, from)
+    shape.AtSplit(from, _) -> next_unsplit_piece(connection, station, from)
+    shape.Assembly(ends) -> next_complete_piece(connection, ends)
   }
 }
 
@@ -1332,16 +1303,19 @@ fn split_off(
   connection: sqlight.Connection,
   station: Station,
   source: Source,
+  branches: Int,
 ) -> Result(#(#(String, String), List(String)), FlowError) {
   let branch = option.unwrap(station.branch, "")
   use sub_piece <- result.try(one(
     connection,
     "insert into piece (id, demand_id, reference, number, state, station_id,
                         since, parent_id, branch)
-     select id || '-' || lower(replace(?2, ' ', '-')), demand_id,
-            reference || ' · ' || ?2, number, 'in_flow', ?3,
-            strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), id, ?2
-     from piece where id = ?1
+     select p.id || '-' || lower(replace(?2, ' ', '-')), p.demand_id,
+            coalesce((select r.reference from piece r where r.id = p.parent_id),
+                     p.reference) || ' · ' || ?2,
+            p.number, 'in_flow', ?3,
+            strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), p.id, ?2
+     from piece p where p.id = ?1
      returning id, reference",
     [sqlight.text(source.id), sqlight.text(branch), sqlight.text(station.id)],
     id_and_reference(),
@@ -1354,11 +1328,9 @@ fn split_off(
         set state = 'split', station_id = null,
             since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1
-        and (select count(*) from piece s where s.parent_id = ?1)
-         >= (select count(distinct branch) from work_station
-             where position = ?2)
+        and (select count(*) from piece s where s.parent_id = ?1) >= ?2
       returning id",
-    [sqlight.text(source.id), sqlight.int(station.position)],
+    [sqlight.text(source.id), sqlight.int(branches)],
     decode.at([0], decode.string),
   ))
   use sent <- result.try(case left {
@@ -1430,14 +1402,13 @@ fn send_kanbans(
   |> result.map(option.values)
 }
 
-/// `upstream` is the position just before this Work Station's: None at the
-/// first one, which pulls from the Backlog.
+/// `nodes` is the whole Line, to follow its routes.
 type Station {
   Station(
     id: String,
-    position: Int,
     branch: Option(String),
-    upstream: Option(Int),
+    inflow: shape.Inflow,
+    nodes: List(shape.Node),
   )
 }
 
@@ -1460,23 +1431,17 @@ fn load_station(
   connection: sqlight.Connection,
   station_id: String,
 ) -> Result(Station, FlowError) {
-  let decoder = {
-    use id <- decode.field(0, decode.string)
-    use position <- decode.field(1, decode.int)
-    use branch <- decode.field(2, decode.optional(decode.string))
-    use upstream <- decode.field(3, decode.optional(decode.int))
-    decode.success(Station(id:, position:, branch:, upstream:))
-  }
-  one(
-    connection,
-    "select w.id, w.position, w.branch,
-            (select max(u.position) from work_station u
-              where u.position < w.position)
-       from work_station w where w.id = ?1",
-    [sqlight.text(station_id)],
-    decoder,
-    or: UnknownStation,
+  use nodes <- result.try(
+    shape.load(connection) |> result.replace_error(StoreFailed),
   )
+  use node <- result.try(
+    list.find(nodes, fn(node) { node.id == station_id })
+    |> result.replace_error(UnknownStation),
+  )
+  use inflow <- result.try(
+    shape.inflow(nodes, node) |> result.replace_error(StoreFailed),
+  )
+  Ok(Station(id: node.id, branch: node.branch, inflow:, nodes:))
 }
 
 fn last_position(connection: sqlight.Connection) -> Result(Int, FlowError) {
@@ -1507,23 +1472,17 @@ fn next_backlog_piece(
 
 fn next_upstream_piece(
   connection: sqlight.Connection,
-  station: Station,
+  from: String,
 ) -> Result(Source, FlowError) {
   find_source(
     connection,
     "select p.id, p.reference, d.label, p.station_id
      from piece p
      join demand d on d.id = p.demand_id
-     join work_station w on w.id = p.station_id
-     where p.state = 'in_bin'
-       and w.position = ?1
-       and w.branch is ?2
+     where p.state = 'in_bin' and p.station_id = ?1
      order by p.since, p.rowid
      limit 1",
-    [
-      sqlight.nullable(sqlight.int, station.upstream),
-      sqlight.nullable(sqlight.text, station.branch),
-    ],
+    [sqlight.text(from)],
     NothingToPull,
   )
 }
@@ -1531,21 +1490,20 @@ fn next_upstream_piece(
 fn next_unsplit_piece(
   connection: sqlight.Connection,
   station: Station,
+  from: String,
 ) -> Result(Source, FlowError) {
   find_source(
     connection,
     "select p.id, p.reference, d.label, p.station_id
      from piece p
      join demand d on d.id = p.demand_id
-     join work_station w on w.id = p.station_id
-     where p.state = 'in_bin'
-       and w.position = ?1
+     where p.state = 'in_bin' and p.station_id = ?1
        and not exists (select 1 from piece s
                        where s.parent_id = p.id and s.branch = ?2)
      order by p.since, p.rowid
      limit 1",
     [
-      sqlight.nullable(sqlight.int, station.upstream),
+      sqlight.text(from),
       sqlight.nullable(sqlight.text, station.branch),
     ],
     NothingToPull,
@@ -1556,7 +1514,7 @@ fn next_unsplit_piece(
 /// the longest comes first.
 fn next_complete_piece(
   connection: sqlight.Connection,
-  station: Station,
+  ends: List(String),
 ) -> Result(Source, FlowError) {
   find_source(
     connection,
@@ -1566,13 +1524,13 @@ fn next_complete_piece(
      where p.state = 'split'
        and not exists (
          select 1 from piece s
-         left join work_station w on w.id = s.station_id
          where s.parent_id = p.id
-           and not (s.state = 'in_bin' and w.position = ?1))
+           and not (s.state = 'in_bin'
+                    and s.station_id in (select value from json_each(?1))))
      order by (select max(s.since) from piece s where s.parent_id = p.id),
               p.rowid
      limit 1",
-    [sqlight.nullable(sqlight.int, station.upstream)],
+    [sqlight.text(json.to_string(json.array(ends, json.string)))],
     NothingToAssemble,
   )
 }

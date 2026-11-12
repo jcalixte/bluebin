@@ -3,6 +3,7 @@ import bluebin/assignment
 import bluebin/calendar
 import bluebin/db
 import bluebin/demand.{type Demand, Demand}
+import bluebin/design
 import bluebin/flow
 import bluebin/heijunka
 import bluebin/line
@@ -321,6 +322,53 @@ pub fn the_assembly_joins_the_sub_pieces_and_sends_each_branch_a_kanban_test() {
        where kind = 'piece_assembled' and piece_id = 'p-offline-4'",
     )
     == 1
+}
+
+pub fn the_assembly_pulls_each_branch_from_its_own_last_work_station_test() {
+  use connection <- with_seeded_database()
+  // A third Work Station on the iOS Branch only, before UAT (F74).
+  let assert Ok(#(before, _)) = design.load(connection)
+  let assert [analysis, conception, build, qa, uat] = before.steps
+  let store =
+    design.Step(name: "Store", stations: [
+      design.Station(
+        id: None,
+        name: "Store iOS",
+        branch: Some("iOS"),
+        blue_bins: 1,
+        team_leader: "pe-alice",
+        team_members: ["pe-alice"],
+      ),
+    ])
+  let assert Ok(after) =
+    design.save(
+      connection,
+      design.Design(..before, steps: [
+        analysis,
+        conception,
+        build,
+        qa,
+        store,
+        uat,
+      ]),
+    )
+  let assert [_, _, _, _, design.Step(stations: [store_ios], ..), _] =
+    after.steps
+  let assert Some(store_id) = store_ios.id
+
+  let assert Ok(_) =
+    flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
+  assert flow.pull(connection, "ws-uat", None, None)
+    == Error(flow.NothingToAssemble)
+  let assert Ok(moved) = flow.pull(connection, store_id, None, None)
+  assert moved.piece == "OFF-4 · iOS"
+  let assert Ok(_) = flow.finish(connection, store_id, "p-offline-4-ios", None)
+
+  let assert Ok(assembled) = flow.pull(connection, "ws-uat", None, None)
+  assert assembled.piece == "OFF-4"
+  assert list.sort(assembled.kanbans_sent_to, string.compare)
+    == list.sort(["ws-qa-android", "ws-qa-web", store_id], string.compare)
+  assert kanbans_over_empty_blue_bins(connection) == 0
 }
 
 pub fn finishing_a_piece_puts_it_in_a_blue_bin_test() {

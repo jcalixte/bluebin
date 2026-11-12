@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { nextTick, ref } from "vue"
+import { computed, nextTick, ref } from "vue"
 import AddStepSlot from "../components/AddStepSlot.vue"
+import FlowConnectors from "../components/FlowConnectors.vue"
 import DesignTeamMembersCard from "../components/DesignTeamMembersCard.vue"
 import DesignStationCard from "../components/DesignStationCard.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
-import { isBranchStep, maxNameLength, useDesign, type DraftStep } from "../composables/useDesign"
+import {
+  draftLanes,
+  draftNodes,
+  isBranchStep,
+  maxNameLength,
+  useDesign,
+  type DraftStation,
+  type DraftStep,
+} from "../composables/useDesign"
+import { flowLinks } from "../shape"
 import { useAccount } from "../composables/useAccount"
 import { useWorkingCalendar } from "../composables/useWorkingCalendar"
 import type { Labels } from "../types"
@@ -29,6 +39,7 @@ const {
   canSplit,
   splitStep,
   removeStation,
+  addStationAt,
 } = useDesign()
 
 const { calendar, calendarError, saveCalendar } = useWorkingCalendar()
@@ -55,9 +66,44 @@ function role(index: number) {
   return null
 }
 
-function splitLabel(step: DraftStep) {
-  if (step.stations.length === 0) return "Add a Work Station"
-  return isBranchStep(step) ? "Add a Branch" : "Split into Branches"
+function splitLabel(step: DraftStep, index: number) {
+  if (isBranchStep(step) || inSplit(index)) return "Add a Branch"
+  return step.stations.length === 0 ? "Add a Work Station" : "Split into Branches"
+}
+
+const lineEl = ref<HTMLElement | null>(null)
+
+const grid = computed(() => draftLanes(draft.value?.steps ?? []))
+
+const links = computed(() => flowLinks(draftNodes(draft.value?.steps ?? [])))
+
+/** Rows of a step column: name, actions, one per lane, extra, footer. */
+const rowCount = computed(() => grid.value.rows + 4)
+
+function inSplit(index: number) {
+  return (grid.value.lanes[index] ?? []).some((lane) => lane !== null)
+}
+
+function laneOf(station: DraftStation) {
+  return station.branch === null ? null : station.branch.trim()
+}
+
+/** The grid row of a Work Station; a second one with the same Branch goes to the extra row. */
+function stationRow(step: DraftStep, index: number, station: DraftStation) {
+  const lanes = grid.value.lanes[index] ?? []
+  const lane = laneOf(station)
+  const first = step.stations.find((one) => laneOf(one) === lane)
+  const at = lanes.indexOf(lane)
+  return first === station && at >= 0 ? 3 + at : 3 + grid.value.rows
+}
+
+/** The lanes of a Split that have no Work Station at this step: an empty cell with a +. */
+function emptyLanes(step: DraftStep, index: number) {
+  return (grid.value.lanes[index] ?? []).flatMap((lane, at) =>
+    lane !== null && !step.stations.some((one) => laneOf(one) === lane)
+      ? [{ lane, row: 3 + at }]
+      : [],
+  )
 }
 
 const lockedMove = "A Work Station with work in it cannot move past another one"
@@ -156,7 +202,10 @@ function confirmDiscard() {
         </div>
 
         <div class="relative overflow-x-auto p-2 pb-4">
-          <div class="flex flex-col items-center lg:min-w-max lg:flex-row lg:items-start">
+          <div
+            ref="lineEl"
+            class="relative flex flex-col items-center lg:min-w-max lg:flex-row lg:items-start"
+          >
             <div
               class="flex h-10 shrink-0 items-center rounded-box border border-dashed border-base-content/30 px-4 text-xs font-semibold uppercase tracking-wide opacity-70"
             >
@@ -166,14 +215,17 @@ function confirmDiscard() {
             <TransitionGroup
               tag="ol"
               move-class="transition-transform duration-300 ease-out motion-reduce:transition-none"
-              class="flex w-full flex-col items-center lg:w-auto lg:flex-row lg:items-start"
+              class="flex w-full flex-col items-center lg:grid lg:w-auto lg:auto-cols-max lg:grid-flow-col lg:items-start lg:gap-y-3"
+              :style="{ gridTemplateRows: `repeat(${rowCount}, auto)` }"
             >
               <li
                 v-for="(step, index) in draft.steps"
                 :key="step.key"
-                class="flex w-full flex-col items-center lg:w-auto lg:flex-row lg:items-start"
+                class="flex w-full flex-col items-center lg:grid lg:w-auto lg:grid-cols-[auto_auto] lg:grid-rows-subgrid lg:items-start"
+                :style="{ gridRow: `span ${rowCount}` }"
               >
                 <AddStepSlot
+                  :style="{ gridRow: 1 }"
                   :label="
                     index === 0 ? 'Add a step first' : `Add a step after ${stepName(index - 1)}`
                   "
@@ -181,11 +233,12 @@ function confirmDiscard() {
                 />
 
                 <div
-                  class="flex w-full max-w-md flex-col gap-3 lg:w-80 lg:shrink-0"
+                  class="flex w-full max-w-md flex-col gap-3 lg:grid lg:w-80 lg:shrink-0 lg:grid-rows-subgrid"
                   :class="arrivalClass(step.key)"
+                  :style="{ gridRow: '1 / -1' }"
                   :data-design-key="step.key"
                 >
-                  <div class="flex h-10 items-center gap-3">
+                  <div class="flex h-10 items-center gap-3" :style="{ gridRow: 1 }">
                     <span
                       class="font-mono text-3xl leading-none text-primary tabular-nums"
                       aria-hidden="true"
@@ -214,6 +267,7 @@ function confirmDiscard() {
 
                   <div
                     class="flex items-center gap-1"
+                    :style="{ gridRow: 2 }"
                     role="group"
                     :aria-label="`Actions of ${stepName(index)}`"
                   >
@@ -270,7 +324,7 @@ function confirmDiscard() {
                       "
                       @click="showArrival(splitStep(index))"
                     >
-                      {{ splitLabel(step) }}
+                      {{ splitLabel(step, index) }}
                     </button>
                     <button
                       v-if="step.stations.length === 0"
@@ -287,19 +341,39 @@ function confirmDiscard() {
                     :key="station.key"
                     v-model="step.stations[stationIndex]"
                     :class="arrivalClass(station.key)"
+                    :style="{ gridRow: stationRow(step, index, station) }"
                     :data-design-key="station.key"
+                    :data-station="station.key"
+                    :data-column="index"
                     :team-members="draft.teamMembers"
                     :takt-hours="draft.taktTimeHours"
                     @remove="removeStation(index, stationIndex)"
                   />
 
+                  <button
+                    v-for="empty in emptyLanes(step, index)"
+                    :key="`empty-${empty.lane}`"
+                    type="button"
+                    class="btn btn-ghost h-auto min-h-16 w-full border border-dashed border-base-content/30 font-normal hover:border-primary hover:text-primary"
+                    :style="{ gridRow: empty.row }"
+                    :title="`The ${empty.lane} Branch skips this step. Add a Work Station to it here.`"
+                    @click="showArrival(addStationAt(index, empty.lane))"
+                  >
+                    + Work Station in {{ empty.lane }}
+                  </button>
+
                   <p
-                    v-if="step.stations.length === 0"
+                    v-if="step.stations.length === 0 && !inSplit(index)"
                     class="rounded-box border border-dashed border-base-content/30 p-4 text-sm opacity-70"
+                    :style="{ gridRow: rowCount }"
                   >
                     No Work Station. Add one or remove this step.
                   </p>
-                  <p v-else-if="step.stations.length > 1" class="text-xs italic opacity-70">
+                  <p
+                    v-else-if="step.stations.length > 1"
+                    class="text-xs italic opacity-70"
+                    :style="{ gridRow: rowCount }"
+                  >
                     {{ step.stations.length }} Branches in parallel
                   </p>
                 </div>
@@ -314,6 +388,7 @@ function confirmDiscard() {
               "
               @add="showArrival(addStepAfter(draft.steps.length - 1))"
             />
+            <FlowConnectors class="hidden lg:block" :container="lineEl" :links="links" simple />
           </div>
         </div>
       </section>

@@ -11,6 +11,7 @@ import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLine } from "../composables/useLine"
 import { useWorkspaces } from "../composables/useWorkspaces"
+import { flowLinks, inflow, isUpstream, laneRows, type ShapeNode } from "../shape"
 import type { HelpOffer, WorkStation } from "../types"
 
 const {
@@ -125,11 +126,7 @@ const madeByChoices = computed(() => {
   if (!found) {
     return []
   }
-  return (line.value?.stations ?? []).filter(
-    (one) =>
-      one.position < found.position &&
-      (one.branch === null || found.branch === null || one.branch === found.branch),
-  )
+  return (line.value?.stations ?? []).filter((one) => isUpstream(nodes.value, one.id, found.id))
 })
 
 async function recordRework() {
@@ -162,6 +159,45 @@ const activePieces = computed(() => {
 })
 
 const lineEl = ref<HTMLElement | null>(null)
+
+const nodes = computed<ShapeNode[]>(() =>
+  (line.value?.stations ?? []).map((station) => ({
+    id: station.id,
+    position: station.position,
+    branch: station.branch,
+    parentBranch: null,
+  })),
+)
+
+const links = computed(() => flowLinks(nodes.value))
+
+const grid = computed(() =>
+  laneRows(
+    nodes.value,
+    columns.value.map((one) => one.position),
+  ),
+)
+
+/** The grid row of a Work Station: 1 is the step names, then one row per lane. */
+function rowOf(station: WorkStation) {
+  const lanes = grid.value.lanes.get(station.position) ?? []
+  return 2 + Math.max(0, lanes.indexOf(station.branch))
+}
+
+function assembles(station: WorkStation) {
+  const node = nodes.value.find((one) => one.id === station.id)
+  return node !== undefined && inflow(nodes.value, node)?.kind === "assembly"
+}
+
+const kanbansByColumn = computed(() =>
+  Object.fromEntries(columns.value.map((column, index) => [index, column.kanbans])),
+)
+
+/** One column for each step, with a gap column between two steps for the arrows. */
+const gridColumns = computed(() => {
+  const steps = columns.value.map(() => "minmax(15rem, 1fr)").join(" 6rem ")
+  return line.value?.heldForRelease.length ? `${steps} 3rem auto` : steps
+})
 
 const columns = computed<{ position: number; stations: WorkStation[]; kanbans: number }[]>(() => {
   const byPosition = new Map<number, WorkStation[]>()
@@ -264,63 +300,71 @@ const taktLabel = computed(() => {
     <p v-else-if="columns.length === 0" class="opacity-70">No Work Station yet.</p>
 
     <div v-else class="overflow-x-auto pb-4">
-      <div ref="lineEl" class="relative flex min-w-max gap-4">
+      <div
+        ref="lineEl"
+        class="relative grid min-w-max gap-x-4 gap-y-3"
+        :style="{
+          gridTemplateColumns: gridColumns,
+          gridTemplateRows: `auto repeat(${grid.rows}, auto) auto`,
+        }"
+      >
         <template v-for="(column, index) in columns" :key="column.position">
-          <div v-if="index > 0" class="w-24 shrink-0" />
-          <div class="flex min-w-[15rem] flex-1 flex-col gap-3">
-            <StepName
-              :name="stepName(column.position)"
-              :max-length="maxNameLength"
-              :readonly="role !== 'owner'"
-              @rename="(name) => rename(column.position, name)"
-            />
-            <div
-              v-for="station in column.stations"
-              :key="station.id"
-              :data-column="index"
-              :data-branch="station.branch ?? ''"
-            >
-              <WorkStationCard
-                :station="station"
-                :active-pieces="activePieces"
-                :last="station.position === lastPosition"
-                :assembly="
-                  station.branch === null && (columns[index - 1]?.stations.length ?? 0) > 1
-                "
-                :busy="busy"
-                :andons="line?.andons ?? []"
-                :stale="stale"
-                :bottleneck="bottleneckOf(station.id)"
-                :takt-hours="line?.taktTimeHours ?? 0"
-                :can-act-as="canActAs"
-                :own-team-member="current?.teamMember"
-                @andon="(who) => run(() => raiseAndon(station.id, who))"
-                @close-andon="(who) => run(() => closeAndon(station.id, who))"
-                @pull="(who) => pullHere(station.id, who)"
-                @finish="(piece) => run((why) => finish(station.id, piece, why))"
-                @deploy="(piece, hold) => run(() => deploy(piece, hold))"
-                @rework="(piece) => openRework(station, piece)"
-                @repair="(rework) => run(() => repairRework(rework))"
-                @assign="(kind, id, teamMember) => run(() => assign(kind, id, teamMember))"
-                @help="(rework, who) => run(() => helpTheRework(rework, who))"
-                @stop-helping="(who) => run(() => stopHelping(who))"
-              />
-            </div>
-            <p v-if="column.stations.length > 1" class="text-xs italic opacity-70">
-              {{ column.stations.length }} Branches in parallel
-            </p>
-          </div>
-        </template>
-        <template v-if="line?.heldForRelease.length">
-          <div class="w-12 shrink-0" />
-          <HeldForReleaseZone
-            :held="line.heldForRelease"
-            :busy="busy"
-            :can-release="canActAs()"
-            @release="(pieces) => run(() => release(pieces))"
+          <StepName
+            :style="{ gridColumn: index * 2 + 1, gridRow: 1 }"
+            :name="stepName(column.position)"
+            :max-length="maxNameLength"
+            :readonly="role !== 'owner'"
+            @rename="(name) => rename(column.position, name)"
           />
+          <div
+            v-for="station in column.stations"
+            :key="station.id"
+            class="self-start"
+            :style="{ gridColumn: index * 2 + 1, gridRow: rowOf(station) }"
+            :data-station="station.id"
+            :data-column="index"
+          >
+            <WorkStationCard
+              :station="station"
+              :active-pieces="activePieces"
+              :last="station.position === lastPosition"
+              :assembly="assembles(station)"
+              :busy="busy"
+              :andons="line?.andons ?? []"
+              :stale="stale"
+              :bottleneck="bottleneckOf(station.id)"
+              :takt-hours="line?.taktTimeHours ?? 0"
+              :can-act-as="canActAs"
+              :own-team-member="current?.teamMember"
+              @andon="(who) => run(() => raiseAndon(station.id, who))"
+              @close-andon="(who) => run(() => closeAndon(station.id, who))"
+              @pull="(who) => pullHere(station.id, who)"
+              @finish="(piece) => run((why) => finish(station.id, piece, why))"
+              @deploy="(piece, hold) => run(() => deploy(piece, hold))"
+              @rework="(piece) => openRework(station, piece)"
+              @repair="(rework) => run(() => repairRework(rework))"
+              @assign="(kind, id, teamMember) => run(() => assign(kind, id, teamMember))"
+              @help="(rework, who) => run(() => helpTheRework(rework, who))"
+              @stop-helping="(who) => run(() => stopHelping(who))"
+            />
+          </div>
+          <p
+            v-if="column.stations.length > 1"
+            class="text-xs italic opacity-70"
+            :style="{ gridColumn: index * 2 + 1, gridRow: grid.rows + 2 }"
+          >
+            {{ column.stations.length }} Branches in parallel
+          </p>
         </template>
-        <FlowConnectors :container="lineEl" :columns="columns" />
+        <HeldForReleaseZone
+          v-if="line?.heldForRelease.length"
+          :style="{ gridColumn: columns.length * 2 + 1, gridRow: '1 / -1' }"
+          :held="line.heldForRelease"
+          :busy="busy"
+          :can-release="canActAs()"
+          @release="(pieces) => run(() => release(pieces))"
+        />
+        <FlowConnectors :container="lineEl" :links="links" :kanbans="kanbansByColumn" />
       </div>
     </div>
 

@@ -151,6 +151,13 @@ pub fn the_branches_need_an_assembly_after_them_test() {
 pub fn a_split_needs_two_branches_test() {
   let assert Error(_) =
     design.check_structure([trunk("A"), split("Build", ["Web"]), trunk("B")])
+  let assert Error(_) =
+    design.check_structure([
+      trunk("A"),
+      split("Build", ["Web"]),
+      split("QA", ["Web"]),
+      trunk("B"),
+    ])
 }
 
 pub fn two_branches_cannot_share_a_name_test() {
@@ -162,14 +169,38 @@ pub fn two_branches_cannot_share_a_name_test() {
     ])
 }
 
-pub fn nested_splits_are_refused_test() {
-  let assert Error(_) =
-    design.check_structure([
+pub fn branches_can_have_different_lengths_test() {
+  // The software team example (F74): Web has one Work Station, iOS two.
+  assert design.check_structure([
+      trunk("Spec"),
+      split("Build", ["Web", "iOS"]),
+      split("QA", ["iOS"]),
+      trunk("UAT"),
+    ])
+    == Ok(Nil)
+}
+
+pub fn a_branch_can_skip_a_step_and_open_late_test() {
+  assert design.check_structure([
       trunk("A"),
       split("Build", ["Web", "iOS"]),
+      split("Build 2", ["iOS"]),
       split("QA", ["Web", "iOS", "Android"]),
       trunk("B"),
     ])
+    == Ok(Nil)
+}
+
+pub fn a_branch_name_is_unique_in_the_line_test() {
+  let assert Error(reason) =
+    design.check_structure([
+      trunk("A"),
+      split("Build", ["Web", "iOS"]),
+      trunk("Mid"),
+      split("QA", ["Web", "Android"]),
+      trunk("B"),
+    ])
+  assert string.contains(reason, "unique in the Line")
 }
 
 pub fn an_empty_line_is_refused_test() {

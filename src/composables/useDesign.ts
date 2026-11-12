@@ -9,6 +9,7 @@ import type {
   Labels,
 } from "../types"
 import type { NameInput } from "../wire"
+import { laneRows, upstream, type ShapeNode } from "../shape"
 import { useLabels } from "./useLabels"
 import { useLiveUpdates } from "./useLiveUpdates"
 
@@ -120,10 +121,57 @@ function branchSet(step: DraftStep) {
   return step.stations.map((station) => (station.branch ?? "").trim()).sort()
 }
 
+function allBranches(steps: DraftStep[]) {
+  return steps.flatMap(branchSet).filter((branch) => branch !== "")
+}
+
 function freshBranch(taken: string[]) {
   let n = 1
   while (taken.includes(`Branch ${n}`)) n++
   return `Branch ${n}`
+}
+
+/** Each Work Station of the draft as a node of its shape; the id is its key. */
+export function draftNodes(steps: DraftStep[]): ShapeNode[] {
+  return steps.flatMap((step, index) =>
+    step.stations.map((station) => ({
+      id: station.key,
+      position: index + 1,
+      branch: station.branch === null ? null : station.branch.trim(),
+      parentBranch: null,
+    })),
+  )
+}
+
+/** The lanes at each step, by step index, and the number of rows of the grid. */
+export function draftLanes(steps: DraftStep[]) {
+  const { lanes, rows } = laneRows(
+    draftNodes(steps),
+    steps.map((_, index) => index + 1),
+  )
+  return { lanes: steps.map((_, index) => lanes.get(index + 1) ?? []), rows }
+}
+
+/** The keys of the Work Stations each Work Station of the draft pulls from. */
+export function draftUpstream(steps: DraftStep[]): Map<string, string[]> {
+  const nodes = draftNodes(steps)
+  return new Map(nodes.map((node) => [node.id, upstream(nodes, node)]))
+}
+
+/** Runs of steps between two trunk steps: the steps of one Split. */
+function splits(steps: DraftStep[]): number[][] {
+  const runs: number[][] = []
+  let run: number[] = []
+  steps.forEach((step, index) => {
+    if (isBranchStep(step)) {
+      run.push(index)
+    } else if (step.stations.length > 0) {
+      if (run.length > 0) runs.push(run)
+      run = []
+    }
+  })
+  if (run.length > 0) runs.push(run)
+  return runs
 }
 
 /** The rules the server checks, as hints. The server stays the judge. */
@@ -150,10 +198,9 @@ export function designProblems(draft: DesignDraft): string[] {
       return
     }
     const branches = branchSet(step)
-    if (step.stations.length === 1 && step.stations[0].branch !== null) {
-      problems.push(`${name} has only one Branch. Add a Branch, or make it one Work Station.`)
-    }
-    if (step.stations.length > 1) {
+    if (step.stations.length > 1 && step.stations.some((station) => station.branch === null)) {
+      problems.push(`Give a Branch name to each Work Station in ${name}.`)
+    } else if (isBranchStep(step)) {
       if (branches.some((branch) => branch === "")) {
         problems.push(`Give a name to each Branch in ${name}.`)
       } else if (new Set(branches).size !== branches.length) {
@@ -165,12 +212,6 @@ export function designProblems(draft: DesignDraft): string[] {
       problems.push(
         `${name} has Branches. The first and the last step must each have one Work Station.`,
       )
-    }
-    const previous = steps[index - 1]
-    if (branch && previous && isBranchStep(previous)) {
-      if (branchSet(previous).join("\n") !== branches.join("\n")) {
-        problems.push(`${name} must have the same Branches as the step before it.`)
-      }
     }
     for (const station of step.stations) {
       const label = station.name.trim() === "" ? `A Work Station in ${name}` : station.name.trim()
@@ -187,6 +228,22 @@ export function designProblems(draft: DesignDraft): string[] {
       }
     }
   })
+  const named: string[] = []
+  for (const run of splits(steps)) {
+    const branches = [...new Set(run.flatMap((index) => branchSet(steps[index])))]
+    const label =
+      run.length === 1 ? `Step ${run[0] + 1}` : `Steps ${run[0] + 1} to ${run[run.length - 1] + 1}`
+    if (branches.length < 2) {
+      problems.push(`${label} open one Branch only. Add a Branch, or remove the Branch name.`)
+    }
+    named.push(...branches.filter((branch) => branch !== ""))
+  }
+  const twice = named.filter((branch, index) => named.indexOf(branch) !== index)
+  if (twice.length > 0) {
+    problems.push(
+      `Two Splits have a Branch named "${twice[0]}". Each Branch name is unique in the Line.`,
+    )
+  }
   return problems
 }
 
@@ -308,18 +365,30 @@ export function useDesign() {
     return station.key
   }
 
+  /** Inside a Split the new step starts empty: each Branch gets a + there. */
   function addStepAfter(index: number) {
+    const list = steps()
     const step: DraftStep = {
       key: newKey(),
       name: freshName(
         "New step",
-        steps().map((one) => one.name),
+        list.map((one) => one.name),
       ),
       stations: [],
     }
-    addStation(step, null)
-    steps().splice(index + 1, 0, step)
+    const before = list[index]
+    const after = list[index + 1]
+    const insideSplit = before && after && isBranchStep(before) && isBranchStep(after)
+    if (!insideSplit) addStation(step, null)
+    list.splice(index + 1, 0, step)
     return step.key
+  }
+
+  /** A Work Station for `branch` at this step, in an empty cell of the grid. */
+  function addStationAt(stepIndex: number, branch: string) {
+    const step = steps()[stepIndex]
+    if (!step || step.stations.some((station) => station.branch === null)) return null
+    return addStation(step, branch)
   }
 
   function removeStep(index: number) {
@@ -352,11 +421,12 @@ export function useDesign() {
     const list = steps()
     const step = list[index]
     if (!step || !canSplit(step)) return null
+    const inSplit = (draftLanes(list).lanes[index] ?? []).some((lane) => lane !== null)
+    if (isBranchStep(step) || inSplit) {
+      return addStation(step, freshBranch(allBranches(list)))
+    }
     if (step.stations.length === 0) {
       return addStation(step, null)
-    }
-    if (isBranchStep(step)) {
-      return addStation(step, freshBranch(branchSet(step)))
     }
     const neighbour = [list[index - 1], list[index + 1]].find(
       (one) => one !== undefined && isBranchStep(one) && one.stations.length > 1,
@@ -364,7 +434,7 @@ export function useDesign() {
     const names = neighbour ? branchSet(neighbour) : []
     const [first] = step.stations
     first.branch = names[0] ?? (first.name.trim() || "Branch 1")
-    const branches = names.length > 1 ? names.slice(1) : [freshBranch(branchSet(step))]
+    const branches = names.length > 1 ? names.slice(1) : [freshBranch(allBranches(list))]
     const keys = branches.map((branch) => addStation(step, branch))
     return keys[0]
   }
@@ -375,7 +445,11 @@ export function useDesign() {
     if (!step || !station || station.locked) return
     step.stations.splice(stationIndex, 1)
     const [last] = step.stations
-    if (step.stations.length === 1 && !last.locked) {
+    // A Split of one step with one Branch left is one Work Station again.
+    const elsewhere = steps().some(
+      (other) => other !== step && other.stations.some((one) => one.branch === last?.branch),
+    )
+    if (step.stations.length === 1 && !last.locked && !elsewhere) {
       last.branch = null
     }
   }
@@ -402,5 +476,6 @@ export function useDesign() {
     canSplit,
     splitStep,
     removeStation,
+    addStationAt,
   }
 }

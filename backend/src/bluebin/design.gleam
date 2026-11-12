@@ -188,6 +188,8 @@ fn load_stations(
 
 /// The shape of the steps alone: one trunk Work Station per step, or a Split
 /// into two or more named Branches that run side by side until the Assembly.
+/// A Branch has one Work Station or more in its Split, at most one at each
+/// step, so it can skip a step; each Branch name is unique in the Line.
 pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
   use <- bool.guard(
     steps == [],
@@ -209,21 +211,52 @@ pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
       "The last step must be one Work Station without a Branch: it assembles the Branches.",
     ),
   )
-  list.window_by_2(shapes)
-  |> list.index_map(fn(pair, index) { #(pair, index + 1) })
-  |> list.try_each(fn(entry) {
-    case entry {
-      #(#(Some(before), Some(after)), position) if before != after ->
-        Error(
-          "Steps "
-          <> int.to_string(position)
-          <> " and "
-          <> int.to_string(position + 1)
-          <> " must have the same Branches. Nested Splits are not supported.",
-        )
-      _ -> Ok(Nil)
-    }
-  })
+  let runs =
+    list.index_map(shapes, fn(shape, index) { #(index + 1, shape) })
+    |> list.chunk(fn(entry) { entry.1 == None })
+    |> list.filter_map(fn(run) {
+      case run {
+        [#(_, Some(_)), ..] ->
+          Ok(#(
+            list.map(run, fn(entry) { entry.0 }),
+            list.flat_map(run, fn(entry) {
+              option.unwrap(entry.1, set.new()) |> set.to_list
+            })
+              |> list.unique,
+          ))
+        _ -> Error(Nil)
+      }
+    })
+  use _ <- result.try(
+    list.try_each(runs, fn(run) {
+      let #(positions, branches) = run
+      case branches {
+        [_, _, ..] -> Ok(Nil)
+        _ ->
+          Error(
+            steps_label(positions)
+            <> " open one Branch only. A Split needs two Branches or more; remove the Branch name to keep one Work Station.",
+          )
+      }
+    }),
+  )
+  let named = list.flat_map(runs, fn(run) { run.1 })
+  case named == list.unique(named) {
+    True -> Ok(Nil)
+    False ->
+      Error(
+        "Two Splits have a Branch with the same name. Each Branch name is unique in the Line.",
+      )
+  }
+}
+
+fn steps_label(positions: List(Int)) -> String {
+  case positions, list.last(positions) {
+    [only], _ -> "Step " <> int.to_string(only)
+    [first, ..], Ok(last) ->
+      "Steps " <> int.to_string(first) <> " to " <> int.to_string(last)
+    _, _ -> "A Split"
+  }
 }
 
 /// None for a trunk step, else its set of Branch names.
@@ -236,11 +269,6 @@ fn step_shape(
   case step.stations {
     [] -> Error(label <> " has no Work Station.")
     [Station(branch: None, ..)] -> Ok(None)
-    [_] ->
-      Error(
-        label
-        <> " has one Branch only. A Split needs two Branches or more; remove the Branch name to keep one Work Station.",
-      )
     stations -> {
       use branches <- result.try(
         list.try_map(stations, fn(station) {

@@ -1,4 +1,5 @@
 import bluebin/flow
+import bluebin/shape
 import bluebin/wire
 import bluebin/wire_json
 import gleam/dynamic/decode
@@ -342,6 +343,8 @@ pub type Station {
     team_members: List(String),
     free_bins: Int,
     stopped: Bool,
+    /// The Work Stations it pulls from (`shape.upstream`).
+    upstream: List(String),
   )
 }
 
@@ -349,7 +352,7 @@ fn help_downstream(mine: List(Station), all: List(Station)) -> Option(Next) {
   all
   |> list.filter(fn(other) {
     !list.contains(mine, other)
-    && list.any(mine, fn(own) { downstream_of(other, own) })
+    && list.any(mine, fn(own) { downstream_of(other, own, all) })
   })
   |> list.filter_map(fn(other) {
     // A Work Station stopped by its own Rework is for Help the Rework, open
@@ -371,32 +374,23 @@ fn help_downstream(mine: List(Station), all: List(Station)) -> Option(Next) {
   })
 }
 
-fn downstream_of(other: Station, own: Station) -> Bool {
-  other.position > own.position && same_chain(other, own)
-}
-
-fn same_chain(one: Station, other: Station) -> Bool {
-  case one.branch, other.branch {
-    Some(a), Some(b) -> a == b
-    _, _ -> True
-  }
-}
-
-/// The Blue Bins of the step just upstream are all full.
-pub fn in_front_full(station: Station, all: List(Station)) -> Bool {
-  let upstream =
-    list.filter(all, fn(other) {
-      other.position < station.position && same_chain(other, station)
-    })
-  let previous =
-    list.fold(upstream, -1, fn(highest, other) {
-      case other.position > highest {
-        True -> other.position
-        False -> highest
+fn downstream_of(other: Station, own: Station, all: List(Station)) -> Bool {
+  shape.reaches(
+    fn(id) {
+      case list.find(all, fn(station) { station.id == id }) {
+        Ok(station) -> station.upstream
+        Error(Nil) -> []
       }
-    })
-  list.any(upstream, fn(other) {
-    other.position == previous && other.free_bins <= 0
+    },
+    own.id,
+    other.id,
+  )
+}
+
+/// The Blue Bins of a Work Station it pulls from are all full.
+pub fn in_front_full(station: Station, all: List(Station)) -> Bool {
+  list.any(all, fn(other) {
+    list.contains(station.upstream, other.id) && other.free_bins <= 0
   })
 }
 
@@ -449,19 +443,35 @@ pub fn stations(
     use team_members <- decode.field(4, decode.optional(decode.string))
     use free_bins <- decode.field(5, decode.int)
     use stopped <- decode.field(6, decode.int)
-    decode.success(Station(
-      id:,
-      name:,
-      position:,
-      branch:,
-      team_members: team_members
-        |> option.map(string.split(_, ","))
-        |> option.unwrap([]),
-      free_bins:,
-      stopped: stopped > 0,
-    ))
+    decode.success(
+      Station(
+        id:,
+        name:,
+        position:,
+        branch:,
+        team_members: team_members
+          |> option.map(string.split(_, ","))
+          |> option.unwrap([]),
+        free_bins:,
+        stopped: stopped > 0,
+        upstream: [],
+      ),
+    )
   }
-  sqlight.query(stations_sql, on: connection, with: [], expecting: decoder)
+  use found <- result.try(sqlight.query(
+    stations_sql,
+    on: connection,
+    with: [],
+    expecting: decoder,
+  ))
+  use nodes <- result.map(shape.load(connection))
+  list.map(found, fn(station) {
+    let upstream = case list.find(nodes, fn(node) { node.id == station.id }) {
+      Ok(node) -> shape.upstream(nodes, node)
+      Error(Nil) -> []
+    }
+    Station(..station, upstream:)
+  })
 }
 
 const stations_sql = "select w.id, w.name, w.position, w.branch,
