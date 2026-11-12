@@ -1310,7 +1310,12 @@ fn split_off(
     connection,
     "insert into piece (id, demand_id, reference, number, state, station_id,
                         since, parent_id, branch)
-     select p.id || '-' || lower(replace(?2, ' ', '-')), p.demand_id,
+     select p.id || '-' || lower(replace(?2, ' ', '-'))
+              || case when exists (
+                   select 1 from piece o
+                    where o.id = p.id || '-' || lower(replace(?2, ' ', '-')))
+                 then '-' || lower(hex(randomblob(3))) else '' end,
+            p.demand_id,
             coalesce((select r.reference from piece r where r.id = p.parent_id),
                      p.reference) || ' · ' || ?2,
             p.number, 'in_flow', ?3,
@@ -1329,7 +1334,7 @@ fn split_off(
             since = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
       where id = ?1
         and (select count(*) from piece s
-              where s.parent_id = ?1
+              where s.parent_id = ?1 and s.state != 'assembled'
                 and s.branch in (select value from json_each(?2)))
          >= json_array_length(?2)
       returning id",
@@ -1507,7 +1512,8 @@ fn next_unsplit_piece(
      join demand d on d.id = p.demand_id
      where p.state = 'in_bin' and p.station_id = ?1
        and not exists (select 1 from piece s
-                       where s.parent_id = p.id and s.branch = ?2)
+                       where s.parent_id = p.id and s.branch = ?2
+                         and s.state != 'assembled')
      order by p.since, p.rowid
      limit 1",
     [

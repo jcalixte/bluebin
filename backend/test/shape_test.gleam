@@ -145,3 +145,28 @@ pub fn upstream_follows_the_branches_test() {
   assert !shape.is_upstream(nodes, "android", "qa-ios")
   assert !shape.is_upstream(nodes, "uat", "spec")
 }
+
+pub fn a_branch_name_used_in_two_splits_stays_in_its_own_split_test() {
+  // Saved before Branch names were unique in the Line.
+  let nodes = [
+    trunk("spec", 1),
+    branch("web-1", 2, "Web"),
+    branch("ios-1", 2, "iOS"),
+    trunk("mid", 3),
+    branch("web-2", 4, "Web"),
+    branch("ios-2", 4, "iOS"),
+    trunk("end", 5),
+  ]
+  assert inflow_of(nodes, "web-2") == AtSplit("mid", ["Web", "iOS"])
+  assert inflow_of(nodes, "end") == Assembly(["web-2", "ios-2"])
+}
+
+pub fn a_trunk_work_station_with_a_parent_branch_stays_on_the_trunk_test() {
+  let nodes = [
+    Node(id: "spec", position: 1, branch: None, parent: Some("Mobile")),
+    branch("web", 2, "Web"),
+    branch("mobile", 2, "Mobile"),
+    trunk("uat", 3),
+  ]
+  assert inflow_of(nodes, "mobile") == AtSplit("spec", ["Mobile", "Web"])
+}

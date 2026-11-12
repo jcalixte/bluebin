@@ -56,6 +56,8 @@ function toDraft(design: Design): DesignDraft {
       name: step.name,
       stations: step.stations.map((station) => ({
         ...station,
+        // Null also from an API older than nested Splits.
+        parentBranch: station.parentBranch ?? null,
         key: station.id,
         teamMembers: [...station.teamMembers],
       })),
@@ -82,7 +84,7 @@ function toPayload(design: DesignShape): DesignInput {
         id: station.id,
         name: station.name.trim(),
         branch: station.branch === null ? null : station.branch.trim(),
-        parentBranch: station.parentBranch === null ? null : station.parentBranch.trim(),
+        parentBranch: station.branch === null ? null : station.parentBranch?.trim() || null,
         blueBins: Number(station.blueBins),
         teamLeader: station.teamLeader,
         teamMembers: [...station.teamMembers].sort(),
@@ -537,6 +539,7 @@ export function useDesign() {
     )
     if (step.stations.length === 1 && !last.locked && !elsewhere) {
       last.branch = null
+      last.parentBranch = null
     }
   }
 

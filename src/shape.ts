@@ -29,15 +29,27 @@ const byCodePoint = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0)
 
 /** A Work Station of a Branch that opens inside `lane`. */
 function inside(node: ShapeNode, lane: string | null) {
-  return lane === null
-    ? node.branch !== null && node.parentBranch === null
-    : node.parentBranch === lane
+  if (node.branch === null) return false
+  return lane === null ? !node.parentBranch : node.parentBranch === lane
+}
+
+/**
+ * For a Work Station of a Branch, only its own Split and the trunk Work
+ * Station before it: a Line saved before Branch names were unique can use one
+ * name in two Splits.
+ */
+function splitAround(nodes: ShapeNode[], node: ShapeNode) {
+  if (node.branch === null) return nodes
+  const trunk = nodes.filter((other) => other.branch === null).map((other) => other.position)
+  const floor = Math.max(-1, ...trunk.filter((at) => at < node.position))
+  const ceiling = Math.min(Infinity, ...trunk.filter((at) => at > node.position))
+  return nodes.filter((other) => other.position >= floor && other.position < ceiling)
 }
 
 function splitSource(nodes: ShapeNode[], first: ShapeNode) {
   let found: ShapeNode | null = null
   for (const other of nodes) {
-    if (other.position < first.position && other.branch === first.parentBranch) {
+    if (other.position < first.position && other.branch === (first.parentBranch ?? null)) {
       if (!found || other.position > found.position) found = other
     }
   }
@@ -53,7 +65,8 @@ function firstOf(nodes: ShapeNode[], branch: string | null) {
 }
 
 /** Null when the shape is broken, as a draft can be. */
-export function inflow(nodes: ShapeNode[], node: ShapeNode): Inflow | null {
+export function inflow(all: ShapeNode[], node: ShapeNode): Inflow | null {
+  const nodes = splitAround(all, node)
   const lane = node.branch
   const before = nodes.filter(
     (other) => other.position < node.position && (other.branch === lane || inside(other, lane)),
@@ -64,7 +77,9 @@ export function inflow(nodes: ShapeNode[], node: ShapeNode): Inflow | null {
     if (!from) return null
     const branches = new Set<string>()
     for (const other of nodes) {
-      if (other.branch === null || other.parentBranch !== node.parentBranch) continue
+      if (other.branch === null || (other.parentBranch ?? null) !== (node.parentBranch ?? null)) {
+        continue
+      }
       const first = firstOf(nodes, other.branch)
       if (first && splitSource(nodes, first)?.id === from.id) branches.add(other.branch)
     }

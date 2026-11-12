@@ -479,6 +479,37 @@ pub fn a_piece_flows_through_a_nested_split_test() {
   assert kanbans_over_empty_blue_bins(connection) == 0
 }
 
+pub fn a_line_saved_with_one_branch_name_in_two_splits_still_flows_test() {
+  use connection <- with_seeded_database()
+  // Saved before Branch names were unique: Web and iOS again after UAT.
+  exec(
+    connection,
+    "insert into work_station (id, name, position, branch, blue_bins) values
+       ('ws-web-2', 'Web 2', 6, 'Web', 1),
+       ('ws-ios-2', 'iOS 2', 6, 'iOS', 1),
+       ('ws-release', 'Release', 7, null, 1);
+     insert into kanban (id, station_id) values
+       ('kb-web-2', 'ws-web-2'), ('kb-ios-2', 'ws-ios-2'),
+       ('kb-release', 'ws-release');",
+  )
+  let assert Ok(_) =
+    flow.finish(connection, "ws-qa-ios", "p-offline-4-ios", None)
+  let assert Ok(_) = flow.pull(connection, "ws-uat", None, None)
+  let assert Ok(_) = flow.finish(connection, "ws-uat", "p-offline-4", None)
+
+  let assert Ok(web) = flow.pull(connection, "ws-web-2", None, None)
+  assert web.piece == "OFF-4 · Web"
+  assert state_of(connection, "p-offline-4") == "in_bin"
+  let assert Ok(_) = flow.pull(connection, "ws-ios-2", None, None)
+  assert state_of(connection, "p-offline-4") == "split"
+  assert count(
+      connection,
+      "select count(*) from piece
+        where parent_id = 'p-offline-4' and state = 'in_flow'",
+    )
+    == 2
+}
+
 pub fn finishing_a_piece_puts_it_in_a_blue_bin_test() {
   use connection <- with_seeded_database()
   let assert Ok(flowed) =

@@ -165,7 +165,7 @@ const nodes = computed<ShapeNode[]>(() =>
     id: station.id,
     position: station.position,
     branch: station.branch,
-    parentBranch: station.parentBranch,
+    parentBranch: station.parentBranch ?? null,
   })),
 )
 

@@ -122,3 +122,21 @@ test("an empty step inside a Split shows the lanes of the Split", () => {
   const { lanes } = laneRows(nodes, [1, 2, 3, 4, 5])
   assert.deepEqual(lanes.get(3), ["Web", "iOS"])
 })
+
+test("a Branch name used in two Splits stays in its own Split", () => {
+  const nodes = [
+    trunk("spec", 1),
+    branch("web-1", 2, "Web"),
+    branch("ios-1", 2, "iOS"),
+    trunk("mid", 3),
+    branch("web-2", 4, "Web"),
+    branch("ios-2", 4, "iOS"),
+    trunk("end", 5),
+  ]
+  assert.deepEqual(inflowOf(nodes, "web-2"), {
+    kind: "split",
+    from: "mid",
+    branches: ["Web", "iOS"],
+  })
+  assert.deepEqual(inflowOf(nodes, "end"), { kind: "assembly", ends: ["web-2", "ios-2"] })
+})

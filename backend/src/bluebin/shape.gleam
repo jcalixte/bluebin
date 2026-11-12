@@ -58,6 +58,7 @@ pub fn load(
 
 /// Error when the shape is broken, which a saved Design never is.
 pub fn inflow(nodes: List(Node), node: Node) -> Result(Inflow, Nil) {
+  let nodes = split_around(nodes, node)
   let lane = node.branch
   let before =
     list.filter(nodes, fn(other) {
@@ -142,11 +143,44 @@ fn ancestors(
   }
 }
 
+/// For a Work Station of a Branch, only its own Split and the trunk Work
+/// Station before it: a Line saved before Branch names were unique can use
+/// one name in two Splits.
+fn split_around(nodes: List(Node), node: Node) -> List(Node) {
+  case node.branch {
+    None -> nodes
+    Some(_) -> {
+      let trunk =
+        list.filter_map(nodes, fn(other) {
+          case other.branch {
+            None -> Ok(other.position)
+            Some(_) -> Error(Nil)
+          }
+        })
+      let floor =
+        list.filter(trunk, fn(at) { at < node.position })
+        |> list.reduce(int.max)
+        |> result.unwrap(-1)
+      let ceiling =
+        list.filter(trunk, fn(at) { at > node.position })
+        |> list.reduce(int.min)
+      list.filter(nodes, fn(other) {
+        other.position >= floor
+        && case ceiling {
+          Ok(at) -> other.position < at
+          Error(Nil) -> True
+        }
+      })
+    }
+  }
+}
+
 /// A Work Station of a Branch that opens inside `lane`.
 fn inside(node: Node, lane: Option(String)) -> Bool {
-  case lane {
-    None -> node.branch != None && node.parent == None
-    Some(outer) -> node.parent == Some(outer)
+  case lane, node.branch {
+    _, None -> False
+    None, Some(_) -> node.parent == None
+    Some(outer), Some(_) -> node.parent == Some(outer)
   }
 }
 

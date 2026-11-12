@@ -1487,7 +1487,11 @@ pub fn from_input(input: wire.DesignInput) -> Design {
             id: station.id,
             name: station.name,
             branch: station.branch,
-            parent_branch: station.parent_branch,
+            // A trunk Work Station has no outer Branch.
+            parent_branch: case clean(station.branch) {
+              None -> None
+              Some(_) -> station.parent_branch
+            },
             blue_bins: station.blue_bins,
             team_leader: station.team_leader,
             team_members: station.team_members,
