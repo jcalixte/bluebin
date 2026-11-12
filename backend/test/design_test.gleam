@@ -388,6 +388,52 @@ pub fn a_branch_that_holds_work_keeps_its_name_test() {
   assert refused(design.save(connection, wanted), "Branch cannot change")
 }
 
+pub fn a_work_station_that_holds_work_keeps_its_outer_branch_test() {
+  use connection <- with_seeded_database()
+  // A valid shape that puts iOS and Android, which hold work, inside a new
+  // Mobile Branch: refused, as a change of Branch is (R19).
+  let before = current(connection)
+  let assert [analysis, conception, build, qa, uat] = before.steps
+  let inside = fn(step: Step) {
+    Step(
+      ..step,
+      stations: list.map(step.stations, fn(station) {
+        case station.branch {
+          Some("Web") -> station
+          _ -> Station(..station, parent_branch: Some("Mobile"))
+        }
+      }),
+    )
+  }
+  let mobile = fn(name) {
+    Step(name:, stations: [
+      Station(
+        id: None,
+        name:,
+        branch: Some("Mobile"),
+        parent_branch: None,
+        blue_bins: 1,
+        team_leader: "pe-ines",
+        team_members: ["pe-ines"],
+      ),
+    ])
+  }
+  let steps = [
+    analysis,
+    conception,
+    mobile("Mobile API"),
+    inside(build),
+    inside(qa),
+    mobile("QA Mobile"),
+    uat,
+  ]
+  assert design.check_structure(steps) == Ok(Nil)
+  assert refused(
+    design.save(connection, Design(..before, steps:)),
+    "Branch cannot change",
+  )
+}
+
 pub fn more_blue_bins_send_kanbans_and_fewer_take_them_back_test() {
   use connection <- with_seeded_database()
   let before = kanbans_of(connection, "ws-uat")

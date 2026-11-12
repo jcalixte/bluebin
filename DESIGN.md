@@ -676,7 +676,7 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 | **Line Lead Time and output (not built)** | | | | |
 | F72 | Measure the **Line Lead Time** of each **Piece** and each **Demand**, from the first pull out of the **Backlog** to **Deployment**, set by the slowest **Sub-Piece** across a **Split**; count a **Piece** in the period of its **Deployment** | → | **Lead Time** = **Backlog** wait + **Line Lead Time** + wait to **Release**, exactly | G9 |
 | F73 | Judge the output of the **Line** in a period against the **Takt Time**: on takt when its deployed **Pieces** reach Σ(**Working Time** in the period ÷ **Takt Time**) over the active **Demands**, behind takt below it; show more as spare capacity, not as a better result | → | 1 verdict for each period, in Measures and in the before/after comparison (F38) | G9 |
-| **Branches and nested Splits (not built)** | | | | |
+| **Branches and nested Splits** | | | | |
 | F74 | Let each **Branch** hold its own number of **Work Stations**, one or more, with no link to the other **Branches** | → | the software team example (Web: 1 **Work Station**, iOS: 2) saves with no error | G10 |
 | F75 | Let a **Branch** open a nested **Split**, closed by a nested **Assembly** at a later **Work Station** of the same **Branch**; each **Branch** name is unique in the **Line**, so the **Piece Reference** shows only the last **Branch** (CHK-3 · iOS) | → | 1 nested level, no more | G10 |
 | F76 | Apply the pull rules at each **Split** and each **Assembly**, nested or not: one **Kanban** to each **Branch** for each **Assembly** (F7), a warning before an **Assembly** (F8), and the upstream **Blue Bin** stays full until each **Sub-Piece** is pulled | → | **Kanbans** ≤ empty **Blue Bins**, at all times; 100 % warned | G2 |
@@ -687,15 +687,15 @@ Measurable responsibilities. Direction: ↑ higher is better, ↓ lower is bette
 ## 4. Cascade — Goals → Functions → How → Components
 
 - **G1** Client satisfaction, Takt Time visible to everyone _W:10_ — F1–F5
-- **G2** Pull, every **Deviation** visible _W:9_ — F6–F9, F76 (not built)
+- **G2** Pull, every **Deviation** visible _W:9_ — F6–F9, F76
 - **G3** One-piece flow at **Takt Time** _W:8_ — F10–F11, F55
 - **G4** Jidoka, stop and fix _W:8_ — F12–F16, F42, F61
 - **G5** A **Team Member** knows the next thing to do _W:9_ — F17–F22
 - **G6** Levelled **Product Mix** _W:7_ — F23–F26
-- **G7** **Line** at a glance _W:8_ — F27–F29, F64, F65, F77 (not built)
+- **G7** **Line** at a glance _W:8_ — F27–F29, F64, F65, F77
 - **G8** Recording costs seconds _W:8_ — F30–F33, F56, F62, F63
 - **G9** Flow problems as numbers _W:8_ — F34–F38, F54, F72, F73 (not built)
-- **G10** Design and change without code _W:6_ — F39–F41, F74, F75 (not built)
+- **G10** Design and change without code _W:6_ — F39–F41, F74, F75
 - **G11** A **Team Member** signs in and finds their own work _W:7_ — F43–F47
 - **G12** A **Line** shows only to the **Accounts** it is meant for _W:6_ — F48–F53
 - **G13** Hold a deployed **Piece** for **Release**, and count the wait in its **Lead Time** _W:6_ — F57–F60 (F56, deploy and release in 1 click, serves G8)
@@ -789,13 +789,15 @@ Core How decisions, shared by many Functions:
   - Serves: F74, F75, F76
   - The steps stay the columns of the **Line**. A **Branch** can have no **Work Station** at a step: its **Sub-Piece** goes on to its next **Work Station**. The **Branches** of one **Split** are the **Branches** of a run of steps that follow each other; each has one **Work Station** or more in the run, and at most one at each step
   - Nesting: `work_station.parent_branch` names the outer **Branch** of a nested **Branch** (iOS → Mobile). The outer **Branch** has a **Work Station** before the nested **Split** and one after it, which does the nested **Assembly**; a nested **Branch** has no `parent_branch` of its own (1 level). Each **Branch** name is unique in the **Line**
-  - Upstream of a **Work Station** = the **Work Station** at the nearest earlier step in its own **Branch**, else in its outer **Branch**, else in the trunk. Downstream, for the **Kanbans** (F76), is the same rule read the other way. `flow` no longer finds the upstream by `position` alone
+  - Where a **Work Station** pulls from (C2 `bluebin/shape`, mirrored by C1 `src/shape.ts`): take the nearest earlier **Work Station** of its own lane (its **Branch**, or the trunk) or of a **Branch** that opens inside that lane. Its own lane: pull straight from it. A **Branch** inside: an **Assembly** of the last **Work Station** of each of those **Branches**. None: the first **Work Station** of a **Branch** pulls its **Sub-Piece** at the **Split**, from the nearest earlier **Work Station** of the lane around it. `flow`, Help Downstream, the bottlenecks and the made-by check of a **Rework** read these routes, not `position`
+  - A **Split** and an **Assembly** count only the live **Sub-Pieces** of a **Piece**, not the ones assembled at an earlier **Split**
 - **How H37 — a tree: each Branch is its own chain, with no steps** (rejected, see T15)
 - **How H38 — a graph: each Work Station lists its upstream Work Stations** (rejected: it allows shapes that the glossary forbids, and the checks become hard)
-- **How H39 — arrows in the grid cells, a ◆ for a Split and a ● for an Assembly** (chosen)
+- **How H39 — a grid of steps × lanes, with the arrows drawn by the SVG layer `FlowConnectors`, a ◆ for a Split and a ● for an Assembly** (chosen)
   - Serves: F77, in C1 `LineView` and `DesignView`
-  - Each **Work Station** has an arrow from its upstream **Work Station**; an empty cell carries the line through. A ◆ stands where a **Branch** starts and a ● in front of the **Work Station** that does the **Assembly**. Each **Branch** name is on its first arrow, as in its **Piece Reference** (CHK-3 · iOS). In `DesignView`, an empty cell shows a + that adds a **Work Station** to that **Branch** at that step
-- **How H40 — an SVG layer that draws the arrows from the positions of the cards** (rejected: it reads the page layout after each render, and breaks when the wall TV resizes)
+  - Each lane (the trunk, a **Branch**, a nested **Branch** under its outer one) keeps one row across its **Split**, so a **Branch** that skips a step leaves an empty cell and its arrow runs straight through it. `FlowConnectors` draws one arrow into each **Work Station** from each one it pulls from (`flowLinks`), measures the cards again on resize, and in `LineView` also draws the **Kanban** lane back. A ◆ stands where a **Split** opens, a ● in front of the **Work Station** that does the **Assembly**, and each **Branch** name is on its first arrow, as in its **Piece Reference** (CHK-3 · iOS)
+  - `DesignView` puts the same rows on a CSS subgrid; an empty cell shows a + that adds a **Work Station** to that **Branch** at that step, except where it would break the shape. **Split this Branch after it** adds a step with two nested **Branches** and a step where the outer **Branch** assembles them, so the shape stays valid
+- **How H40 — arrows drawn inside the grid cells, with no SVG layer** (rejected: an arrow that skips a step or turns at a **Split** needs a free path across cells, and `FlowConnectors` already drew the Piece and **Kanban** lanes of `LineView`)
 
 Components that realise these How decisions:
 
@@ -822,7 +824,7 @@ Changes to existing components for the run chart (F38): C2 `measures` adds `week
 
 Changes to existing components for the Team view (F65): C1 `TeamView` shows each **Team Member** with their **Assignments** and what they help, and the **Pieces** and **Rework** nobody holds; each name links to `/next?teamMember=<id>` and opens in the page, as the header tabs do. C1 `useWorkspaces` holds `ownWorkOnly` (a Member with a **Team Member** in the **Line** sees only their own work), which `NextThingView` and `TeamView` share: for that Member, the names of the other **Team Members** are not links.
 
-Changes to existing components for **Branches** of any length and nested **Splits** (F74–F77, not built): C3 gets `work_station.parent_branch` through an additive step v4 → v5 (H29, [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md)); C2 `design` `check_structure` replaces "the same **Branches** as the step before" with the rules of H36, and the save keeps the F40 checks (R19); C2 `flow` finds the upstream and the downstream **Work Station** by **Branch**, then outer **Branch**, then trunk (H36), runs the **Split** and the **Assembly** at both levels through `piece.parent_id` (a **Sub-Piece** of a **Sub-Piece**), and compares the made-by and found-by **Work Stations** of a **Rework** on the same chain; C2 `line` sends `parentBranch` with each **Work Station**; C1 `useDesign` mirrors the H36 checks; C1 `DesignView` shows one row for each **Branch**, a nested **Branch** under its outer **Branch**, and an empty cell with + (H39); C1 `LineView` draws the arrows, ◆ and ● (H39). C9 gets the rules by compiling C2, so `pnpm sim:test` covers them.
+Changes to existing components for **Branches** of any length and nested **Splits** (F74–F77, built 2026-11-12): C2 gets the module `bluebin/shape` and C1 `src/shape.ts` (H36); C3 gets `work_station.parent_branch` through an additive step v4 → v5 (H29, [ADR-0006](./docs/adr/0006-additive-schema-changes-migrate.md)); C2 `design` `check_structure` replaces "the same **Branches** as the step before" with the rules of H36, and the save keeps the F40 checks (R19); C2 `flow` finds the upstream and the downstream **Work Station** by **Branch**, then outer **Branch**, then trunk (H36), runs the **Split** and the **Assembly** at both levels through `piece.parent_id` (a **Sub-Piece** of a **Sub-Piece**), and compares the made-by and found-by **Work Stations** of a **Rework** on the same chain; C2 `line` sends `parentBranch` with each **Work Station**; C1 `useDesign` mirrors the H36 checks; C1 `DesignView` shows one row for each **Branch**, a nested **Branch** under its outer **Branch**, and an empty cell with + (H39); C1 `LineView` draws the arrows, ◆ and ● (H39). C9 gets the rules by compiling C2, so `pnpm sim:test` covers them.
 
 Changes to existing components for Simulation sharing (F67–F71): C10 is new. C1 `main.ts` mounts `GuestGate` instead of a local **Line** for a **Guest**; `GuestGate` shows one screen for each state (looking, pick a **Team Member**, host gone, host ended, link failed), with **Look again** and **Play a Simulation alone**; `SimulationBar` adds **Invite…** (the link, "In the room", **End for every Guest…** with an inline confirm); `App.vue` tells a **Guest** that the **Line** lives in the page of the **Host**; `WorkingCalendarCard` hides holidays in the **Simulation** (R16).
 
@@ -960,7 +962,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 | 3 | F69 / F70 answer and update | ≤ 1 s / ≤ 2 s | Time from a **Guest** click to its screen update, with 5 **Guests** | Send the changed data with `change`, so that a **Guest** does not read again |
 | 4 | F66 the rules of bluebin.app | 0 differences | `pnpm sim:test` after each backend change | Hide the action in the **Simulation** until its route runs on both targets |
 
-### Branches and nested Splits (F74–F77, not built)
+### Branches and nested Splits (F74–F77)
 
 | Rank | Function | Target | Watched on | If we miss it |
 | :--: | --- | --- | --- | --- |
@@ -1011,6 +1013,7 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **The Simulation lives in the page of the Host.** A reload or a closed tab ends it for every **Guest**. **Trigger to revisit:** a team asks to keep a **Simulation** for more than one session, for example for a training of several days.
 - **Line Lead Time and output against Takt Time are defined, not measured** (F72, F73). **Trigger to revisit:** the next change to Measures; build §16 first.
 - **Named steps in the code, avoided in the glossary** (T15). [CONTEXT.md](./CONTEXT.md) says to avoid "step" and "column", but the **Line** keeps named steps (`line_step`) as its columns. **Trigger to revisit:** a team reads a column as a stage that does not exist, or the empty cells of short **Branches** outnumber the **Work Stations**; then H37.
+- **An SPA older than nested Splits drops `parentBranch` when it saves the Design.** Its nested **Branches** then become **Branches** of the outer **Split**, with no warning, unless a **Work Station** of them holds work (R19). **Trigger to revisit:** a nested **Split** is lost after a save from an old tab; then refuse a save that has no `parentBranch` on a **Line** that has nested **Branches**.
 
 ---
 
@@ -1029,6 +1032,8 @@ Symbols: `⊗` strong conflict, `×` mild conflict.
 - **The Simulation read as a demo.** The first draft of G14 put the **Simulation** outside the TPS house, as a way for anyone to try Bluebin. Resolved (2026-11-10): it is off-the-line practice (Training Within Industry), so G14 sits in the foundation next to **Standardized Work**, and [CONTEXT.md](./CONTEXT.md) says so; showing Bluebin to a visitor is a side effect.
 - **Line Lead Time is in the glossary, not in the measures.** [CONTEXT.md](./CONTEXT.md) (2026-11-09) defines **Line Lead Time**, counts a **Piece** by its **Deployment** for the output of the **Line**, and judges that output against the **Takt Time**. C2 `measures` has neither. Open: F72 and F73, built in the order of §16.
 - **Steps in the code, not in the glossary.** [CONTEXT.md](./CONTEXT.md) lists "step" and "column" as words to avoid for a **Work Station**, but `line_step` gives each column a name, and `LineView` and `DesignView` show it. Left open (2026-11-11): H36 keeps the steps as columns, see T15 and the tension on named steps.
+- **H40 rejected what `LineView` already had.** The first draft of H39 put the arrows in the grid cells and rejected an SVG layer because it would break on resize, but `FlowConnectors` was already that layer, measured again by a `ResizeObserver`. Resolved (2026-11-12): H39 draws with `FlowConnectors`, and H40 is the cell-only drawing.
+- **A second Split of the same Piece counted the Sub-Pieces of the first.** `split_off` and the **Assembly** counted every **Sub-Piece** of a **Piece**, also the ones assembled at an earlier **Split**, so the **Piece** left the upstream **Blue Bin** after the first **Branch** pulled and never assembled again. Two **Splits** in one **Line** could not work. Resolved (2026-11-12): they count only the live **Sub-Pieces**; `bluebin_test` takes OFF-4 through two **Splits** and a nested one.
 - **"A user has one workspace for now".** The comment in `backend/src/bluebin/workspace.gleam` and the README's "Sign-in and Workspaces" said the **Workspace** comes only from `X-authentik-uid`. Resolved with C7 and H12: the owner's uid in the URL opens another **Workspace**.
 - **F9 and the automatic pause.** F9 also warned before a second active **Assignment**, but taking an **Assignment** pauses the current one automatically, so a second active one cannot happen. Resolved: F9 covers only the second **Piece** in a **Blue Bin**.
 
@@ -1123,7 +1128,7 @@ Why this order: slice 1 gives the number that the **Line** owns, apart from the 
 
 ---
 
-## 17. Build order — Branches and nested Splits (F74–F77, not built)
+## 17. Build order — Branches and nested Splits (F74–F77, built 2026-11-12)
 
 | Slice | Name | Functions and components | What ships | Done when |
 | :---: | --- | --- | --- | --- |
@@ -1132,6 +1137,8 @@ Why this order: slice 1 gives the number that the **Line** owns, apart from the 
 | 3 | Nested **Split** | F75, F76, C3 v4 → v5, C2 `design`, `flow` and `line`, C1 | `parent_branch`, the nested **Split** and its **Assembly**, R19 on save | Budget rows 1, 2 and 4 pass; `pnpm sim:test` passes |
 
 Why this order: slice 1 removes the pain of equal lengths with no migration. Slice 2 makes short **Branches** readable before nesting adds rows. Slice 3 carries the migration and the most risk, and its fallback is to stop after slice 2.
+
+Status (2026-11-12): slice 1 is proved by `shape_test`, `design_test` (`branches_can_have_different_lengths`, `a_branch_can_skip_a_step_and_open_late`) and `bluebin_test` (`the_assembly_pulls_each_branch_from_its_own_last_work_station`). Slice 3 is proved by `a_piece_flows_through_a_nested_split` (budget row 1), `a_work_station_that_holds_work_keeps_its_outer_branch` (row 2), `a_version_4_database_gets_the_parent_branch_column` (row 4), the nested rules of `design_test`, `src/shape.test.ts` and `pnpm sim:test`. Slice 2 is checked by a server render of `DesignView` only: its 1920×1080 target (budget row 3) still needs a look on the wall TV.
 
 ---
 
