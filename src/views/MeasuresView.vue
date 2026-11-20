@@ -58,6 +58,14 @@ const weekOptions = [12, 26, 52]
 
 const chosenChange = computed(() => changes.value.find((one) => one.at === changeAt.value))
 
+/** A Work Station that only changed needs no tag: its facts say what changed. */
+const entryKinds: Record<string, string> = {
+  station_added: "new Work Station",
+  station_removed: "Work Station removed",
+  team_member_added: "new Team Member",
+  team_member_removed: "Team Member removed",
+}
+
 /** Other Line changes inside the two periods: their effect mixes in. */
 const otherChanges = computed(() =>
   changes.value.filter((one) => {
@@ -85,6 +93,9 @@ const shortenedBy = computed(() => {
   if (lengths.value[1] >= days.value) return null
   return after.to === today ? "recent" : "line_start"
 })
+
+/** Days after the After period, up to today: the measures leave them out. */
+const daysLeftOut = computed(() => periodDays({ from: after.to, to: today }) - 1)
 
 const ruleLabels: Record<string, string> = {
   pull_without_kanban: "Pull without a Kanban",
@@ -437,8 +448,31 @@ watch(deviationList, () => {
               </select>
             </label>
           </div>
-          <ul class="max-w-prose list-disc space-y-1 pl-5 text-sm">
-            <li v-for="(item, itemIndex) in chosenChange.items" :key="itemIndex">{{ item }}</li>
+          <ul
+            aria-label="What changed"
+            class="divide-y divide-base-300 rounded-box border border-base-300 text-sm"
+          >
+            <li
+              v-for="(entry, entryIndex) in chosenChange.entries"
+              :key="entryIndex"
+              class="grid gap-x-4 gap-y-1.5 px-4 py-2.5 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:items-baseline"
+            >
+              <p class="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                <span class="font-semibold break-words">{{ entry.name }}</span>
+                <span v-if="entryKinds[entry.kind]" class="text-xs opacity-70">
+                  {{ entryKinds[entry.kind] }}
+                </span>
+              </p>
+              <ul v-if="entry.facts.length > 0" class="flex flex-wrap gap-1.5">
+                <li
+                  v-for="(fact, factIndex) in entry.facts"
+                  :key="factIndex"
+                  class="rounded-field bg-base-200 px-2 py-0.5"
+                >
+                  {{ fact }}
+                </li>
+              </ul>
+            </li>
           </ul>
           <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-x-3 text-sm">
             <div class="rounded-box border border-base-300 px-4 py-3">
@@ -481,6 +515,11 @@ watch(deviationList, () => {
               Another Line change falls in these periods ({{
                 otherChanges.map((one) => atLabel(one.at)).join(", ")
               }}): its effect mixes in.
+            </template>
+            <template v-if="daysLeftOut > 0">
+              After ends on {{ dayLabel(after.to) }}: the {{ dayCount(daysLeftOut) }} since then,
+              and their Deviations, are not in these measures. To see them, pick a later Line change
+              or Custom dates.
             </template>
           </p>
         </template>

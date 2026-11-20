@@ -329,6 +329,22 @@ pub type LineChange {
     at: String,
     /// What changed, one sentence for each Work Station or Team Member.
     items: List(String),
+    /// The same changes as `items`, one entry each, for a list that shows
+    /// the name apart from the facts.
+    entries: List(LineChangeEntry),
+  )
+}
+
+/// What one save changed on one Work Station or Team Member.
+pub type LineChangeEntry {
+  LineChangeEntry(
+    /// `station_added`, `station_changed`, `station_removed`,
+    /// `team_member_added` or `team_member_removed`.
+    kind: String,
+    /// The Work Station or Team Member.
+    name: String,
+    /// Short facts: "3 Blue Bins", "Team Leader Anne → Bob".
+    facts: List(String),
   )
 }
 

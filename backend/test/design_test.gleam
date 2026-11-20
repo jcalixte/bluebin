@@ -684,22 +684,53 @@ pub fn line_changes_say_what_changed_newest_first_test() {
   )
 
   let assert Ok(changes) = design.line_changes(connection)
-  assert changes
+  assert list.map(changes, fn(change) { #(change.at, change.items) })
     == [
-      wire.LineChange(at: "2026-11-08T08:00:00Z", items: [
+      #("2026-11-08T08:00:00Z", [
         "Review: Team Members swapped (+Bob, −Anne), Team Leader Anne → Bob, moved from step 2 to step 3, moved into Branch B",
       ]),
-      wire.LineChange(at: "2026-11-07T08:00:00Z", items: [
+      #("2026-11-07T08:00:00Z", [
         "Review added: 1 Blue Bin, 2 Team Members (Anne, pe-gone)",
       ]),
-      wire.LineChange(at: "2026-11-06T08:00:00Z", items: ["Review removed"]),
-      wire.LineChange(at: "2026-11-03T14:00:00Z", items: [
+      #("2026-11-06T08:00:00Z", ["Review removed"]),
+      #("2026-11-03T14:00:00Z", [
         "Review: Blue Bins 2 → 3, Team Members 1 → 2 (+Bob)",
         "Team Member Bob added",
       ]),
-      wire.LineChange(at: "2026-11-02T09:00:00Z", items: [
+      #("2026-11-02T09:00:00Z", [
         "Review added: 2 Blue Bins, 1 Team Member (Anne)",
       ]),
+    ]
+  assert list.map(changes, fn(change) { change.entries })
+    == [
+      [
+        wire.LineChangeEntry("station_changed", "Review", [
+          "Team Members swapped (+Bob, −Anne)",
+          "Team Leader Anne → Bob",
+          "moved from step 2 to step 3",
+          "moved into Branch B",
+        ]),
+      ],
+      [
+        wire.LineChangeEntry("station_added", "Review", [
+          "1 Blue Bin",
+          "2 Team Members (Anne, pe-gone)",
+        ]),
+      ],
+      [wire.LineChangeEntry("station_removed", "Review", [])],
+      [
+        wire.LineChangeEntry("station_changed", "Review", [
+          "Blue Bins 2 → 3",
+          "Team Members 1 → 2 (+Bob)",
+        ]),
+        wire.LineChangeEntry("team_member_added", "Bob", []),
+      ],
+      [
+        wire.LineChangeEntry("station_added", "Review", [
+          "2 Blue Bins",
+          "1 Team Member (Anne)",
+        ]),
+      ],
     ]
 }
 

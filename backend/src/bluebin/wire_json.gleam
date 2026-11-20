@@ -315,6 +315,15 @@ pub fn line_change(value: wire.LineChange) -> json.Json {
   json.object([
     #("at", json.string(value.at)),
     #("items", json.array(value.items, json.string)),
+    #("entries", json.array(value.entries, line_change_entry)),
+  ])
+}
+
+pub fn line_change_entry(value: wire.LineChangeEntry) -> json.Json {
+  json.object([
+    #("kind", json.string(value.kind)),
+    #("name", json.string(value.name)),
+    #("facts", json.array(value.facts, json.string)),
   ])
 }
 

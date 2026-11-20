@@ -286,6 +286,24 @@ export type LineChange = {
   at: string
   /** What changed, one sentence for each Work Station or Team Member. */
   items: string[]
+  /**
+   * The same changes as `items`, one entry each, for a list that shows
+   * the name apart from the facts.
+   */
+  entries: LineChangeEntry[]
+}
+
+/** What one save changed on one Work Station or Team Member. */
+export type LineChangeEntry = {
+  /**
+   * `station_added`, `station_changed`, `station_removed`,
+   * `team_member_added` or `team_member_removed`.
+   */
+  kind: string
+  /** The Work Station or Team Member. */
+  name: string
+  /** Short facts: "3 Blue Bins", "Team Leader Anne → Bob". */
+  facts: string[]
 }
 
 export type BlueBin = {

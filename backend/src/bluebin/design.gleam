@@ -1238,7 +1238,7 @@ pub fn line_changes(
             None, _ -> states
           }
           case describe(event, before, names) {
-            Some(text) -> #(states, [#(second, at, text), ..items])
+            Some(entry) -> #(states, [#(second, at, entry), ..items])
             None -> #(states, items)
           }
         }
@@ -1247,18 +1247,19 @@ pub fn line_changes(
   // Oldest first in, newest first out: a change keeps the time of its first event.
   list.reverse(items)
   |> list.fold([], fn(changes, item) {
-    let #(second, at, text) = item
+    let #(second, at, entry) = item
     case changes {
-      [#(last, opened_at, texts), ..rest] if second - last <= save_window -> [
-        #(second, opened_at, [text, ..texts]),
+      [#(last, opened_at, entries), ..rest] if second - last <= save_window -> [
+        #(second, opened_at, [entry, ..entries]),
         ..rest
       ]
-      _ -> [#(second, at, [text]), ..changes]
+      _ -> [#(second, at, [entry]), ..changes]
     }
   })
   |> list.map(fn(change) {
-    let #(_, at, texts) = change
-    wire.LineChange(at:, items: list.reverse(texts))
+    let #(_, at, entries) = change
+    let entries = list.reverse(entries)
+    wire.LineChange(at:, items: list.map(entries, sentence), entries:)
   })
   |> Ok
 }
@@ -1303,7 +1304,7 @@ fn describe(
   event: LineEvent,
   before: Option(StationState),
   names: Dict(String, String),
-) -> Option(String) {
+) -> Option(wire.LineChangeEntry) {
   let now = event.state
   let name_of = fn(id) { dict.get(names, id) |> result.unwrap(id) }
   let leader = fn(state: StationState) {
@@ -1314,20 +1315,22 @@ fn describe(
   }
   let named = fn(ids) { list.map(ids, name_of) |> string.join(", ") }
   let size = fn(state: StationState) {
-    plural(state.blue_bins, "Blue Bin")
-    <> ", "
-    <> plural(list.length(state.team_members), "Team Member")
-    <> case state.team_members {
-      [] -> ""
-      ids -> " (" <> named(ids) <> ")"
-    }
+    [
+      plural(state.blue_bins, "Blue Bin"),
+      plural(list.length(state.team_members), "Team Member")
+        <> case state.team_members {
+        [] -> ""
+        ids -> " (" <> named(ids) <> ")"
+      },
+    ]
+  }
+  let entry = fn(name, facts) {
+    Some(wire.LineChangeEntry(kind: event.change, name:, facts:))
   }
   case event.change, before {
-    "station_added", _ -> Some(now.name <> " added: " <> size(now))
-    "station_removed", _ -> Some(event.name <> " removed")
-    "team_member_added", _ -> Some("Team Member " <> event.name <> " added")
-    "team_member_removed", _ -> Some("Team Member " <> event.name <> " removed")
-    "station_changed", None -> Some(now.name <> ": " <> size(now))
+    "station_added", _ | "station_changed", None -> entry(now.name, size(now))
+    "station_removed", _ | "team_member_added", _ | "team_member_removed", _ ->
+      entry(event.name, [])
     "station_changed", Some(old) -> {
       let joined =
         list.filter(now.team_members, fn(id) {
@@ -1398,11 +1401,23 @@ fn describe(
       |> fn(parts) {
         case parts {
           [] -> None
-          _ -> Some(now.name <> ": " <> string.join(parts, ", "))
+          _ -> entry(now.name, parts)
         }
       }
     }
     _, _ -> None
+  }
+}
+
+/// One sentence for the entry, where only text fits: a `<select>` option.
+fn sentence(entry: wire.LineChangeEntry) -> String {
+  let facts = string.join(entry.facts, ", ")
+  case entry.kind {
+    "station_added" -> entry.name <> " added: " <> facts
+    "station_removed" -> entry.name <> " removed"
+    "team_member_added" -> "Team Member " <> entry.name <> " added"
+    "team_member_removed" -> "Team Member " <> entry.name <> " removed"
+    _ -> entry.name <> ": " <> facts
   }
 }
 
