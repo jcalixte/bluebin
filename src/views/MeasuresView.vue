@@ -437,8 +437,8 @@ watch(deviationList, () => {
               </select>
             </label>
           </div>
-          <ul class="list-inside list-disc text-sm">
-            <li v-for="item in chosenChange.items" :key="item">{{ item }}</li>
+          <ul class="max-w-prose list-disc space-y-1 pl-5 text-sm">
+            <li v-for="(item, itemIndex) in chosenChange.items" :key="itemIndex">{{ item }}</li>
           </ul>
           <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-x-3 text-sm">
             <div class="rounded-box border border-base-300 px-4 py-3">
