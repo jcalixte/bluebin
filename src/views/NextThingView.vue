@@ -8,7 +8,7 @@ import RaiseReworkDialog from "../components/RaiseReworkDialog.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
 import { useWorkspaces } from "../composables/useWorkspaces"
-import type { Assignment, FlowConfirm, NextThing, WorkStation } from "../types"
+import type { Assignment, FlowConfirm, NextThing, PriorityList, WorkStation } from "../types"
 
 /** Team Members differ from one Line to the next, and Line ids from one Workspace to the next. */
 const storageKey = `bluebin.teamMember.${workspaceOwner ? `${workspaceOwner}/` : ""}${lineId}`
@@ -59,6 +59,21 @@ const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 const next = computed(() => view.value?.next ?? null)
 
 const waiting = computed(() => (view.value?.assignments ?? []).filter((one) => !one.active))
+
+function kanbans(list: PriorityList) {
+  return list.items.filter((item) => item.kind === "kanban").length
+}
+
+const kanbanTotal = computed(() =>
+  (view.value?.priorityLists ?? []).reduce((total, list) => total + kanbans(list), 0),
+)
+
+/** Past this many, the tokens would wrap; the number still tells the count. */
+const maxTokens = 8
+
+function authorize(count: number) {
+  return count === 1 ? "Kanban authorizes a pull" : "Kanbans authorize a pull"
+}
 
 function handOverTo(assignment: Assignment) {
   return (
@@ -454,6 +469,26 @@ function since(at: string) {
           <h3 id="stations-title" class="text-xs font-semibold uppercase tracking-wide opacity-70">
             My Work Stations, nearest to Deployment first
           </h3>
+          <div
+            class="mt-3 flex items-center gap-4 rounded-box border border-base-300 bg-base-100 px-4 py-3"
+          >
+            <span
+              class="text-3xl font-semibold leading-none tabular-nums"
+              :class="kanbanTotal > 0 ? 'text-primary' : 'opacity-70'"
+            >
+              {{ kanbanTotal }}
+            </span>
+            <p class="min-w-0 text-sm leading-snug">
+              <span class="font-medium">{{ authorize(kanbanTotal) }}</span>
+              <span class="block text-xs opacity-70">
+                {{
+                  kanbanTotal > 0
+                    ? "At all your Work Stations. Pull at the one nearest to Deployment first."
+                    : "Pulling a Piece now would be a Deviation."
+                }}
+              </span>
+            </p>
+          </div>
           <div class="mt-3 grid gap-3">
             <article
               v-for="list in view.priorityLists"
@@ -464,7 +499,27 @@ function since(at: string) {
               <header class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <h4 class="font-semibold leading-tight">{{ list.name }}</h4>
-                  <p class="mt-0.5 text-xs opacity-70">Priority List</p>
+                  <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <span class="opacity-70">Priority List ·</span>
+                    <span
+                      v-if="kanbans(list) > 0"
+                      class="flex items-center gap-0.5"
+                      aria-hidden="true"
+                    >
+                      <span
+                        v-for="token in Math.min(kanbans(list), maxTokens)"
+                        :key="token"
+                        class="h-3.5 w-2.5 rounded-[2px] border border-primary bg-primary/15"
+                      />
+                      <span v-if="kanbans(list) > maxTokens" class="ml-0.5 opacity-70">+</span>
+                    </span>
+                    <span
+                      class="tabular-nums"
+                      :class="kanbans(list) > 0 ? 'font-medium' : 'opacity-70'"
+                    >
+                      {{ kanbans(list) }} {{ kanbans(list) === 1 ? "Kanban" : "Kanbans" }}
+                    </span>
+                  </p>
                 </div>
                 <span
                   v-if="stopped(list.station)"
