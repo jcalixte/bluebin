@@ -1213,6 +1213,14 @@ pub fn line_changes(
       },
     ),
   )
+  use names <- result.try(
+    query(connection, "select id, name from team_member", [], {
+      use id <- decode.field(0, decode.string)
+      use name <- decode.field(1, decode.string)
+      decode.success(#(id, name))
+    }),
+  )
+  let names = dict.from_list(names)
   let #(_, items) =
     list.fold(events, #(dict.new(), []), fn(acc, row) {
       let #(states, items) = acc
@@ -1229,7 +1237,7 @@ pub fn line_changes(
             Some(id), _ -> dict.insert(states, id, event.state)
             None, _ -> states
           }
-          case describe(event, before) {
+          case describe(event, before, names) {
             Some(text) -> #(states, [#(second, at, text), ..items])
             None -> #(states, items)
           }
@@ -1291,12 +1299,28 @@ fn line_event_decoder() -> decode.Decoder(LineEvent) {
   ))
 }
 
-fn describe(event: LineEvent, before: Option(StationState)) -> Option(String) {
+fn describe(
+  event: LineEvent,
+  before: Option(StationState),
+  names: Dict(String, String),
+) -> Option(String) {
   let now = event.state
+  let name_of = fn(id) { dict.get(names, id) |> result.unwrap(id) }
+  let leader = fn(state: StationState) {
+    case state.team_leader {
+      "" -> "none"
+      id -> name_of(id)
+    }
+  }
+  let named = fn(ids) { list.map(ids, name_of) |> string.join(", ") }
   let size = fn(state: StationState) {
     plural(state.blue_bins, "Blue Bin")
     <> ", "
     <> plural(list.length(state.team_members), "Team Member")
+    <> case state.team_members {
+      [] -> ""
+      ids -> " (" <> named(ids) <> ")"
+    }
   }
   case event.change, before {
     "station_added", _ -> Some(now.name <> " added: " <> size(now))
@@ -1304,7 +1328,25 @@ fn describe(event: LineEvent, before: Option(StationState)) -> Option(String) {
     "team_member_added", _ -> Some("Team Member " <> event.name <> " added")
     "team_member_removed", _ -> Some("Team Member " <> event.name <> " removed")
     "station_changed", None -> Some(now.name <> ": " <> size(now))
-    "station_changed", Some(old) ->
+    "station_changed", Some(old) -> {
+      let joined =
+        list.filter(now.team_members, fn(id) {
+          !list.contains(old.team_members, id)
+        })
+      let left =
+        list.filter(old.team_members, fn(id) {
+          !list.contains(now.team_members, id)
+        })
+      let who =
+        list.append(
+          list.map(joined, fn(id) { "+" <> name_of(id) }),
+          list.map(left, fn(id) { "−" <> name_of(id) }),
+        )
+        |> string.join(", ")
+      let #(old_count, now_count) = #(
+        list.length(old.team_members),
+        list.length(now.team_members),
+      )
       [
         #(old.name != now.name, "renamed from " <> old.name),
         #(
@@ -1315,19 +1357,37 @@ fn describe(event: LineEvent, before: Option(StationState)) -> Option(String) {
             <> int.to_string(now.blue_bins),
         ),
         #(
-          list.length(old.team_members) != list.length(now.team_members),
+          old_count != now_count,
           "Team Members "
-            <> int.to_string(list.length(old.team_members))
+            <> int.to_string(old_count)
             <> " → "
-            <> int.to_string(list.length(now.team_members)),
+            <> int.to_string(now_count)
+            <> " ("
+            <> who
+            <> ")",
         ),
         #(
-          list.length(old.team_members) == list.length(now.team_members)
-            && old.team_members != now.team_members,
-          "other Team Members",
+          old_count == now_count && who != "",
+          "Team Members swapped (" <> who <> ")",
         ),
-        #(old.team_leader != now.team_leader, "new Team Leader"),
-        #(old.position != now.position || old.branch != now.branch, "moved"),
+        #(
+          old.team_leader != now.team_leader,
+          "Team Leader " <> leader(old) <> " → " <> leader(now),
+        ),
+        #(
+          old.position != now.position,
+          "moved from step "
+            <> int.to_string(old.position)
+            <> " to step "
+            <> int.to_string(now.position),
+        ),
+        #(old.branch != now.branch, case old.branch, now.branch {
+          None, Some(branch) -> "moved into Branch " <> branch
+          Some(branch), None -> "moved out of Branch " <> branch
+          Some(from), Some(to) ->
+            "moved from Branch " <> from <> " to Branch " <> to
+          None, None -> ""
+        }),
       ]
       |> list.filter_map(fn(part) {
         case part.0 {
@@ -1341,6 +1401,7 @@ fn describe(event: LineEvent, before: Option(StationState)) -> Option(String) {
           _ -> Some(now.name <> ": " <> string.join(parts, ", "))
         }
       }
+    }
     _, _ -> None
   }
 }

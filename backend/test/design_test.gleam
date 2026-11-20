@@ -625,6 +625,11 @@ fn line_changed(connection: sqlight.Connection, at: String, payload: String) {
 
 pub fn line_changes_say_what_changed_newest_first_test() {
   use connection <- with_seeded_database()
+  let assert Ok(_) =
+    sqlight.exec(
+      "insert into team_member (id, name) values ('pe-a', 'Anne'), ('pe-b', 'Bob')",
+      connection,
+    )
   let station = fn(change, bins, members) {
     "{\"change\": \""
     <> change
@@ -665,17 +670,35 @@ pub fn line_changes_say_what_changed_newest_first_test() {
     "2026-11-06T08:00:00Z",
     "{\"change\": \"station_removed\", \"station\": \"ws-x\", \"name\": \"Review\"}",
   )
+  line_changed(
+    connection,
+    "2026-11-07T08:00:00Z",
+    station("station_added", "1", "[\"pe-a\", \"pe-gone\"]"),
+  )
+  line_changed(
+    connection,
+    "2026-11-08T08:00:00Z",
+    "{\"change\": \"station_changed\", \"station\": \"ws-x\", \"name\": \"Review\",
+    \"position\": 3, \"branch\": \"B\", \"blueBins\": 1, \"teamLeader\": \"pe-b\",
+    \"teamMembers\": [\"pe-b\", \"pe-gone\"]}",
+  )
 
   let assert Ok(changes) = design.line_changes(connection)
   assert changes
     == [
+      wire.LineChange(at: "2026-11-08T08:00:00Z", items: [
+        "Review: Team Members swapped (+Bob, −Anne), Team Leader Anne → Bob, moved from step 2 to step 3, moved into Branch B",
+      ]),
+      wire.LineChange(at: "2026-11-07T08:00:00Z", items: [
+        "Review added: 1 Blue Bin, 2 Team Members (Anne, pe-gone)",
+      ]),
       wire.LineChange(at: "2026-11-06T08:00:00Z", items: ["Review removed"]),
       wire.LineChange(at: "2026-11-03T14:00:00Z", items: [
-        "Review: Blue Bins 2 → 3, Team Members 1 → 2",
+        "Review: Blue Bins 2 → 3, Team Members 1 → 2 (+Bob)",
         "Team Member Bob added",
       ]),
       wire.LineChange(at: "2026-11-02T09:00:00Z", items: [
-        "Review added: 2 Blue Bins, 1 Team Member",
+        "Review added: 2 Blue Bins, 1 Team Member (Anne)",
       ]),
     ]
 }

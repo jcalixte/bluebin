@@ -42,6 +42,10 @@ _Avoid_: subtask, child ticket
 The short name of a Piece: its Demand Code and its number in its Demand, for example CHK-3, and for a Sub-Piece its last Branch too, for example CHK-3 · iOS.
 _Avoid_: id, ticket number, key, US-3
 
+**Route**:
+The Work Stations of the Line that one Piece goes through, in Line order. By default a Piece goes through every Work Station.
+_Avoid_: path, workflow, itinerary, skip list
+
 **Split**:
 The point where a Piece divides into Sub-Pieces that flow in parallel, one per Branch.
 _Avoid_: fork
@@ -83,7 +87,7 @@ A Team Member who joins a Piece in another Team Member's hands, by Help the Rewo
 _Avoid_: pair, co-assignee, reviewer, contributor
 
 **Deployment**:
-The moment a complete Piece leaves the last Work Station of the Line and runs in production, even if the Client cannot use it yet.
+The moment a complete Piece leaves the last Work Station of its Route and runs in production, even if the Client cannot use it yet.
 _Avoid_: ship, push to prod, delivery, go live
 
 **Release**:
@@ -249,7 +253,7 @@ _Avoid_: hidden Line, secret Line
 - Several deployed **Pieces** can have one **Release** together, for example the web, iOS and Android **Pieces** of one **Demand**
 - Line measures count **Deployments**: **Takt Gap**, **Andon** and **Forecast** show if the **Line** keeps its pace. Client measures count **Releases**: **Lead Time** and **On-Time Delivery** show what the **Client** gets
 - The wait from **Deployment** to **Release** is **Stagnation Time** of the **Piece**, so a common **Release** date shows its cost in the **Lead Time**
-- The **Heijunka Sequence** decides which **Piece** leaves the **Backlog**; a **Kanban** from the first **Work Station** decides when
+- The **Heijunka Sequence** decides which **Piece** leaves the **Backlog**; a **Kanban** from the first **Work Station** of its **Route** decides when
 - In the **Heijunka Sequence**, each **Demand** spreads the **Pieces** it has left in the **Backlog** evenly over the Working Time it has left until its due date; each **Piece** has an ideal slot at the middle of its interval, counted from now; the earliest slot goes first, then the earliest due date, then first-in, first-out
 - A late **Demand** gets more slots in the **Heijunka Sequence**, mixed with the other **Demands**; its **Takt Gap** still uses its **Takt Time**
 - Inside one **Demand**, **Pieces** keep first-in, first-out order
@@ -261,6 +265,12 @@ _Avoid_: hidden Line, secret Line
 - A **Branch** can open a nested **Split**; an **Assembly** at a later **Work Station** of the same **Branch** closes it. A nested **Branch** does not open another **Split**
 - Each **Branch** name is unique in the **Line**, so a **Sub-Piece** shows only its last **Branch**: CHK-3 · iOS, not CHK-3 · Mobile · iOS
 - A **Piece** is complete only when all its **Sub-Pieces** pass the **Assembly**
+- A **Piece** has exactly one **Route**; a **Demand** gives the same **Route** to all its **Pieces** when they enter the **Backlog**, and a **Team Member** can change the **Route** of one **Piece** only while it waits in the **Backlog**
+- A **Piece** goes straight past a **Work Station** that is not on its **Route**: the next **Work Station** of its **Route** pulls it from the **Blue Bin** before, or from the **Backlog**, and the **Kanban** goes back to the **Work Station** whose **Blue Bin** it left
+- A **Route** keeps each **Work Station** that does an **Assembly** for the **Piece**, and the **Work Station** before each **Split** it goes through; a **Split** opens only the **Branches** on the **Route**, and the **Assembly** waits only for their **Sub-Pieces**. A **Sub-Piece** has the **Route** of its **Piece**
+- A **Piece** is deployed from the last **Work Station** of its **Route**
+- A **Work Station** pulls first the **Piece** that waits the longest in a **Blue Bin** before it on its **Route**, then the next **Piece** of the **Heijunka Sequence** whose **Route** starts there
+- **Rework** names only a **Work Station** on the **Route** of the **Piece**
 - An **Assembly** is possible only when every **Sub-Piece** of the **Piece** is in the last **Blue Bin** of its **Branch**, and needs a **Kanban** of the **Work Station** after the **Branches**
 - One **Assembly** sends one **Kanban** to the last **Work Station** of each **Branch**
 - At a **Split**, each **Branch** pulls its own **Sub-Piece** with its own **Kanban**; the **Piece** leaves the upstream **Blue Bin** only when all its **Sub-Pieces** are pulled
@@ -377,6 +387,7 @@ _Avoid_: hidden Line, secret Line
 - **Heijunka** order — resolved: computed as the **Heijunka Sequence**, released only on a **Kanban** (pull, not a timed pitch), with manual reorder allowed.
 - "Heijunka sequencer" — the part of the app that computes the **Heijunka Sequence**; a design name, not a domain term.
 - "branch" — resolved: **Branch** is the chain of **Work Stations** between a **Split** and an **Assembly**; "fork" is avoided.
+- "skip a Work Station" — resolved (2026-11-20): a **Piece** that does not need a **Work Station** (Design, or the iOS **Branch**) has a **Route** without it, and goes straight past it. It is not a **Deviation**: the **Route** is chosen in the **Backlog**, before the **Piece** enters the **Line**. A **Piece** never waits in a **Blue Bin** of a **Work Station** it skips.
 - "sub-assembly" — resolved (2026-11-11): the **Assembly** that closes a nested **Split** is an **Assembly**, the same action at a lower level. No new term.
 - **Assembly** — resolved: an explicit action, not a **Work Station**; it has no **Team Members** and no **Blue Bins**.
 - "swarm" — resolved: renamed **Help Downstream**, clearer for the team.

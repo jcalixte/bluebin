@@ -3,12 +3,15 @@ import { computed, ref } from "vue"
 import { lineFetch } from "../api"
 import { codePattern, proposeCode } from "../demandCode"
 import { useLabels } from "../composables/useLabels"
+import { useLine } from "../composables/useLine"
 import type { DemandInput } from "../wire"
 import AppModal from "./AppModal.vue"
+import RoutePicker from "./RoutePicker.vue"
 
 const emit = defineEmits<{ created: []; close: [] }>()
 
 const { labels } = useLabels()
+const { line } = useLine()
 
 /** Must match the limits of POST /api/demands in the backend. */
 const maxNameLength = 60
@@ -35,6 +38,13 @@ const code = computed({
     typedCode.value = value.toUpperCase()
   },
 })
+/** The Work Stations every Piece of the Demand skips; none by default. */
+const skips = ref<string[]>([])
+const skippedNames = computed(() =>
+  (line.value?.stations ?? [])
+    .filter((station) => skips.value.includes(station.id))
+    .map((station) => station.name),
+)
 const saving = ref(false)
 const problem = ref<string | null>(null)
 
@@ -63,6 +73,7 @@ async function create() {
         dueOn: dueOn.value,
         pieces: pieces.value,
         code: code.value,
+        skips: skips.value,
       } satisfies DemandInput),
     })
     if (!response.ok) {
@@ -139,6 +150,20 @@ async function create() {
           />
         </label>
       </div>
+      <details v-if="line" class="rounded-box border border-base-300 px-3 py-2 text-sm">
+        <summary class="cursor-pointer font-medium">
+          Route:
+          {{
+            skippedNames.length === 0 ? "every Work Station" : `skips ${skippedNames.join(", ")}`
+          }}
+        </summary>
+        <p class="mt-2 text-xs opacity-70">
+          Clear the Work Stations its {{ labels.pieces }} do not need, for example Design or one
+          Branch. A {{ labels.piece }} goes straight past them. You can change the route of one
+          {{ labels.piece }} in the Backlog.
+        </p>
+        <RoutePicker v-model="skips" class="mt-2" :stations="line.stations" />
+      </details>
       <div v-if="problem" role="alert" class="alert alert-error text-sm">
         <span>The {{ labels.demand }} was not created: {{ problem }}</span>
       </div>

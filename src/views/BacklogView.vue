@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
+import AppModal from "../components/AppModal.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import HeijunkaBox from "../components/HeijunkaBox.vue"
 import InTheLineCard from "../components/InTheLineCard.vue"
+import RoutePicker from "../components/RoutePicker.vue"
 import { useBacklog } from "../composables/useBacklog"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLabels } from "../composables/useLabels"
 import { useLine } from "../composables/useLine"
 import { useWorkspaces } from "../composables/useWorkspaces"
 
-const { backlog, error, loading, makeUrgent } = useBacklog()
+const { backlog, error, loading, makeUrgent, changeRoute } = useBacklog()
 const { pending, actionError, busy, run, recordDeviation } = useFlowRunner()
 const { labels } = useLabels()
 const { line } = useLine()
@@ -29,6 +31,37 @@ const taktLabel = computed(() => {
 
 function urgent(piece: string) {
   run((reason) => makeUrgent(piece, reason))
+}
+
+function skippedNames(skips: string[]) {
+  return (line.value?.stations ?? [])
+    .filter((station) => skips.includes(station.id))
+    .map((station) => station.name)
+}
+
+/** The Piece whose route is open for change, with the route being drawn. */
+const routing = ref<{ id: string; reference: string; skips: string[] } | null>(null)
+const routeProblem = ref<string | null>(null)
+const routeSaving = ref(false)
+
+function openRoute(piece: { id: string; reference: string; skips: string[] }) {
+  routeProblem.value = null
+  routing.value = { id: piece.id, reference: piece.reference, skips: [...piece.skips] }
+}
+
+async function saveRoute() {
+  const piece = routing.value
+  if (!piece || routeSaving.value) return
+  routeSaving.value = true
+  routeProblem.value = null
+  try {
+    await changeRoute(piece.id, piece.skips)
+    routing.value = null
+  } catch (cause) {
+    routeProblem.value = cause instanceof Error ? cause.message : String(cause)
+  } finally {
+    routeSaving.value = false
+  }
 }
 
 function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
@@ -135,18 +168,38 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                   <span class="min-w-0 truncate text-sm opacity-70">{{ piece.demandLabel }}</span>
                   <span v-if="index === 0" class="badge badge-primary badge-sm">Next out</span>
                   <span v-if="piece.urgent" class="badge badge-warning badge-sm">Urgent</span>
+                  <span
+                    v-if="piece.skips.length > 0"
+                    class="badge badge-ghost badge-sm"
+                    :title="`Goes straight past ${skippedNames(piece.skips).join(', ')}`"
+                  >
+                    Skips {{ skippedNames(piece.skips).join(", ") }}
+                  </span>
                 </p>
-                <button
-                  v-if="piece.canBeUrgent && canAct"
-                  type="button"
-                  class="btn btn-ghost btn-sm"
-                  :disabled="busy"
-                  :aria-label="`Make ${piece.reference} of ${piece.demandLabel} urgent`"
-                  title="Move this Piece to the top of the Backlog, before its turn. It is a Deviation."
-                  @click="urgent(piece.id)"
-                >
-                  Make urgent
-                </button>
+                <span class="flex gap-1">
+                  <button
+                    v-if="canAct && line"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    :disabled="busy"
+                    :aria-label="`Choose the Work Stations of ${piece.reference}`"
+                    title="Choose the Work Stations this Piece goes through"
+                    @click="openRoute(piece)"
+                  >
+                    Route
+                  </button>
+                  <button
+                    v-if="piece.canBeUrgent && canAct"
+                    type="button"
+                    class="btn btn-ghost btn-sm"
+                    :disabled="busy"
+                    :aria-label="`Make ${piece.reference} of ${piece.demandLabel} urgent`"
+                    title="Move this Piece to the top of the Backlog, before its turn. It is a Deviation."
+                    @click="urgent(piece.id)"
+                  >
+                    Make urgent
+                  </button>
+                </span>
               </li>
             </ol>
           </div>
@@ -174,7 +227,9 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                     >
                       {{ dateLabel(cell.day, { weekday: "short", day: "numeric" }) }}
                     </th>
-                    <th class="sticky right-0 border-l border-base-300 bg-base-100 text-center">Total</th>
+                    <th class="sticky right-0 border-l border-base-300 bg-base-100 text-center">
+                      Total
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,6 +265,26 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
 
       <InTheLineCard v-if="line" :line="line" />
     </div>
+
+    <AppModal v-if="routing && line" @close="routing = null">
+      <form class="grid gap-3" @submit.prevent="saveRoute">
+        <h3 class="text-lg font-semibold">Route of {{ routing.reference }}</h3>
+        <p class="text-sm opacity-80">
+          Clear the Work Stations this {{ labels.piece }} does not need: it goes straight past them.
+          The route changes only while it waits in the Backlog.
+        </p>
+        <RoutePicker v-model="routing.skips" :stations="line.stations" />
+        <div v-if="routeProblem" role="alert" class="alert alert-error text-sm">
+          <span>The route did not change: {{ routeProblem }}</span>
+        </div>
+        <div class="modal-action mt-1">
+          <button type="button" class="btn btn-ghost" @click="routing = null">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="routeSaving">
+            Save the route
+          </button>
+        </div>
+      </form>
+    </AppModal>
 
     <DeviationDialog
       v-if="pending"

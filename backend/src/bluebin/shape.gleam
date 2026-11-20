@@ -6,8 +6,10 @@
 //// does the Assembly. A Branch can open one nested Split, closed by a later
 //// Work Station of the same Branch. `src/shape.ts` mirrors this module.
 
+import gleam/bool
 import gleam/dynamic/decode
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -268,4 +270,69 @@ fn ends(nodes: List(Node), lane: Option(String), node: Node) -> List(String) {
     string.compare(option.unwrap(a.0, ""), option.unwrap(b.0, ""))
   })
   |> list.map(fn(entry) { { entry.1 }.id })
+}
+
+/// A route as stored: a JSON array of the Work Stations a Piece skips.
+pub fn skips_of(route: String) -> List(String) {
+  json.parse(route, decode.list(decode.string)) |> result.unwrap([])
+}
+
+/// The Work Stations a Piece goes through: every one but those it skips.
+pub fn kept(nodes: List(Node), skips: List(String)) -> List(Node) {
+  list.filter(nodes, fn(node) { !list.contains(skips, node.id) })
+}
+
+/// The Work Station a Piece deploys from: the last one of its route, which is
+/// on the trunk because a Line ends with one.
+pub fn last(nodes: List(Node)) -> Result(Node, Nil) {
+  nodes
+  |> list.filter(fn(node) { node.branch == None })
+  |> list.reduce(fn(a, b) {
+    case a.position >= b.position {
+      True -> a
+      False -> b
+    }
+  })
+}
+
+pub type RouteError {
+  UnknownStation(String)
+  SkipsEveryStation
+  /// The Work Station would assemble Branches the Piece keeps.
+  SkipsAnAssembly(String)
+  /// The Work Station has nothing left to pull the Piece from.
+  Stranded(String)
+}
+
+/// A Piece can skip any Work Station but one that would do its Assembly, and
+/// each Work Station it keeps must still have a place to pull from. Answers
+/// the skipped ids, sorted and unique.
+pub fn check_route(
+  nodes: List(Node),
+  skips: List(String),
+) -> Result(List(String), RouteError) {
+  let skips = list.unique(skips) |> list.sort(string.compare)
+  let known = fn(id) { list.any(nodes, fn(node) { node.id == id }) }
+  use _ <- result.try(case list.find(skips, fn(id) { !known(id) }) {
+    Ok(id) -> Error(UnknownStation(id))
+    Error(Nil) -> Ok(Nil)
+  })
+  let route = kept(nodes, skips)
+  use <- bool.guard(route == [], Error(SkipsEveryStation))
+  let skipped = list.filter(nodes, fn(node) { list.contains(skips, node.id) })
+  let assembles =
+    list.find(skipped, fn(node) {
+      case inflow([node, ..route], node) {
+        Ok(Assembly(_)) -> True
+        _ -> False
+      }
+    })
+  use _ <- result.try(case assembles {
+    Ok(node) -> Error(SkipsAnAssembly(node.id))
+    Error(Nil) -> Ok(Nil)
+  })
+  case list.find(route, fn(node) { inflow(route, node) == Error(Nil) }) {
+    Ok(node) -> Error(Stranded(node.id))
+    Error(Nil) -> Ok(skips)
+  }
 }

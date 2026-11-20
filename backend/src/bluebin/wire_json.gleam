@@ -182,6 +182,7 @@ pub fn backlog_piece(value: wire.BacklogPiece) -> json.Json {
     #("slotHours", json.float(value.slot_hours)),
     #("urgent", json.bool(value.urgent)),
     #("canBeUrgent", json.bool(value.can_be_urgent)),
+    #("skips", json.array(value.skips, json.string)),
   ])
 }
 
@@ -324,6 +325,7 @@ pub fn blue_bin(value: wire.BlueBin) -> json.Json {
     #("piece", json.nullable(value.piece, json.string)),
     #("demand", json.nullable(value.demand, json.string)),
     #("pulledBy", json.nullable(value.pulled_by, json.string)),
+    #("deploysHere", json.bool(value.deploys_here)),
   ])
 }
 
@@ -332,6 +334,7 @@ pub fn overflow(value: wire.Overflow) -> json.Json {
     #("id", json.string(value.id)),
     #("piece", json.string(value.piece)),
     #("demand", json.string(value.demand)),
+    #("deploysHere", json.bool(value.deploys_here)),
   ])
 }
 
@@ -741,7 +744,19 @@ pub fn demand_input_decoder() -> decode.Decoder(wire.DemandInput) {
     None,
     decode.optional(decode.string),
   )
-  decode.success(wire.DemandInput(label:, client:, due_on:, pieces:, code:))
+  use skips <- decode.optional_field(
+    "skips",
+    None,
+    decode.optional(decode.list(decode.string)),
+  )
+  decode.success(wire.DemandInput(
+    label:,
+    client:,
+    due_on:,
+    pieces:,
+    code:,
+    skips:,
+  ))
 }
 
 pub fn demand_code_input_decoder() -> decode.Decoder(wire.DemandCodeInput) {
@@ -757,6 +772,12 @@ pub fn urgent_input_decoder() -> decode.Decoder(wire.UrgentInput) {
     decode.optional(decode.string),
   )
   decode.success(wire.UrgentInput(piece:, reason:))
+}
+
+pub fn route_input_decoder() -> decode.Decoder(wire.RouteInput) {
+  use piece <- decode.field("piece", decode.string)
+  use skips <- decode.field("skips", decode.list(decode.string))
+  decode.success(wire.RouteInput(piece:, skips:))
 }
 
 pub fn pull_input_decoder() -> decode.Decoder(wire.PullInput) {

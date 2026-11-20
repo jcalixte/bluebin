@@ -125,10 +125,6 @@ function recordRework(madeBy: string, description: string) {
   void run(() => raiseRework(asked.station, asked.piece, madeBy, description))
 }
 
-const lastPosition = computed(() =>
-  (line.value?.stations ?? []).reduce((last, station) => Math.max(last, station.position), 0),
-)
-
 const activePieces = computed(() => {
   const active = new Map<string, { piece: string; station: string; position: number }>()
   for (const station of line.value?.stations ?? []) {
@@ -314,7 +310,6 @@ const taktLabel = computed(() => {
             <WorkStationCard
               :station="station"
               :active-pieces="activePieces"
-              :last="station.position === lastPosition"
               :assembly="assembles(station)"
               :busy="busy"
               :andons="line?.andons ?? []"

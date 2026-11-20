@@ -1,5 +1,6 @@
 import bluebin/calendar
 import bluebin/demand.{type Demand}
+import bluebin/shape
 import bluebin/wire
 import bluebin/wire_json
 import gleam/bool
@@ -22,6 +23,8 @@ pub type Waiting {
     demand: String,
     arrived: Int,
     urgent: Option(Int),
+    /// The Work Stations it skips.
+    skips: List(String),
   )
 }
 
@@ -42,7 +45,8 @@ pub type Effect {
 
 const waiting_sql =
   "
-select p.id, p.reference, p.demand_id, p.rowid, p.urgent
+select p.id, p.reference, p.demand_id, p.rowid, p.urgent,
+       coalesce(p.skips, '[]')
 from piece p
 join demand d on d.id = p.demand_id
 where p.state = 'backlog' and p.parent_id is null and d.state = 'active'
@@ -65,7 +69,15 @@ fn waiting_decoder() -> decode.Decoder(Waiting) {
   use demand <- decode.field(2, decode.string)
   use arrived <- decode.field(3, decode.int)
   use urgent <- decode.field(4, decode.optional(decode.int))
-  decode.success(Waiting(id:, reference:, demand:, arrived:, urgent:))
+  use route <- decode.field(5, decode.string)
+  decode.success(Waiting(
+    id:,
+    reference:,
+    demand:,
+    arrived:,
+    urgent:,
+    skips: shape.skips_of(route),
+  ))
 }
 
 /// The Heijunka Sequence (F23): the Pieces made urgent by hand first, in the
@@ -292,6 +304,7 @@ pub fn to_json(backlog: Backlog, mix: List(MixRow)) -> json.Json {
         slot_hours: demand.round_to_tenth(placed.slot_hours),
         urgent: placed.piece.urgent != None,
         can_be_urgent: list.contains(urgent_ok, placed.piece.id),
+        skips: placed.piece.skips,
       )
     }),
     mix: list.map(mix, fn(row) {

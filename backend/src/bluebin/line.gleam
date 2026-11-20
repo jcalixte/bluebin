@@ -1,4 +1,5 @@
 import bluebin/db
+import bluebin/shape
 import bluebin/text
 import bluebin/wire
 import gleam/dict.{type Dict}
@@ -29,6 +30,8 @@ pub type Parked {
     demand: String,
     /// Comma-separated Branches that already took their Sub-Piece at a Split.
     pulled_by: Option(String),
+    /// The Work Stations it skips, as stored.
+    route: String,
   )
 }
 
@@ -100,8 +103,18 @@ pub fn load(
   use quality <- result.try(query_quality(connection))
   use deviations <- result.try(query_deviations(connection))
 
+  let nodes =
+    list.map(stations, fn(one) {
+      shape.Node(
+        id: one.id,
+        position: one.position,
+        branch: one.branch,
+        parent: one.parent_branch,
+      )
+    })
   let rows =
     Rows(
+      nodes:,
       parked: by_station(parked, fn(one) { one.station_id }),
       members: by_station(members, fn(one) { one.station_id }),
       in_progress: by_station(in_progress, fn(one) { one.station_id }),
@@ -120,6 +133,7 @@ pub fn load(
 
 type Rows {
   Rows(
+    nodes: List(shape.Node),
     parked: Dict(String, List(Parked)),
     members: Dict(String, List(Member)),
     in_progress: Dict(String, List(InProgress)),
@@ -175,9 +189,14 @@ fn wire_station(station: Station, rows: Rows) -> wire.WorkStation {
     parent_branch: station.parent_branch,
     blue_bin_count: station.blue_bins,
     team_leader: station.team_leader,
-    blue_bins: bin_rows(1, station.blue_bins, in_bins),
+    blue_bins: bin_rows(1, station.blue_bins, in_bins, deploys_here(rows, _)),
     overflow: list.map(over, fn(piece) {
-      wire.Overflow(id: piece.id, piece: piece.reference, demand: piece.demand)
+      wire.Overflow(
+        id: piece.id,
+        piece: piece.reference,
+        demand: piece.demand,
+        deploys_here: deploys_here(rows, piece),
+      )
     }),
     team_members: list.map(of(rows.members, station), fn(member) {
       wire.Member(id: member.id, name: member.name, busy: member.busy)
@@ -230,7 +249,20 @@ fn wire_helpers(helpers: List(Helper)) -> List(wire.TeamMemberName) {
   })
 }
 
-fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(wire.BlueBin) {
+/// The Piece waits in the last Work Station of its route.
+fn deploys_here(rows: Rows, piece: Parked) -> Bool {
+  case shape.last(shape.kept(rows.nodes, shape.skips_of(piece.route))) {
+    Ok(last) -> last.id == piece.station_id
+    Error(Nil) -> False
+  }
+}
+
+fn bin_rows(
+  slot: Int,
+  last: Int,
+  pieces: List(Parked),
+  deploys_here: fn(Parked) -> Bool,
+) -> List(wire.BlueBin) {
   case slot > last {
     True -> []
     False -> {
@@ -245,8 +277,9 @@ fn bin_rows(slot: Int, last: Int, pieces: List(Parked)) -> List(wire.BlueBin) {
           piece: option.map(here, fn(one) { one.reference }),
           demand: option.map(here, fn(one) { one.demand }),
           pulled_by: option.then(here, fn(one) { one.pulled_by }),
+          deploys_here: option.map(here, deploys_here) |> option.unwrap(False),
         )
-      [row, ..bin_rows(slot + 1, last, rest)]
+      [row, ..bin_rows(slot + 1, last, rest, deploys_here)]
     }
   }
 }
@@ -293,12 +326,21 @@ fn query_parked(
     use reference <- decode.field(2, decode.string)
     use demand <- decode.field(3, decode.string)
     use pulled_by <- decode.field(4, decode.optional(decode.string))
-    decode.success(Parked(station_id:, id:, reference:, demand:, pulled_by:))
+    use route <- decode.field(5, decode.string)
+    decode.success(Parked(
+      station_id:,
+      id:,
+      reference:,
+      demand:,
+      pulled_by:,
+      route:,
+    ))
   }
   sqlight.query(
     "select p.station_id, p.id, p.reference, d.label,
             (select group_concat(s.branch, ', ') from piece s
-             where s.parent_id = p.id and s.state != 'assembled')
+             where s.parent_id = p.id and s.state != 'assembled'),
+            coalesce(p.skips, '[]')
      from piece p
      join demand d on d.id = p.demand_id
      where p.state = 'in_bin' and p.station_id is not null

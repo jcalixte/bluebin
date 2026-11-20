@@ -1200,7 +1200,7 @@ fn waiting(
   arrived: Int,
   urgent: option.Option(Int),
 ) -> heijunka.Waiting {
-  heijunka.Waiting(id:, reference: id, demand:, arrived:, urgent:)
+  heijunka.Waiting(id:, reference: id, demand:, arrived:, urgent:, skips: [])
 }
 
 fn ids(sequence: List(heijunka.Placed)) -> List(String) {
@@ -1659,10 +1659,11 @@ pub fn a_version_4_database_gets_the_parent_branch_column_test() {
   exec(
     connection,
     "alter table work_station drop column parent_branch;
+     alter table piece drop column skips;
      pragma user_version = 4;",
   )
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
-  assert count(connection, "pragma user_version") == 5
+  assert count(connection, "pragma user_version") == 6
   assert count(
       connection,
       "select count(*) from work_station where parent_branch is null",
@@ -1670,9 +1671,25 @@ pub fn a_version_4_database_gets_the_parent_branch_column_test() {
     == stations
 }
 
+pub fn a_version_5_database_gets_a_route_for_each_piece_test() {
+  use connection <- with_seeded_database()
+  let pieces = count(connection, "select count(*) from piece")
+  exec(
+    connection,
+    "alter table piece drop column skips;
+     pragma user_version = 5;",
+  )
+  let assert Ok(Nil) = db.prepare(connection, db.Demo)
+  assert count(connection, "pragma user_version") == 6
+  // Every Piece goes through every Work Station, as before.
+  assert count(connection, "select count(*) from piece where skips is null")
+    == pieces
+  let assert Ok(_) = flow.pull(connection, "ws-ios", None, None)
+}
+
 pub fn a_new_database_gets_the_schema_once_test() {
   use connection <- with_seeded_database()
-  assert count(connection, "pragma user_version") == 5
+  assert count(connection, "pragma user_version") == 6
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "select count(*) from line_label") == 1
   assert count(connection, "select count(*) from working_calendar") == 1
@@ -1808,11 +1825,12 @@ pub fn a_version_2_database_migrates_to_the_latest_version_test() {
      alter table demand drop column code;
      alter table piece drop column number;
      alter table work_station drop column parent_branch;
+     alter table piece drop column skips;
      pragma user_version = 2;",
   )
 
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
-  assert count(connection, "pragma user_version") == 5
+  assert count(connection, "pragma user_version") == 6
   assert count(connection, "select count(*) from piece") == pieces
   assert count(connection, "select count(*) from flow_event") == events
   assert count(connection, "select count(*) from sqlite_master
@@ -1844,11 +1862,12 @@ pub fn a_version_3_database_gets_demand_codes_test() {
      alter table demand drop column code;
      alter table piece drop column number;
      alter table work_station drop column parent_branch;
+     alter table piece drop column skips;
      pragma user_version = 3;",
   )
 
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
-  assert count(connection, "pragma user_version") == 5
+  assert count(connection, "pragma user_version") == 6
   let code_of = fn(id) {
     let assert Ok([code]) =
       sqlight.query(

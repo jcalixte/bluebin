@@ -8,6 +8,7 @@ import gleam/dynamic/decode
 import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/order
 import gleam/result
 import gleam/string
 import sqlight
@@ -91,7 +92,7 @@ pub fn pull(
       holds_an_open_rework(connection, team_member, station.id)
   })
   use <- bool.guard(repairing, Error(ReworkFirst))
-  use source <- result.try(next_source(connection, station))
+  use #(source, inflow) <- result.try(next_source(connection, station))
 
   use kanban <- result.try(oldest_kanban(connection, station.id))
   use open_rework <- result.try(raised_an_open_rework(connection, station.id))
@@ -117,7 +118,7 @@ pub fn pull(
   ))
   use _ <- result.try(spend_kanban(connection, kanban, station.id))
 
-  use #(pulled, sent) <- result.try(case station.inflow {
+  use #(pulled, sent) <- result.try(case inflow {
     shape.FromBacklog | shape.Straight(_) ->
       take_whole(connection, station, source)
     shape.AtSplit(_, branches) ->
@@ -141,7 +142,7 @@ pub fn pull(
 
   use _ <- result.try(record_event(
     connection,
-    case station.inflow {
+    case inflow {
       shape.Assembly(_) -> "piece_assembled"
       _ -> "piece_pulled"
     },
@@ -252,8 +253,7 @@ pub fn deploy(
   hold hold: Bool,
 ) -> Result(Flowed, FlowError) {
   use <- in_transaction(connection)
-  use last <- result.try(last_position(connection))
-  use piece <- result.try(load_piece_in_last_bin(connection, piece_id, last))
+  use piece <- result.try(load_piece_in_last_bin(connection, piece_id))
 
   use _ <- result.try(
     write(
@@ -513,6 +513,18 @@ pub fn raise_rework(
     found_by.id,
     "in_flow",
   ))
+  // A Work Station the Piece skipped did not make its defect.
+  use route <- result.try(one(
+    connection,
+    "select coalesce(skips, '[]') from piece where id = ?1",
+    [sqlight.text(piece.id)],
+    decode.at([0], decode.string),
+    or: PieceNotHere,
+  ))
+  use <- bool.guard(
+    list.contains(shape.skips_of(route), made_by.id),
+    Error(NotUpstream),
+  )
 
   use author <- result.try(author_of(connection, piece.id, made_by.id))
 
@@ -1270,16 +1282,144 @@ fn author_of(
   )
 }
 
+/// The next Piece the Work Station pulls, and where from: each Piece follows
+/// its own route, so the Work Station pulls from the Work Station before it on
+/// that route. A Piece already in the Line goes first, the one that waits the
+/// longest; then the Backlog, in Heijunka Sequence.
 fn next_source(
   connection: sqlight.Connection,
   station: Station,
-) -> Result(Source, FlowError) {
-  case station.inflow {
-    shape.FromBacklog -> next_backlog_piece(connection)
-    shape.Straight(from) -> next_upstream_piece(connection, from)
-    shape.AtSplit(from, _) -> next_unsplit_piece(connection, station, from)
-    shape.Assembly(ends) -> next_complete_piece(connection, ends)
+) -> Result(#(Source, shape.Inflow), FlowError) {
+  use routes <- result.try(rows(
+    connection,
+    "select distinct coalesce(skips, '[]') from piece
+      where state in ('backlog', 'in_bin', 'split')",
+    [],
+    decode.at([0], decode.string),
+  ))
+  let inflows =
+    list.filter_map(routes, fn(route) {
+      let nodes = shape.kept(station.nodes, shape.skips_of(route))
+      use node <- result.try(
+        list.find(nodes, fn(node) { node.id == station.id }),
+      )
+      shape.inflow(nodes, node) |> result.map(fn(inflow) { #(route, inflow) })
+    })
+  use found <- result.try(
+    list.try_map(inflows, fn(one) { in_line_source(connection, station, one) }),
+  )
+  let oldest =
+    option.values(found)
+    |> list.reduce(fn(a, b) {
+      case string.compare(a.1, b.1) {
+        order.Gt -> b
+        order.Eq if a.2 > b.2 -> b
+        _ -> a
+      }
+    })
+  case oldest {
+    Ok(#(source, _, _, inflow)) -> Ok(#(source, inflow))
+    Error(Nil) -> {
+      let from_backlog =
+        list.filter_map(inflows, fn(one) {
+          case one.1 {
+            shape.FromBacklog -> Ok(one.0)
+            _ -> Error(Nil)
+          }
+        })
+      case from_backlog, station.inflow {
+        [], shape.Assembly(_) -> Error(NothingToAssemble)
+        [], _ -> Error(NothingToPull)
+        _, _ ->
+          next_backlog_piece(connection, from_backlog)
+          |> result.map(fn(source) { #(source, shape.FromBacklog) })
+      }
+    }
   }
+}
+
+/// The Piece of this route that waits the longest for the Work Station, with
+/// when and in which order it came.
+fn in_line_source(
+  connection: sqlight.Connection,
+  station: Station,
+  route: #(String, shape.Inflow),
+) -> Result(Option(#(Source, String, Int, shape.Inflow)), FlowError) {
+  let #(skips, inflow) = route
+  let found = case inflow {
+    shape.FromBacklog -> Ok([])
+    shape.Straight(from) ->
+      rows(
+        connection,
+        "select p.id, p.reference, d.label, p.station_id, p.since, p.rowid
+         from piece p
+         join demand d on d.id = p.demand_id
+         where p.state = 'in_bin' and p.station_id = ?1
+           and coalesce(p.skips, '[]') = ?2
+         order by p.since, p.rowid
+         limit 1",
+        [sqlight.text(from), sqlight.text(skips)],
+        waiting_source(),
+      )
+    shape.AtSplit(from, _) ->
+      rows(
+        connection,
+        "select p.id, p.reference, d.label, p.station_id, p.since, p.rowid
+         from piece p
+         join demand d on d.id = p.demand_id
+         where p.state = 'in_bin' and p.station_id = ?1
+           and coalesce(p.skips, '[]') = ?3
+           and not exists (select 1 from piece s
+                           where s.parent_id = p.id and s.branch = ?2
+                             and s.state != 'assembled')
+         order by p.since, p.rowid
+         limit 1",
+        [
+          sqlight.text(from),
+          sqlight.nullable(sqlight.text, station.branch),
+          sqlight.text(skips),
+        ],
+        waiting_source(),
+      )
+    // Every Sub-Piece waits in the last Blue Bin of its Branch; the Piece
+    // complete the longest comes first.
+    shape.Assembly(ends) ->
+      rows(
+        connection,
+        "select p.id, p.reference, d.label, null, latest.since, p.rowid
+         from piece p
+         join demand d on d.id = p.demand_id
+         join (select parent_id, max(since) as since from piece
+                group by parent_id) latest on latest.parent_id = p.id
+         where p.state = 'split' and coalesce(p.skips, '[]') = ?2
+           and not exists (
+             select 1 from piece s
+             where s.parent_id = p.id and s.state != 'assembled'
+               and not (s.state = 'in_bin'
+                        and s.station_id in (select value from json_each(?1))))
+         order by latest.since, p.rowid
+         limit 1",
+        [
+          sqlight.text(json.to_string(json.array(ends, json.string))),
+          sqlight.text(skips),
+        ],
+        waiting_source(),
+      )
+  }
+  use found <- result.map(found)
+  list.first(found)
+  |> option.from_result
+  |> option.map(fn(one) { #(one.0, one.1, one.2, inflow) })
+}
+
+fn waiting_source() -> decode.Decoder(#(Source, String, Int)) {
+  use id <- decode.field(0, decode.string)
+  use reference <- decode.field(1, decode.string)
+  use demand <- decode.field(2, decode.string)
+  use station_id <- decode.field(3, decode.optional(decode.string))
+  use since <- decode.field(4, decode.string)
+  use rowid <- decode.field(5, decode.int)
+  decode.success(#(Source(id:, reference:, demand:, station_id:), since, rowid))
 }
 
 /// Answers the id and reference of what moved, and the Work Stations that got
@@ -1309,7 +1449,7 @@ fn split_off(
   use sub_piece <- result.try(one(
     connection,
     "insert into piece (id, demand_id, reference, number, state, station_id,
-                        since, parent_id, branch)
+                        since, parent_id, branch, skips)
      select p.id || '-' || lower(replace(?2, ' ', '-'))
               || case when exists (
                    select 1 from piece o
@@ -1319,7 +1459,7 @@ fn split_off(
             coalesce((select r.reference from piece r where r.id = p.parent_id),
                      p.reference) || ' · ' || ?2,
             p.number, 'in_flow', ?3,
-            strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), p.id, ?2
+            strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), p.id, ?2, p.skips
      from piece p where p.id = ?1
      returning id, reference",
     [sqlight.text(source.id), sqlight.text(branch), sqlight.text(station.id)],
@@ -1457,112 +1597,36 @@ fn load_station(
   Ok(Station(id: node.id, branch: node.branch, inflow:, nodes:))
 }
 
-fn last_position(connection: sqlight.Connection) -> Result(Int, FlowError) {
-  one(
-    connection,
-    "select max(position) from work_station",
-    [],
-    decode.at([0], decode.int),
-    or: UnknownStation,
-  )
-}
-
 fn next_backlog_piece(
   connection: sqlight.Connection,
+  routes: List(String),
 ) -> Result(Source, FlowError) {
+  use ids <- result.try(rows(
+    connection,
+    "select id from piece
+      where state = 'backlog'
+        and coalesce(skips, '[]') in (select value from json_each(?1))",
+    [sqlight.text(json.to_string(json.array(routes, json.string)))],
+    decode.at([0], decode.string),
+  ))
   case heijunka.load(connection) {
     Error(_) -> Error(StoreFailed)
-    Ok(heijunka.Backlog(sequence: [], ..)) -> Error(NothingToPull)
-    Ok(heijunka.Backlog(sequence: [next, ..], ..)) ->
-      Ok(Source(
-        id: next.piece.id,
-        reference: next.piece.reference,
-        demand: next.demand.label,
-        station_id: None,
-      ))
+    Ok(backlog) ->
+      case
+        list.find(backlog.sequence, fn(next) {
+          list.contains(ids, next.piece.id)
+        })
+      {
+        Error(Nil) -> Error(NothingToPull)
+        Ok(next) ->
+          Ok(Source(
+            id: next.piece.id,
+            reference: next.piece.reference,
+            demand: next.demand.label,
+            station_id: None,
+          ))
+      }
   }
-}
-
-fn next_upstream_piece(
-  connection: sqlight.Connection,
-  from: String,
-) -> Result(Source, FlowError) {
-  find_source(
-    connection,
-    "select p.id, p.reference, d.label, p.station_id
-     from piece p
-     join demand d on d.id = p.demand_id
-     where p.state = 'in_bin' and p.station_id = ?1
-     order by p.since, p.rowid
-     limit 1",
-    [sqlight.text(from)],
-    NothingToPull,
-  )
-}
-
-fn next_unsplit_piece(
-  connection: sqlight.Connection,
-  station: Station,
-  from: String,
-) -> Result(Source, FlowError) {
-  find_source(
-    connection,
-    "select p.id, p.reference, d.label, p.station_id
-     from piece p
-     join demand d on d.id = p.demand_id
-     where p.state = 'in_bin' and p.station_id = ?1
-       and not exists (select 1 from piece s
-                       where s.parent_id = p.id and s.branch = ?2
-                         and s.state != 'assembled')
-     order by p.since, p.rowid
-     limit 1",
-    [
-      sqlight.text(from),
-      sqlight.nullable(sqlight.text, station.branch),
-    ],
-    NothingToPull,
-  )
-}
-
-/// Every Sub-Piece waits in the last Blue Bin of its Branch; the Piece complete
-/// the longest comes first.
-fn next_complete_piece(
-  connection: sqlight.Connection,
-  ends: List(String),
-) -> Result(Source, FlowError) {
-  find_source(
-    connection,
-    "select p.id, p.reference, d.label, null
-     from piece p
-     join demand d on d.id = p.demand_id
-     where p.state = 'split'
-       and not exists (
-         select 1 from piece s
-         where s.parent_id = p.id and s.state != 'assembled'
-           and not (s.state = 'in_bin'
-                    and s.station_id in (select value from json_each(?1))))
-     order by (select max(s.since) from piece s where s.parent_id = p.id),
-              p.rowid
-     limit 1",
-    [sqlight.text(json.to_string(json.array(ends, json.string)))],
-    NothingToAssemble,
-  )
-}
-
-fn find_source(
-  connection: sqlight.Connection,
-  sql: String,
-  values: List(sqlight.Value),
-  when_none: FlowError,
-) -> Result(Source, FlowError) {
-  let decoder = {
-    use id <- decode.field(0, decode.string)
-    use reference <- decode.field(1, decode.string)
-    use demand <- decode.field(2, decode.string)
-    use station_id <- decode.field(3, decode.optional(decode.string))
-    decode.success(Source(id:, reference:, demand:, station_id:))
-  }
-  one(connection, sql, values, decoder, or: when_none)
 }
 
 fn load_piece_at(
@@ -1583,22 +1647,32 @@ fn load_piece_at(
   )
 }
 
+/// A Piece in a Blue Bin of the last Work Station of its route.
 fn load_piece_in_last_bin(
   connection: sqlight.Connection,
   piece_id: String,
-  last_position: Int,
 ) -> Result(Held, FlowError) {
-  one(
+  use #(piece, route) <- result.try(one(
     connection,
-    "select p.id, p.reference, d.label, p.station_id
+    "select p.id, p.reference, d.label, p.station_id, coalesce(p.skips, '[]')
      from piece p
      join demand d on d.id = p.demand_id
-     join work_station w on w.id = p.station_id
-     where p.id = ?1 and p.state = 'in_bin' and w.position = ?2",
-    [sqlight.text(piece_id), sqlight.int(last_position)],
-    held_decoder(),
+     where p.id = ?1 and p.state = 'in_bin'",
+    [sqlight.text(piece_id)],
+    {
+      use held <- decode.then(held_decoder())
+      use route <- decode.field(4, decode.string)
+      decode.success(#(held, route))
+    },
     or: PieceNotHere,
+  ))
+  use nodes <- result.try(
+    shape.load(connection) |> result.replace_error(StoreFailed),
   )
+  case shape.last(shape.kept(nodes, shape.skips_of(route))) {
+    Ok(last) if last.id == piece.station_id -> Ok(piece)
+    _ -> Error(PieceNotHere)
+  }
 }
 
 fn held_decoder() -> decode.Decoder(Held) {

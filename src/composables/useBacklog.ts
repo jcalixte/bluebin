@@ -1,6 +1,7 @@
 import { onMounted, ref } from "vue"
 import { lineFetch, postAction } from "../api"
 import type { Backlog } from "../types"
+import type { RouteInput } from "../wire"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
 
@@ -26,8 +27,21 @@ export function useBacklog() {
     return confirm
   }
 
+  /** Throws the server's reason when the Line does not allow the route. */
+  async function changeRoute(piece: string, skips: string[]) {
+    const response = await lineFetch("/api/backlog/route", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ piece, skips } satisfies RouteInput),
+    })
+    if (!response.ok) {
+      throw new Error((await response.text()) || `API answered ${response.status}`)
+    }
+    await load()
+  }
+
   onMounted(load)
   useLiveUpdates(load)
 
-  return { backlog, error, loading, makeUrgent }
+  return { backlog, error, loading, makeUrgent, changeRoute }
 }

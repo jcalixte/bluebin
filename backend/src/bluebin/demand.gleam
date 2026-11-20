@@ -1,6 +1,7 @@
 import bluebin/calendar.{type Calendar}
 import bluebin/db
 import bluebin/demand_code
+import bluebin/route
 import bluebin/text
 import bluebin/wire
 import bluebin/wire_json
@@ -233,7 +234,8 @@ pub type CreateError {
   StoreFailed
 }
 
-/// The Demand starts today, its Pieces waiting in the Backlog.
+/// The Demand starts today, its Pieces waiting in the Backlog. Each Piece
+/// skips the Work Stations of `skips`.
 pub fn create(
   connection: sqlight.Connection,
   label: String,
@@ -241,6 +243,7 @@ pub fn create(
   due_on: String,
   pieces: Int,
   code: Option(String),
+  skips: List(String),
 ) -> Result(String, CreateError) {
   use label <- result.try(check_text(label, "A Demand needs a label."))
   use client <- result.try(check_text(client, "A Demand needs a Client."))
@@ -251,6 +254,15 @@ pub fn create(
     )),
   )
   use _ <- result.try(check_due(connection, due_on))
+  use route <- result.try(
+    route.check(connection, skips)
+    |> result.map_error(fn(error) {
+      case error {
+        route.Invalid(reason) -> Invalid(reason)
+        route.NotInBacklog | route.StoreFailed -> StoreFailed
+      }
+    }),
+  )
 
   use <- db.transaction(connection, fn(_) { StoreFailed })
   use code <- result.try(case code {
@@ -259,7 +271,7 @@ pub fn create(
       active_codes(connection, "")
       |> result.map(fn(taken) { demand_code.propose(label, taken) })
   })
-  insert(connection, label, client, due_on, pieces, code)
+  insert(connection, label, client, due_on, pieces, code, route)
 }
 
 /// Gives the active Demand `id` a new code; every Piece Reference of its
@@ -363,6 +375,7 @@ fn insert(
   due_on: String,
   pieces: Int,
   code: String,
+  route: Option(String),
 ) -> Result(String, CreateError) {
   use rows <- result.try(query(
     connection,
@@ -384,11 +397,16 @@ fn insert(
   use _ <- result.try(query(
     connection,
     "with recursive n(i) as (select 1 union all select i + 1 from n where i < ?2)
-     insert into piece (id, demand_id, reference, number, state, entered_at)
+     insert into piece (id, demand_id, reference, number, state, entered_at,
+                        skips)
      select 'p-' || substr(?1, 3) || '-' || i, ?1, '', i, 'backlog',
-            strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), ?3
        from n order by i",
-    [sqlight.text(id), sqlight.int(pieces)],
+    [
+      sqlight.text(id),
+      sqlight.int(pieces),
+      sqlight.nullable(sqlight.text, route),
+    ],
     decode.success(Nil),
   ))
   use _ <- result.try(write_references(connection, id))

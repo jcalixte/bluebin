@@ -6,7 +6,6 @@ const props = defineProps<{
   station: WorkStation
   /** The Piece each Team Member transforms now, by Team Member id. */
   activePieces: Map<string, { piece: string; station: string; position: number }>
-  last?: boolean
   busy?: boolean
   /** The Work Station after the Branches pulls by Assembly. */
   assembly?: boolean
@@ -464,7 +463,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
               <span v-if="bin.pulledBy" class="truncate text-[0.6875rem] opacity-80">
                 {{ bin.pulledBy }} pulled
               </span>
-              <template v-if="last && bin.id && canActAs()">
+              <template v-if="bin.deploysHere && bin.id && canActAs()">
                 <button
                   class="btn btn-xs"
                   :disabled="busy"
@@ -493,7 +492,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           >
             <span class="truncate font-medium">{{ extra.piece }}</span>
             <span class="text-[0.6875rem]">over the count</span>
-            <template v-if="last && canActAs()">
+            <template v-if="extra.deploysHere && canActAs()">
               <button
                 class="btn btn-xs"
                 :disabled="busy"

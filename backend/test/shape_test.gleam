@@ -170,3 +170,47 @@ pub fn a_trunk_work_station_with_a_parent_branch_stays_on_the_trunk_test() {
   ]
   assert inflow_of(nodes, "mobile") == AtSplit("spec", ["Mobile", "Web"])
 }
+
+pub fn a_route_skips_a_trunk_work_station_test() {
+  assert shape.check_route(even(), ["conception"]) == Ok(["conception"])
+  let route = shape.kept(even(), ["conception"])
+  assert inflow_of(route, "web")
+    == AtSplit("analysis", ["Android", "Web", "iOS"])
+}
+
+pub fn a_route_skips_whole_branches_test() {
+  let skips = ["qa-web", "web", "qa-android", "android"]
+  assert shape.check_route(even(), skips)
+    == Ok(["android", "qa-android", "qa-web", "web"])
+  let route = shape.kept(even(), skips)
+  assert inflow_of(route, "ios") == AtSplit("conception", ["iOS"])
+  assert inflow_of(route, "uat") == Assembly(["qa-ios"])
+}
+
+pub fn a_route_keeps_the_work_station_that_assembles_it_test() {
+  assert shape.check_route(even(), ["uat"])
+    == Error(shape.SkipsAnAssembly("uat"))
+  // With no Branch left, UAT assembles nothing and can go too.
+  let branches = ["web", "ios", "android", "qa-web", "qa-ios", "qa-android"]
+  let assert Ok(_) = shape.check_route(even(), ["uat", ..branches])
+  let assert Ok(last) = shape.last(shape.kept(even(), ["uat", ..branches]))
+  assert last.id == "conception"
+}
+
+pub fn a_route_keeps_a_place_to_pull_from_test() {
+  assert shape.check_route(nesting(), ["mobile-api"])
+    == Error(shape.Stranded("ios"))
+  // Skipping the whole Mobile Branch skips its nested Split too.
+  let mobile = ["mobile-api", "ios", "android", "qa-ios", "qa-mobile"]
+  let assert Ok(_) = shape.check_route(nesting(), mobile)
+  assert shape.check_route(nesting(), ["qa-mobile"])
+    == Error(shape.SkipsAnAssembly("qa-mobile"))
+}
+
+pub fn a_route_keeps_one_known_work_station_test() {
+  assert shape.check_route(even(), list.map(even(), fn(node) { node.id }))
+    == Error(shape.SkipsEveryStation)
+  assert shape.check_route(even(), ["design"])
+    == Error(shape.UnknownStation("design"))
+  assert shape.check_route(even(), []) == Ok([])
+}

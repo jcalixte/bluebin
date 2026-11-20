@@ -162,6 +162,8 @@ export type BacklogPiece = {
   slotHours: number
   urgent: boolean
   canBeUrgent: boolean
+  /** The ids of the Work Stations it skips; empty when it goes through all. */
+  skips: string[]
 }
 
 export type MixCell = {
@@ -293,12 +295,15 @@ export type BlueBin = {
   demand: string | null
   /** At a Split, the Branches that already pulled their Sub-Piece of it. */
   pulledBy: string | null
+  /** This is the last Work Station of the Piece's route: it deploys from here. */
+  deploysHere: boolean
 }
 
 export type Overflow = {
   id: string
   piece: string
   demand: string
+  deploysHere: boolean
 }
 
 export type Deviation = {
@@ -624,6 +629,8 @@ export type DemandInput = {
   dueOn: string
   pieces: number
   code?: string | null
+  /** The ids of the Work Stations its Pieces skip; none when absent. */
+  skips?: string[] | null
 }
 
 /** `PUT /api/demands/<id>/code`. */
@@ -634,6 +641,12 @@ export type DemandCodeInput = {
 export type UrgentInput = {
   piece: string
   reason?: string | null
+}
+
+/** `POST /api/backlog/route`: the Work Stations a Piece in the Backlog skips. */
+export type RouteInput = {
+  piece: string
+  skips: string[]
 }
 
 /** `reason` confirms a pull that breaks a rule. */

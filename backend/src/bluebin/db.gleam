@@ -16,7 +16,7 @@ pub const workspaces_directory = "data/workspaces"
 /// The schema of a new database. Raise `schema_version` when it changes, and
 /// add a step to `migrations` when the change only adds; a database whose
 /// version has no step is refused (ADR-0006).
-const schema_version = 5
+const schema_version = 6
 
 /// Parents before children. `foreign_keys` holds only on the connection that
 /// runs this schema and the seed, and only outside a transaction: `ready`
@@ -73,7 +73,8 @@ create table piece (
   branch      text,
   urgent      integer,
   entered_at  text,
-  number      integer
+  number      integer,
+  skips       text
 );
 
 create table flow_event (
@@ -204,6 +205,7 @@ update piece
 ",
   ),
   #(4, "alter table work_station add column parent_branch text;\n"),
+  #(5, "alter table piece add column skips text;\n"),
 ]
 
 const seed_passes_sql =

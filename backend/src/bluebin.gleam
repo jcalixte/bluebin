@@ -14,6 +14,7 @@ import bluebin/line
 import bluebin/lines
 import bluebin/live
 import bluebin/measures
+import bluebin/route
 import bluebin/spa
 import bluebin/wire
 import bluebin/wire_json
@@ -789,6 +790,7 @@ fn route(
     _, ["api", "line"] -> line_view(database)
     _, ["api", "backlog"] -> backlog(database)
     _, ["api", "backlog", "urgent"] -> make_urgent(request, database)
+    _, ["api", "backlog", "route"] -> change_route(request, database)
     _, ["api", "pull"] -> pull(request, database, act_as)
     _, ["api", "finish"] -> finish(request, database)
     _, ["api", "deploy"] -> deploy(request, database)
@@ -1087,14 +1089,22 @@ fn demands(database: String) -> wisp.Response {
 }
 
 fn create_demand(request: wisp.Request, database: String) -> wisp.Response {
-  use wire.DemandInput(label:, client:, due_on:, pieces:, code:) <- require_body(
+  use wire.DemandInput(label:, client:, due_on:, pieces:, code:, skips:) <- require_body(
     request,
     wire_json.demand_input_decoder(),
     or: "expected a body like {\"label\": \"Checkout redesign\", \"client\": \"Retail\", \"dueOn\": \"2026-12-31\", \"pieces\": 8}",
   )
   case
     db.with_connection_at(database, fn(connection) {
-      demand.create(connection, label, client, due_on, pieces, code)
+      demand.create(
+        connection,
+        label,
+        client,
+        due_on,
+        pieces,
+        code,
+        option.unwrap(skips, []),
+      )
     })
   {
     Ok(id) -> send_json(json.object([#("id", json.string(id))]), 201)
@@ -1223,6 +1233,28 @@ fn make_urgent(request: wisp.Request, database: String) -> wisp.Response {
       flow.make_urgent(connection, piece, reason)
     }),
   )
+}
+
+fn change_route(request: wisp.Request, database: String) -> wisp.Response {
+  use wire.RouteInput(piece:, skips:) <- require_body(
+    request,
+    wire_json.route_input_decoder(),
+    or: "expected a body like {\"piece\": \"p-billing-3\", \"skips\": [\"ws-design\"]}",
+  )
+  case
+    db.with_connection_at(database, fn(connection) {
+      route.change(connection, piece, skips)
+    })
+  {
+    Ok(Nil) -> wisp.no_content()
+    Error(route.Invalid(reason)) -> wisp.bad_request(reason)
+    Error(route.NotInBacklog) ->
+      wisp.response(409)
+      |> wisp.string_body(
+        "This Piece has left the Backlog: its route no longer changes.",
+      )
+    Error(route.StoreFailed) -> wisp.internal_server_error()
+  }
 }
 
 fn pull(

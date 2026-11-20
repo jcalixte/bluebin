@@ -203,6 +203,8 @@ pub type BacklogPiece {
     slot_hours: Float,
     urgent: Bool,
     can_be_urgent: Bool,
+    /// The ids of the Work Stations it skips; empty when it goes through all.
+    skips: List(String),
   )
 }
 
@@ -338,11 +340,13 @@ pub type BlueBin {
     demand: Option(String),
     /// At a Split, the Branches that already pulled their Sub-Piece of it.
     pulled_by: Option(String),
+    /// This is the last Work Station of the Piece's route: it deploys from here.
+    deploys_here: Bool,
   )
 }
 
 pub type Overflow {
-  Overflow(id: String, piece: String, demand: String)
+  Overflow(id: String, piece: String, demand: String, deploys_here: Bool)
 }
 
 pub type Deviation {
@@ -647,6 +651,8 @@ pub type DemandInput {
     due_on: String,
     pieces: Int,
     code: Option(String),
+    /// The ids of the Work Stations its Pieces skip; none when absent.
+    skips: Option(List(String)),
   )
 }
 
@@ -657,6 +663,11 @@ pub type DemandCodeInput {
 
 pub type UrgentInput {
   UrgentInput(piece: String, reason: Option(String))
+}
+
+/// `POST /api/backlog/route`: the Work Stations a Piece in the Backlog skips.
+pub type RouteInput {
+  RouteInput(piece: String, skips: List(String))
 }
 
 /// `reason` confirms a pull that breaks a rule.
