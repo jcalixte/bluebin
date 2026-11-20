@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import AndonAlert from "../components/AndonAlert.vue"
-import AppModal from "../components/AppModal.vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import HeldForReleaseZone from "../components/HeldForReleaseZone.vue"
+import RaiseReworkDialog from "../components/RaiseReworkDialog.vue"
 import WorkStationCard from "../components/WorkStationCard.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useLine } from "../composables/useLine"
 import { useWorkspaces } from "../composables/useWorkspaces"
-import { flowLinks, inflow, isUpstream, laneRows, type ShapeNode } from "../shape"
+import { flowLinks, inflow, laneRows, type ShapeNode } from "../shape"
 import type { HelpOffer, WorkStation } from "../types"
 
 const {
@@ -106,36 +106,23 @@ function helpInstead(rework: string) {
   if (who) void run(() => helpTheRework(rework, who))
 }
 
-const raising = ref<{ station: WorkStation; piece: string; reference: string } | null>(null)
-const madeBy = ref("")
-const defect = ref("")
+const raising = ref<{ station: string; piece: string; reference: string } | null>(null)
 
 function openRework(station: WorkStation, piece: string) {
   raising.value = {
-    station,
+    station: station.id,
     piece,
     reference: station.inProgress.find((one) => one.id === piece)?.piece ?? piece,
   }
-  const [only, ...others] = madeByChoices.value
-  madeBy.value = only && others.length === 0 ? only.id : ""
-  defect.value = ""
 }
 
-const madeByChoices = computed(() => {
-  const found = raising.value?.station
-  if (!found) {
-    return []
-  }
-  return (line.value?.stations ?? []).filter((one) => isUpstream(nodes.value, one.id, found.id))
-})
-
-async function recordRework() {
+function recordRework(madeBy: string, description: string) {
   const asked = raising.value
-  if (!asked || madeBy.value === "" || defect.value.trim() === "") {
+  if (!asked) {
     return
   }
   raising.value = null
-  await run(() => raiseRework(asked.station.id, asked.piece, madeBy.value, defect.value.trim()))
+  void run(() => raiseRework(asked.station, asked.piece, madeBy, description))
 }
 
 const lastPosition = computed(() =>
@@ -368,42 +355,15 @@ const taktLabel = computed(() => {
       </div>
     </div>
 
-    <AppModal v-if="raising" @close="raising = null">
-      <h3 class="text-lg font-semibold">A defect in {{ raising.reference }}</h3>
-      <p class="py-2 text-sm opacity-80">
-        The Piece stays here: name the Work Station that made the defect, and one of its Team
-        Members comes to repair it.
-      </p>
-      <label class="form-control">
-        <span class="label-text text-sm">Made by</span>
-        <select v-model="madeBy" class="select select-bordered mt-1 w-full">
-          <option value="" disabled>Pick a Work Station</option>
-          <option v-for="one in madeByChoices" :key="one.id" :value="one.id">
-            {{ one.name }}
-          </option>
-        </select>
-      </label>
-      <label class="form-control mt-2">
-        <span class="label-text text-sm">What is wrong? One line.</span>
-        <input
-          v-model="defect"
-          class="input input-bordered mt-1 w-full"
-          maxlength="120"
-          placeholder="Sync retries lose the last edit"
-          @keyup.enter="recordRework"
-        />
-      </label>
-      <div class="modal-action">
-        <button class="btn btn-ghost" @click="raising = null">Cancel</button>
-        <button
-          class="btn btn-error"
-          :disabled="busy || madeBy === '' || defect.trim() === ''"
-          @click="recordRework"
-        >
-          Raise the Rework
-        </button>
-      </div>
-    </AppModal>
+    <RaiseReworkDialog
+      v-if="raising"
+      :station="raising.station"
+      :reference="raising.reference"
+      :stations="line?.stations ?? []"
+      :busy="busy"
+      @raise="recordRework"
+      @close="raising = null"
+    />
 
     <DeviationDialog
       v-if="pending"

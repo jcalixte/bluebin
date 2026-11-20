@@ -1,6 +1,6 @@
 import { onMounted, ref, watch, type Ref } from "vue"
 import { lineFetch, postAction, type ActionBodies } from "../api"
-import type { FlowConfirm, TeamMember, TeamMemberView } from "../types"
+import type { FlowConfirm, Line, TeamMember, TeamMemberView, WorkStation } from "../types"
 import { useLiveUpdates } from "./useLiveUpdates"
 import { useLoad } from "./useLoad"
 
@@ -62,6 +62,18 @@ export function useNextThing(teamMemberId: Ref<string>) {
   const assign = (kind: "piece" | "rework", id: string, teamMember: string) =>
     act("/api/assign", { kind, id, teamMember })
 
+  const raiseRework = (station: string, piece: string, madeBy: string, description: string) =>
+    act("/api/rework", { station, piece, madeBy, description })
+
+  /** The Line's shape names the Work Stations that can have made a defect. */
+  async function loadStations(): Promise<WorkStation[]> {
+    const response = await lineFetch("/api/line")
+    if (!response.ok) {
+      throw new Error(`API answered ${response.status}`)
+    }
+    return ((await response.json()) as Line).stations
+  }
+
   const raiseAndon = (station: string) =>
     act("/api/andon", { station, teamMember: teamMemberId.value })
 
@@ -84,6 +96,8 @@ export function useNextThing(teamMemberId: Ref<string>) {
     helpTheRework,
     stopHelping,
     assign,
+    raiseRework,
+    loadStations,
     raiseAndon,
     closeAndon,
   }

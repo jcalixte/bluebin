@@ -4,10 +4,11 @@ import { lineId, workspaceOwner } from "../api"
 import AndonAlert from "../components/AndonAlert.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
+import RaiseReworkDialog from "../components/RaiseReworkDialog.vue"
 import { useFlowRunner } from "../composables/useFlowRunner"
 import { useNextThing } from "../composables/useNextThing"
 import { useWorkspaces } from "../composables/useWorkspaces"
-import type { Assignment, FlowConfirm, NextThing } from "../types"
+import type { Assignment, FlowConfirm, NextThing, WorkStation } from "../types"
 
 /** Team Members differ from one Line to the next, and Line ids from one Workspace to the next. */
 const storageKey = `bluebin.teamMember.${workspaceOwner ? `${workspaceOwner}/` : ""}${lineId}`
@@ -44,6 +45,8 @@ const {
   helpTheRework,
   stopHelping,
   assign,
+  raiseRework,
+  loadStations,
   raiseAndon,
   closeAndon,
 } = useNextThing(teamMemberId)
@@ -70,6 +73,24 @@ function handOver(assignment: Assignment, event: Event) {
   if (teamMember !== "") {
     void run(() => assign(assignment.kind, assignment.id, teamMember))
   }
+}
+
+const raising = ref<{ assignment: Assignment; stations: WorkStation[] } | null>(null)
+
+function openRework(assignment: Assignment) {
+  void run(async () => {
+    raising.value = { assignment, stations: await loadStations() }
+    return null
+  })
+}
+
+function recordRework(madeBy: string, description: string) {
+  const asked = raising.value?.assignment
+  if (!asked) {
+    return
+  }
+  raising.value = null
+  void run(() => raiseRework(asked.station, asked.id, madeBy, description))
 }
 
 /** Captures `now` so a Deviation confirmed later reruns this action, not
@@ -316,7 +337,7 @@ function since(at: string) {
               </div>
             </template>
 
-            <div v-if="focus.action && acting" class="mt-auto pt-2">
+            <div v-if="focus.action && acting" class="mt-auto flex flex-wrap gap-3 pt-2">
               <button
                 class="btn btn-primary btn-lg w-full sm:w-auto"
                 :disabled="busy"
@@ -324,6 +345,15 @@ function since(at: string) {
               >
                 <span v-if="busy" class="loading loading-spinner loading-sm" aria-hidden="true" />
                 {{ focus.action }}
+              </button>
+              <button
+                v-if="next.kind === 'continue' && next.assignment.kind === 'piece'"
+                class="btn btn-ghost btn-lg w-full sm:w-auto"
+                :disabled="busy"
+                title="Found a defect? Name the Work Station that made it"
+                @click="openRework(next.assignment)"
+              >
+                Raise a Rework
               </button>
             </div>
           </div>
@@ -480,6 +510,16 @@ function since(at: string) {
         </section>
       </div>
     </template>
+
+    <RaiseReworkDialog
+      v-if="raising"
+      :station="raising.assignment.station"
+      :reference="raising.assignment.piece"
+      :stations="raising.stations"
+      :busy="busy"
+      @raise="recordRework"
+      @close="raising = null"
+    />
 
     <DeviationDialog
       v-if="pending"
