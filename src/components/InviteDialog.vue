@@ -47,8 +47,8 @@ function day(expires: string) {
   <AppModal @close="emit('close')">
     <h3 class="text-lg font-semibold">Invite a person</h3>
     <p class="py-2 text-sm opacity-80">
-      The link lets one person make an account and sign in to Bluebin. It works one time only, for
-      one week. Send it to the person. Do not open it yourself: opening it uses it.
+      This link lets one person create a Bluebin account. Send it to them without opening it
+      yourself, because the first visit uses it up. If nobody opens it, it expires after a week.
     </p>
 
     <div v-if="invitation" class="grid gap-2">
