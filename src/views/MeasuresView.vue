@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue"
+import { computed, ref, watch } from "vue"
 import CompareCell, { type Verdict } from "../components/CompareCell.vue"
 import RunChart from "../components/RunChart.vue"
 import VerdictPill from "../components/VerdictPill.vue"
@@ -353,6 +353,19 @@ const deviationList = computed(() =>
       ]
     : [],
 )
+
+const deviationPageSize = 20
+const deviationPage = ref(1)
+const deviationPageCount = computed(() =>
+  Math.max(1, Math.ceil(deviationList.value.length / deviationPageSize)),
+)
+const deviationFirst = computed(() => (deviationPage.value - 1) * deviationPageSize)
+const deviationPageRows = computed(() =>
+  deviationList.value.slice(deviationFirst.value, deviationFirst.value + deviationPageSize),
+)
+watch(deviationList, () => {
+  deviationPage.value = 1
+})
 </script>
 
 <template>
@@ -808,8 +821,8 @@ const deviationList = computed(() =>
               </thead>
               <tbody>
                 <tr
-                  v-for="(one, index) in deviationList"
-                  :key="`${one.period}-${one.at}-${one.station}-${index}`"
+                  v-for="(one, index) in deviationPageRows"
+                  :key="`${one.period}-${one.at}-${one.station}-${deviationFirst + index}`"
                 >
                   <td>{{ one.period }}</td>
                   <td class="whitespace-nowrap">{{ atLabel(one.at) }}</td>
@@ -821,6 +834,37 @@ const deviationList = computed(() =>
               </tbody>
             </table>
           </div>
+          <nav
+            v-if="deviationPageCount > 1"
+            class="flex flex-wrap items-center justify-between gap-2"
+            aria-label="Deviation pages"
+          >
+            <p class="text-sm tabular-nums opacity-70" aria-live="polite">
+              {{ deviationFirst + 1 }}–{{ deviationFirst + deviationPageRows.length }} of
+              {{ deviationList.length }}
+            </p>
+            <div class="join">
+              <button
+                type="button"
+                class="btn join-item btn-sm"
+                :disabled="deviationPage === 1"
+                @click="deviationPage--"
+              >
+                Previous
+              </button>
+              <span class="btn join-item btn-sm pointer-events-none tabular-nums">
+                Page {{ deviationPage }} of {{ deviationPageCount }}
+              </span>
+              <button
+                type="button"
+                class="btn join-item btn-sm"
+                :disabled="deviationPage === deviationPageCount"
+                @click="deviationPage++"
+              >
+                Next
+              </button>
+            </div>
+          </nav>
         </div>
       </div>
     </div>
