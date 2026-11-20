@@ -25,7 +25,7 @@ fn inflow_of(nodes: List(shape.Node), id: String) -> shape.Inflow {
   found
 }
 
-/// The Line of the seed: three Branches of the same length.
+/// The Line of the seed.
 fn even() -> List(shape.Node) {
   [
     trunk("analysis", 1),
@@ -109,7 +109,6 @@ pub fn two_splits_follow_each_other_test() {
   assert inflow_of(nodes, "end") == Assembly(["c", "d"])
 }
 
-/// Web, and Mobile that splits again into iOS and Android until QA Mobile.
 fn nesting() -> List(shape.Node) {
   [
     trunk("spec", 1),

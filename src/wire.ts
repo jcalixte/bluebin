@@ -2,7 +2,6 @@
 
 export type Demand = {
   id: string
-  /** The Demand Code, `CHK`: it starts the Piece Reference of each of its Pieces. */
   code: string
   label: string
   client: string
@@ -33,20 +32,19 @@ export type WorkingCalendar = {
   holidays: Holiday[]
 }
 
-/** What the Account may do in a Line; the server checks it again (H10). */
+/** The server checks it again (H10). */
 export type LineRole = "owner" | "member" | "viewer"
 
 export type LineEntry = {
   id: string
   name: string
-  /** Anyone with its look-only link sees a Shared Line, signed in or not. */
   shared: boolean
   role: LineRole
   /** The Account's own Team Member, for a member. */
   teamMember: string | null
 }
 
-/** One Workspace of the Line menu, from `GET /api/workspaces`. */
+/** `GET /api/workspaces`. */
 export type Workspace = {
   owner: string
   /** The owner's name; null before their first sign-in. */
@@ -55,7 +53,7 @@ export type Workspace = {
   lines: LineEntry[]
 }
 
-/** Hours, in each view; the whole Duration is null when there is nothing to average. */
+/** Hours; the whole Duration is null when there is nothing to average. */
 export type Duration = {
   calendar: number | null
   working: number | null
@@ -75,7 +73,7 @@ export type DemandMeasures = {
   label: string
   client: string
   pieces: number
-  /** The Demand's own Lead Time: null until its last Piece is released. */
+  /** Null until the Demand's last Piece is released. */
   demandLeadTime: Duration | null
   leadTime: Duration | null
   touchTime: Duration | null
@@ -96,9 +94,8 @@ export type StationMeasures = {
   /** A fraction in 0..1. */
   touchShare: number | null
   starvationTime: Duration | null
-  /** The time an Andon stopped the Work Station inside the period. */
   andonTime: Duration | null
-  /** The Andons raised on the Work Station inside the period. */
+  /** Andons raised inside the period. */
   andons: number
   pulls: number
   deviations: number
@@ -118,7 +115,7 @@ export type OnTime = {
   onTime: number
 }
 
-/** The Deviations recorded in the period: how many per rule, most first, then each one. */
+/** `byRule` is sorted most first. */
 export type DeviationMeasures = {
   byRule: RuleCount[]
   list: RecordedDeviation[]
@@ -135,18 +132,16 @@ export type Measures = {
   pieces: PieceMeasures
   demands: DemandMeasures[]
   stations: StationMeasures[]
-  /** The time at least one Work Station is stopped by an Andon; stops at the same time count once. */
+  /** Stops at the same time count once. */
   andonTime: Duration | null
-  /** Demands delivered in the period, and those delivered by their due date. */
   onTime: OnTime
   deviations: DeviationMeasures
 }
 
-/** What a reorder of the Heijunka Sequence costs one Demand. */
 export type ReorderEffect = {
   demand: string
   label: string
-  /** Places its next Piece moves: positive is later. */
+  /** Positive is later. */
   places: number
   hours: number
   taktGap: number
@@ -162,7 +157,6 @@ export type BacklogPiece = {
   slotHours: number
   urgent: boolean
   canBeUrgent: boolean
-  /** The ids of the Work Stations it skips; empty when it goes through all. */
   skips: string[]
 }
 
@@ -183,11 +177,10 @@ export type MixRow = {
   demand: string
   label: string
   cells: MixCell[]
-  /** The days shown, added up. */
   total: MixTotal
 }
 
-/** `sequence` is the Heijunka Sequence: its first Piece leaves the Backlog next. */
+/** `sequence` is the Heijunka Sequence, next Piece first. */
 export type Backlog = {
   taktTimeHours: number
   sequence: BacklogPiece[]
@@ -209,8 +202,7 @@ export type AccountName = {
 
 /**
  * `email` links the Team Member to the Account that has it; `account` stays
- * null until that Account signs in ("not linked yet"). Both are empty while
- * nobody is signed in.
+ * null until that Account signs in. Both are empty while nobody is signed in.
  */
 export type DesignTeamMember = {
   id: string
@@ -220,10 +212,9 @@ export type DesignTeamMember = {
 }
 
 /**
- * Suggested Blue Bins (DESIGN.md F55): the last `passes` (at most 20) that went
- * in the Blue Bin. `replenishmentHours` is their 85th percentile in Working
- * Time, without the pauses while the Team Member held another Piece; null
- * under 5 passes. `blueBins` is null without it or without a Takt Time.
+ * DESIGN.md F55: the last `passes` (at most 20) that went in the Blue Bin.
+ * `replenishmentHours` is their 85th percentile in Working Time, without the
+ * pauses while the Team Member held another Piece; null under 5 passes. `blueBins` is null without it or without a Takt Time.
  */
 export type BlueBinSuggestion = {
   passes: number
@@ -239,7 +230,6 @@ export type DesignStation = {
   id: string
   name: string
   branch: string | null
-  /** The outer Branch of a nested Branch. */
   parentBranch: string | null
   blueBins: number
   teamLeader: string
@@ -249,7 +239,6 @@ export type DesignStation = {
   suggestion: BlueBinSuggestion
 }
 
-/** Steps are in flow order: the first step pulls from the Backlog. */
 export type DesignStep = {
   name: string
   stations: DesignStation[]
@@ -257,15 +246,14 @@ export type DesignStep = {
 
 export type Design = {
   labels: Labels
-  /** The Takt Time of the Line, in hours of Working Time; 0 with no active Demand. */
+  /** 0 with no active Demand. */
   taktTimeHours: number
   teamMembers: DesignTeamMember[]
   steps: DesignStep[]
 }
 
-/** The run chart (F38): the Line's first day, and its last weeks. */
 export type WeekHistory = {
-  /** The day of the first event of the Line, `YYYY-MM-DD` (UTC): no measure before it. */
+  /** `YYYY-MM-DD` (UTC), the day of the first event of the Line. */
   startedOn: string
   weeks: WeekMeasures[]
 }
@@ -276,31 +264,26 @@ export type WeekMeasures = {
   to: string
   /** Pieces released in the week. */
   pieces: number
-  /** Average per Piece released; null with no Piece released. */
+  /** Average per Piece released. */
   leadTime: Duration | null
 }
 
-/** One save of the Design that changes the flow: the pivot of a before/after comparison (F38). */
+/** A save of the Design that changes the flow (F38). */
 export type LineChange = {
-  /** When the Design was saved, `YYYY-MM-DDTHH:MM:SSZ` (UTC). */
+  /** `YYYY-MM-DDTHH:MM:SSZ` (UTC). */
   at: string
   /** What changed, one sentence for each Work Station or Team Member. */
   items: string[]
-  /**
-   * The same changes as `items`, one entry each, for a list that shows
-   * the name apart from the facts.
-   */
+  /** The same changes as `items`, one entry each. */
   entries: LineChangeEntry[]
 }
 
-/** What one save changed on one Work Station or Team Member. */
 export type LineChangeEntry = {
   /**
    * `station_added`, `station_changed`, `station_removed`,
    * `team_member_added` or `team_member_removed`.
    */
   kind: string
-  /** The Work Station or Team Member. */
   name: string
   /** Short facts: "3 Blue Bins", "Team Leader Anne → Bob". */
   facts: string[]
@@ -313,7 +296,6 @@ export type BlueBin = {
   demand: string | null
   /** At a Split, the Branches that already pulled their Sub-Piece of it. */
   pulledBy: string | null
-  /** This is the last Work Station of the Piece's route: it deploys from here. */
   deploysHere: boolean
 }
 
@@ -351,7 +333,6 @@ export type InProgressPiece = {
   paused: boolean
   /** An open Rework repairs it: finishing it accepts the repair. */
   underRework: boolean
-  /** The Team Members who Help the Rework on this Piece. */
   helpers: TeamMemberName[]
 }
 
@@ -376,7 +357,6 @@ export type WorkStation = {
   name: string
   position: number
   branch: string | null
-  /** The outer Branch of a nested Branch. */
   parentBranch: string | null
   blueBinCount: number
   teamLeader: string | null
@@ -402,7 +382,7 @@ export type RuleConfirm = {
   message: string
 }
 
-/** The 409 answer of a reorder of the Heijunka Sequence, with what it costs. */
+/** The 409 answer of a reorder of the Heijunka Sequence. */
 export type ReorderConfirm = {
   confirm: string
   message: string
@@ -450,7 +430,7 @@ export type Bottleneck = {
   fullInFront: boolean
 }
 
-/** A deployed Piece that waits for its Release; `waitingHours` since its Deployment, in Calendar Time. */
+/** `waitingHours` since its Deployment, in Calendar Time. */
 export type HeldForRelease = {
   id: string
   piece: string
@@ -579,7 +559,6 @@ export type AccountInput = {
   lastName: string
 }
 
-/** The name of a new or renamed Line, Team Member or step. */
 export type NameInput = {
   name: string
 }
@@ -661,7 +640,7 @@ export type UrgentInput = {
   reason?: string | null
 }
 
-/** `POST /api/backlog/route`: the Work Stations a Piece in the Backlog skips. */
+/** `POST /api/backlog/route`, for a Piece in the Backlog. */
 export type RouteInput = {
   piece: string
   skips: string[]

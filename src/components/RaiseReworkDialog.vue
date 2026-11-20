@@ -7,7 +7,6 @@ import type { WorkStation } from "../types"
 const props = defineProps<{
   /** The Work Station that found the defect and holds the Piece. */
   station: string
-  /** The name of the Piece, for the title. */
   reference: string
   stations: WorkStation[]
   busy: boolean

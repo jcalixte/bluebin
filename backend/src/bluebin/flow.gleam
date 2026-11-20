@@ -134,7 +134,6 @@ pub fn pull(
   use _ <- result.try(case holder {
     None -> Ok([])
     Some(holder) -> {
-      // Pulling is the Helper's choice of other work: the help ends.
       use _ <- result.try(leave_help(connection, holder, "pulled"))
       keep_nearest_active(connection, holder, pulled.0)
     }
@@ -188,7 +187,6 @@ pub fn finish(
     reason,
   ))
 
-  // Finishing the Piece accepts its repair: its open Rework closes.
   use open <- result.try(
     rows(
       connection,
@@ -210,8 +208,8 @@ pub fn finish(
     }),
   )
 
-  // Before the assignee is cleared below: piece_pass records who transformed
-  // the Piece, for the Rework author (F13) and First Pass Yield (F16).
+  // Before the assignee is cleared: piece_pass records who transformed the
+  // Piece, for the Rework author (F13) and First Pass Yield (F16).
   use _ <- result.try(record_pass(connection, piece.id, station.id))
   use holder <- result.try(assignee_of(connection, piece.id))
 
@@ -245,8 +243,6 @@ pub fn finish(
   )
 }
 
-/// By default the Piece is released at its Deployment; with `hold` it waits,
-/// held for Release, until `release`. Either way it leaves the Line.
 pub fn deploy(
   connection: sqlight.Connection,
   piece_id: String,
@@ -289,8 +285,6 @@ pub fn deploy(
   ))
 }
 
-/// Releases every Piece of `piece_ids`, or none of them when one is not held
-/// for Release.
 pub fn release(
   connection: sqlight.Connection,
   piece_ids: List(String),
@@ -402,9 +396,6 @@ fn deliver_demand_when_complete(
   }
 }
 
-/// Moves the next Piece of a Demand to the top of the Backlog, behind the
-/// Pieces already urgent (F25). It breaks the Heijunka Sequence, so it asks
-/// for a reason first and shows what each Demand loses.
 pub fn make_urgent(
   connection: sqlight.Connection,
   piece_id: String,
@@ -465,7 +456,6 @@ pub fn make_urgent(
   }
 }
 
-/// A Backlog reorder is this Work Station's Deviation.
 fn first_station(connection: sqlight.Connection) -> Result(String, FlowError) {
   one(
     connection,
@@ -504,7 +494,7 @@ pub fn raise_rework(
   use found_by <- result.try(load_station(connection, station_id))
   use made_by <- result.try(load_station(connection, made_by_id))
   use <- bool.guard(
-    !shape.is_upstream(found_by.nodes, made_by.id, found_by.id),
+    !shape.is_upstream(found_by.line_nodes, made_by.id, found_by.id),
     Error(NotUpstream),
   )
   use piece <- result.try(load_piece_at(
@@ -513,7 +503,6 @@ pub fn raise_rework(
     found_by.id,
     "in_flow",
   ))
-  // A Work Station the Piece skipped did not make its defect.
   use route <- result.try(one(
     connection,
     "select coalesce(skips, '[]') from piece where id = ?1",
@@ -589,9 +578,6 @@ pub fn repair_rework(
   Ok(Repaired(piece: reference, resumed:))
 }
 
-/// Closes an open Rework: ends its help (F63) and frees its repairer.
-/// `by` is `repaired`, or `finish` when the Work Station that found the
-/// defect finishes the Piece, which accepts the repair.
 fn close_rework(
   connection: sqlight.Connection,
   rework_id: String,
@@ -646,9 +632,6 @@ pub type Helped {
   Helped(piece: String, assignee: String, paused: List(String))
 }
 
-/// Help the Rework (F61): a Team Member of the Work Station that found the
-/// defect, or of the one that made it, joins the Piece while someone holds
-/// the Rework's Assignment. Their own Pieces pause (F62).
 pub fn help_the_rework(
   connection: sqlight.Connection,
   rework_id: String,
@@ -734,7 +717,6 @@ pub type StoppedHelping {
   StoppedHelping(piece: String, resumed: Option(String))
 }
 
-/// The Helper stops before the Rework closes (F63); their next Piece resumes.
 pub fn stop_helping(
   connection: sqlight.Connection,
   team_member_id: String,
@@ -767,8 +749,7 @@ fn helped_rework(
   )
 }
 
-/// Ends the help of `team_member_id`, if any, and answers the reference of
-/// the Piece they helped. The caller settles their Pieces.
+/// The caller settles the Team Member's Pieces.
 fn leave_help(
   connection: sqlight.Connection,
   team_member_id: String,
@@ -871,7 +852,7 @@ pub fn reassign(
         connection,
         id,
       ))
-      use station_id <- result.try(rework_station(connection, id))
+      use station_id <- result.try(rework_made_by(connection, id))
       Ok(#(reference, station_id, previous, False))
     }
   })
@@ -936,7 +917,6 @@ fn settle(
   use helping <- result.try(helped_rework(connection, team_member_id))
   case open, helping {
     True, _ -> {
-      // Rework first: their own repair ends any help.
       use _ <- result.try(leave_help(connection, team_member_id, "rework"))
       use _ <- result.try(start_next_rework(connection, team_member_id))
       use paused <- result.try(pause_pieces(
@@ -948,8 +928,8 @@ fn settle(
       Ok(Settled(paused:, resumed: None))
     }
     False, Some(#(_, helped_piece)) -> {
-      // The helped Piece can be in their own hands, as at the Work Station
-      // that found the defect: it stays active.
+      // The helped Piece can be their own, at the Work Station that found the
+      // defect: it stays active.
       use paused <- result.try(pause_pieces(
         connection,
         team_member_id,
@@ -992,9 +972,8 @@ fn start_next_rework(
   )
 }
 
-/// A Team Member transforms one Piece at a time. When a Piece comes into their
-/// hands, the one nearest to Deployment stays active and the others pause; on
-/// a tie the newcomer waits. Finishing beats starting.
+/// The Piece nearest to Deployment stays active and the others pause; on a tie
+/// the newcomer waits.
 fn keep_nearest_active(
   connection: sqlight.Connection,
   team_member_id: String,
@@ -1012,7 +991,6 @@ fn keep_nearest_active(
   pause_pieces(connection, team_member_id, kept, "held")
 }
 
-/// Answers the references of the Pieces paused.
 fn pause_pieces(
   connection: sqlight.Connection,
   team_member_id: String,
@@ -1124,8 +1102,7 @@ fn load_piece_in_hand(
   )
 }
 
-/// The Work Station that made the defect, not the one that raised it.
-fn rework_station(
+fn rework_made_by(
   connection: sqlight.Connection,
   rework_id: String,
 ) -> Result(String, FlowError) {
@@ -1171,9 +1148,8 @@ pub fn can_pull(
   }
 }
 
-/// Any Team Member stops their Work Station with one click (F42). A second Andon
-/// on a stopped Work Station changes nothing. A Team Member who is not of the Work
-/// Station still stops it, but is not recorded as who raised it.
+/// A Team Member who is not of the Work Station still stops it, but is not
+/// recorded as who raised it.
 pub fn raise_andon(
   connection: sqlight.Connection,
   station_id: String,
@@ -1204,7 +1180,6 @@ pub fn raise_andon(
   )
 }
 
-/// Only the Team Leader of the Work Station closes its Andon.
 pub fn close_andon(
   connection: sqlight.Connection,
   station_id: String,
@@ -1282,10 +1257,6 @@ fn author_of(
   )
 }
 
-/// The next Piece the Work Station pulls, and where from: each Piece follows
-/// its own route, so the Work Station pulls from the Work Station before it on
-/// that route. A Piece already in the Line goes first, the one that waits the
-/// longest; then the Backlog, in Heijunka Sequence.
 fn next_source(
   connection: sqlight.Connection,
   station: Station,
@@ -1299,7 +1270,7 @@ fn next_source(
   ))
   let inflows =
     list.filter_map(routes, fn(route) {
-      let nodes = shape.kept(station.nodes, shape.skips_of(route))
+      let nodes = shape.kept(station.line_nodes, shape.skips_of(route))
       use node <- result.try(
         list.find(nodes, fn(node) { node.id == station.id }),
       )
@@ -1338,8 +1309,8 @@ fn next_source(
   }
 }
 
-/// The Piece of this route that waits the longest for the Work Station, with
-/// when and in which order it came.
+/// The Piece of this route that waits the longest, with its `since` and
+/// `rowid` to compare across routes.
 fn in_line_source(
   connection: sqlight.Connection,
   station: Station,
@@ -1422,8 +1393,6 @@ fn waiting_source() -> decode.Decoder(#(Source, String, Int)) {
   decode.success(#(Source(id:, reference:, demand:, station_id:), since, rowid))
 }
 
-/// Answers the id and reference of what moved, and the Work Stations that got
-/// a Kanban back.
 fn take_whole(
   connection: sqlight.Connection,
   station: Station,
@@ -1487,8 +1456,7 @@ fn split_off(
   use sent <- result.try(case left {
     None -> Ok([])
     Some(_) -> {
-      // The Piece leaves the trunk's Blue Bin here, which ends its Station
-      // Lead Time there.
+      // `piece_split` ends the Piece's Station Lead Time at the trunk.
       use _ <- result.try(record_event(
         connection,
         "piece_split",
@@ -1555,13 +1523,12 @@ fn send_kanbans(
   |> result.map(option.values)
 }
 
-/// `nodes` is the whole Line, to follow its routes.
 type Station {
   Station(
     id: String,
     branch: Option(String),
     inflow: shape.Inflow,
-    nodes: List(shape.Node),
+    line_nodes: List(shape.Node),
   )
 }
 
@@ -1594,7 +1561,7 @@ fn load_station(
   use inflow <- result.try(
     shape.inflow(nodes, node) |> result.replace_error(StoreFailed),
   )
-  Ok(Station(id: node.id, branch: node.branch, inflow:, nodes:))
+  Ok(Station(id: node.id, branch: node.branch, inflow:, line_nodes: nodes))
 }
 
 fn next_backlog_piece(
@@ -1647,7 +1614,6 @@ fn load_piece_at(
   )
 }
 
-/// A Piece in a Blue Bin of the last Work Station of its route.
 fn load_piece_in_last_bin(
   connection: sqlight.Connection,
   piece_id: String,
@@ -1797,8 +1763,6 @@ fn free_blue_bins(
   )
 }
 
-/// Never more Kanbans than empty Blue Bins: at the limit the insert writes
-/// nothing and answers None (F7).
 fn send_kanban(
   connection: sqlight.Connection,
   station_id: String,
@@ -1947,8 +1911,7 @@ fn exists(
   |> result.map(fn(count) { option.unwrap(count, 0) > 0 })
 }
 
-/// One action's state, flow event and Deviations commit together or not at
-/// all (ADR-0002); a NeedsConfirmation rolls back too.
+/// A NeedsConfirmation rolls back too (ADR-0002).
 fn in_transaction(
   connection: sqlight.Connection,
   run: fn() -> Result(a, FlowError),

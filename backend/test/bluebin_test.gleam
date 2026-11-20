@@ -458,7 +458,6 @@ pub fn a_piece_flows_through_a_nested_split_test() {
   assert list.sort(nested.kanbans_sent_to, string.compare)
     == list.sort([phone, tablet], string.compare)
 
-  // A defect found at App QA, made on the Phone Branch inside it.
   let assert Ok(_) =
     flow.raise_rework(
       connection,
@@ -599,8 +598,7 @@ pub fn a_rework_goes_to_its_author_and_pauses_their_piece_test() {
   assert raised.assignee == Some("Alice")
   assert raised.paused == Some("CHK-9 · iOS")
   assert state_of(connection, "p-checkout-9-ios") == "paused"
-  // A pause for Rework is a real loss of capacity: it counts in the
-  // suggested Blue Bins (DESIGN.md R11).
+  // A pause for Rework counts in the suggested Blue Bins (DESIGN.md R11).
   assert count(
       connection,
       "select count(*) from flow_event
@@ -1229,8 +1227,6 @@ pub fn the_heijunka_sequence_takes_the_earliest_slot_first_test() {
   assert ids(sequence) == ["b1", "a1", "b2", "b3", "a2", "b4"]
 }
 
-/// Regression: absolute slots (n Takt Times after the start) put every Piece
-/// of a late Demand ahead of the others, in one block.
 pub fn a_late_demand_gets_more_slots_but_stays_mixed_test() {
   let demands = [
     heijunka_demand("late", "2026-11-12", 5),
@@ -1413,8 +1409,7 @@ pub fn days_with_no_piece_add_up_to_off_plan_test() {
   assert heijunka.on_plan(sum) == False
 }
 
-/// Every hour of every day is Working Time, so a test never depends on the
-/// clock it runs at.
+/// So a test never depends on the clock it runs at.
 const always_working =
   calendar.Calendar(
     days: [0, 1, 2, 3, 4, 5, 6],
@@ -1681,7 +1676,7 @@ pub fn a_version_5_database_gets_a_route_for_each_piece_test() {
   )
   let assert Ok(Nil) = db.prepare(connection, db.Demo)
   assert count(connection, "pragma user_version") == 6
-  // Every Piece goes through every Work Station, as before.
+  // Every Piece goes through every Work Station.
   assert count(connection, "select count(*) from piece where skips is null")
     == pieces
   let assert Ok(_) = flow.pull(connection, "ws-ios", None, None)

@@ -65,7 +65,6 @@ export function useNextThing(teamMemberId: Ref<string>) {
   const raiseRework = (station: string, piece: string, madeBy: string, description: string) =>
     act("/api/rework", { station, piece, madeBy, description })
 
-  /** The Line's shape names the Work Stations that can have made a defect. */
   async function loadStations(): Promise<WorkStation[]> {
     const response = await lineFetch("/api/line")
     if (!response.ok) {

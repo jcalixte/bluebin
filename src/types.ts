@@ -56,7 +56,6 @@ export type {
 export type HelpOffer = {
   rework: string
   label: string
-  /** Why this help cannot start now, or null. */
   blocked: string | null
 }
 

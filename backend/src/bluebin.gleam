@@ -267,9 +267,6 @@ pub fn handle_request(
   }
 }
 
-/// `segments` is the path inside the Line, `["api", "demands"]` for
-/// `/api/demands`, `/api/lines/<id>/demands` and
-/// `/api/w/<owner>/lines/<id>/demands`.
 fn in_line(
   request: wisp.Request,
   context: Context,
@@ -297,8 +294,6 @@ fn in_line(
   }
 }
 
-/// The role table refuses a route missing from it, and one the role may not
-/// use (F48).
 fn guard(
   method: http.Method,
   segments: List(String),
@@ -315,9 +310,8 @@ fn guard(
   }
 }
 
-/// The routes of one Line as `role`, behind the same guard as the API, with
-/// no Workspace and no Account: the Simulation runs them in the browser, on
-/// its own Line that lives only in the page (`sim/`).
+/// The Simulation (`sim/`) runs this in the browser, on a Line that lives only
+/// in the page: no Workspace, no Account.
 pub fn simulate(
   request: wisp.Request,
   role: access.Role,
@@ -463,9 +457,7 @@ fn share_line(
   }
 }
 
-/// How the caller's own first Line starts, when this request makes it: empty
-/// with SSO on, where the Simulation shows the demo data; from the demo data
-/// with SSO off, as in dev and in the smoke test.
+/// Dev and the smoke test run with SSO off and start from the demo data.
 fn start_of(context: Context) -> db.Start {
   case context.sso {
     True -> db.Empty
@@ -558,8 +550,6 @@ fn save_account(
   }
 }
 
-/// The link holds from the Account's next sign-in: each Team Member that
-/// has its email, in any Line of any Workspace, shows its name (F47).
 fn show_name_in_lines(context: Context, account: accounts.Account) -> Nil {
   let name = accounts.full_name(account)
   accounts.links_of(context.accounts, account.email)
@@ -642,7 +632,6 @@ fn create_invitation(
   }
 }
 
-/// Every Line the Account can open, by Workspace, its own first (F46).
 fn list_workspaces(
   request: wisp.Request,
   context: Context,
@@ -760,10 +749,8 @@ fn require_workspace(
   }
 }
 
-/// The caller's own Workspace. With SSO on, forward auth sets the uid on
-/// every request it lets through signed in; one with no uid came through a
-/// path authentik does not guard (`/api/s/`, a crafted `..`), so it gets
-/// nothing, and never the `anonymous` Workspace.
+/// With SSO on, a request with no uid came through a path authentik does not
+/// guard (`/api/s/`, a crafted `..`): it gets no Workspace, never `anonymous`.
 fn caller_of(
   request: request.Request(body),
   context: Context,
@@ -903,8 +890,6 @@ fn design_of(database: String, linking: Option(Linking)) -> wisp.Response {
   }
 }
 
-/// The Design with the Takt Time of the Line and the suggested Blue Bins
-/// (F55), waiting for the Account links.
 fn design_json(
   connection: sqlight.Connection,
 ) -> Result(fn(List(accounts.Link)) -> json.Json, Nil) {
@@ -1535,7 +1520,6 @@ fn stop_helping(
   }
 }
 
-/// The Team Member an action acts as (F50); the owner must name one.
 fn acting(
   act_as: ActAs,
   wanted: Option(String),

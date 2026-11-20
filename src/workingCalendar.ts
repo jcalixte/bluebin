@@ -2,7 +2,6 @@ import type { WorkingCalendar } from "./wire.ts"
 
 const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-/** The working days in short: "Mon–Fri", "Sun–Thu", "Mon, Wed, Fri". */
 export function workingDaysLabel(days: number[]): string {
   if (days.length === 0) return "No working day"
   if (days.length === 7) return "Every day"
@@ -23,7 +22,6 @@ export function workingDaysLabel(days: number[]): string {
     .join(", ")
 }
 
-/** One line to read what Working Time counts: "Mon–Fri, 08:00–17:00 UTC, 11 holidays". */
 export function workingCalendarLabel(calendar: WorkingCalendar): string {
   const holidays = calendar.holidays.length
   const parts = [workingDaysLabel(calendar.days), `${calendar.start}–${calendar.end} UTC`]

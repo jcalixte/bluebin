@@ -1,6 +1,3 @@
-//// The route of a Piece: the Work Stations it skips. A Piece goes through
-//// every Work Station by default; its route changes only in the Backlog.
-
 import bluebin/shape
 import gleam/dynamic/decode
 import gleam/json
@@ -15,7 +12,6 @@ pub type RouteError {
   StoreFailed
 }
 
-/// The route as stored, None for every Work Station, if the Line allows it.
 pub fn check(
   connection: sqlight.Connection,
   skips: List(String),
@@ -60,7 +56,6 @@ pub fn check(
   }
 }
 
-/// Gives a Piece waiting in the Backlog a new route.
 pub fn change(
   connection: sqlight.Connection,
   piece_id: String,

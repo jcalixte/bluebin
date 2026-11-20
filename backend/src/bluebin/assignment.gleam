@@ -201,8 +201,7 @@ fn next_thing(
       })
     })
   case active, free_rework {
-    // The Piece in their hands is under Rework: they help its repair rather
-    // than finish it.
+    // A Piece in hand under Rework: help its repair rather than finish it.
     Ok(Transform(id: piece_id, ..) as assignment), _ -> {
       use rework <- result.try(help_the_rework(
         connection,
@@ -237,7 +236,6 @@ fn next_thing(
   }
 }
 
-/// The oldest Rework a Team Member can help, on `piece` only when given.
 fn help_the_rework(
   connection: sqlight.Connection,
   team_member_id: String,
@@ -287,8 +285,7 @@ const helping_sql =
        join work_station w on w.id = p.station_id
       where h.team_member_id = ?1"
 
-/// F61: the two Work Stations concerned, someone repairs, not their own
-/// Rework, and none of their own waits.
+/// Help the Rework rules: DESIGN.md F61.
 const help_the_rework_sql =
   "select r.id, p.reference, pe.name, w.id, w.name
        from rework r
@@ -343,7 +340,6 @@ pub type Station {
     team_members: List(String),
     free_bins: Int,
     stopped: Bool,
-    /// The Work Stations it pulls from (`shape.upstream`).
     upstream: List(String),
   )
 }
@@ -355,8 +351,7 @@ fn help_downstream(mine: List(Station), all: List(Station)) -> Option(Next) {
     && list.any(mine, fn(own) { downstream_of(other, own, all) })
   })
   |> list.filter_map(fn(other) {
-    // A Work Station stopped by its own Rework is for Help the Rework, open
-    // only to the two Work Stations concerned (F22).
+    // A stopped Work Station is for Help the Rework only (F22).
     case other.stopped, in_front_full(other, all) {
       False, True -> Ok(#(other, "the Blue Bins in front of it are full"))
       _, _ -> Error(Nil)
@@ -387,7 +382,6 @@ fn downstream_of(other: Station, own: Station, all: List(Station)) -> Bool {
   )
 }
 
-/// The Blue Bins of a Work Station it pulls from are all full.
 pub fn in_front_full(station: Station, all: List(Station)) -> Bool {
   list.any(all, fn(other) {
     list.contains(station.upstream, other.id) && other.free_bins <= 0
@@ -611,7 +605,8 @@ fn assignments(
   Ok(list.append(repairs, pieces))
 }
 
-/// `andons` are those of the Team Member's Work Stations (DESIGN.md R2).
+/// `andons` must already be only those of the Team Member's Work Stations
+/// (DESIGN.md R2).
 pub fn to_json(view: View, andons: List(wire.Andon)) -> Json {
   wire.TeamMemberView(
     andons:,

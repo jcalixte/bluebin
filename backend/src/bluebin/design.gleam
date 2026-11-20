@@ -1,5 +1,3 @@
-//// Design and change a running Line without code (F39–F41).
-
 import bluebin/accounts
 import bluebin/db
 import bluebin/line
@@ -135,8 +133,6 @@ pub fn load(
   Ok(#(Design(labels:, team_members:, steps:), held))
 }
 
-/// In Line order, with its step position. `members` pairs a Work Station id
-/// with a Team Member id.
 fn load_stations(
   connection: sqlight.Connection,
   members: List(#(String, String)),
@@ -191,10 +187,6 @@ fn load_stations(
   )
 }
 
-/// The shape of the steps alone: one trunk Work Station per step, or a Split
-/// into two or more named Branches that run side by side until the Assembly.
-/// A Branch has one Work Station or more in its Split, at most one at each
-/// step, so it can skip a step; each Branch name is unique in the Line.
 pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
   use <- bool.guard(
     steps == [],
@@ -256,9 +248,6 @@ pub fn check_structure(steps: List(Step)) -> Result(Nil, String) {
   }
 }
 
-/// One Split: two Branches or more, and at most one nested Split in each
-/// Branch, between a Work Station of that Branch before it and one after it,
-/// which does the nested Assembly. A nested Branch does not split again.
 fn check_split(
   run: #(List(Int), List(#(Int, String, Option(String)))),
 ) -> Result(Nil, String) {
@@ -360,7 +349,6 @@ fn steps_label(positions: List(Int)) -> String {
   }
 }
 
-/// None for a trunk step, else its set of Branch names.
 fn step_shape(
   step: Step,
   position: Int,
@@ -420,7 +408,6 @@ fn check_name(name: String, when_empty: String) -> Result(Nil, String) {
   })
 }
 
-/// Everything the running flow forbids: work must not be lost or move back.
 fn check_change(
   wanted: Design,
   current: Design,
@@ -481,8 +468,8 @@ fn check_team_members(
   wanted: List(TeamMember),
   current: List(TeamMember),
 ) -> Result(Nil, String) {
-  // A linked Team Member carries its Account's name, which can be longer.
-  // Only a name the owner types must fit.
+  // A linked Team Member carries its Account's name, which can be longer:
+  // only a name the owner types must fit.
   use _ <- result.try(
     list.try_each(wanted, fn(team_member) {
       case list.contains(current, team_member) {
@@ -519,7 +506,6 @@ fn check_removed_stations(
   })
 }
 
-/// `busy` pairs a Work Station id with a Team Member id.
 fn check_busy(
   busy: List(#(String, String)),
   placed: List(#(Int, Station)),
@@ -629,8 +615,8 @@ fn check_station(
   }
 }
 
-/// Work Stations that hold work keep their order: a Piece never moves backward
-/// (ADR-0001), and Pieces side by side in Branches stay side by side.
+/// Compares with ties: a Piece never moves backward (ADR-0001), and Pieces
+/// side by side in Branches stay side by side.
 fn check_locked_order(
   placed: List(#(Int, Station)),
   held: Dict(String, Held),
@@ -700,10 +686,10 @@ pub fn save(
   connection: sqlight.Connection,
   wanted: Design,
 ) -> Result(Design, DesignError) {
-  // A removed Work Station leaves its id in past rows (passes, Deviations,
-  // closed Rework) so the history stays (F40): the delete must pass even on a
-  // connection that enforces foreign keys, as the tests' connections do.
-  // Outside the transaction, where SQLite ignores the pragma.
+  // Past rows (passes, Deviations, closed Rework) keep a removed Work
+  // Station's id (F40), so the delete must pass on a connection that enforces
+  // foreign keys, as the tests' do. Outside the transaction, where SQLite
+  // ignores the pragma.
   use _ <- result.try(
     sqlight.exec("pragma foreign_keys = off;", connection)
     |> result.replace_error(StoreFailed),
@@ -853,8 +839,7 @@ fn save_team_members(
   })
 }
 
-/// A linked Team Member shows its Account's name (F47): `names` pairs a
-/// Team Member id with that name. True when a name changed.
+/// True when a name changed.
 pub fn name_linked(
   connection: sqlight.Connection,
   names: List(#(String, String)),
@@ -949,7 +934,6 @@ fn add_station(
   )
   use id <- result.try(list.first(rows) |> result.replace_error(StoreFailed))
   use _ <- result.try(set_team_members(connection, id, station.team_members))
-  // Every Blue Bin of a new Work Station is empty: one Kanban for each (F7).
   use _ <- result.try(send_kanbans(connection, id, station.blue_bins))
   changed(connection, station_payload("station_added", id, position, station))
 }
@@ -1004,8 +988,7 @@ fn change_station(
     True -> Ok(Nil)
     False -> set_team_members(connection, id, wanted.team_members)
   })
-  // Kanbans ≤ empty Blue Bins (F7): a new bin brings a Kanban, a removed empty
-  // bin takes the newest one back.
+  // Keeps Kanbans ≤ empty Blue Bins (F7).
   let free = wanted.blue_bins - held.in_bins
   let added = wanted.blue_bins - before.blue_bins
   use _ <- result.try(case added > 0 {
@@ -1071,8 +1054,7 @@ fn set_team_members(
   })
 }
 
-/// `kanban_sent` and `kanban_spent` date the Kanbans held, for the Starvation
-/// Time, so each Kanban that comes or goes is in the log.
+/// One `kanban_sent` per Kanban: the Starvation Time dates each one.
 fn send_kanbans(
   connection: sqlight.Connection,
   station_id: String,
@@ -1191,11 +1173,8 @@ type StationState {
   )
 }
 
-/// Events of one save land at most this many seconds apart.
 const save_window = 2
 
-/// The saves of the Design that change the flow, newest first (F38). Renames
-/// and labels change no flow, so they are not listed.
 pub fn line_changes(
   connection: sqlight.Connection,
 ) -> Result(List(wire.LineChange), Nil) {
@@ -1244,7 +1223,7 @@ pub fn line_changes(
         }
       }
     })
-  // Oldest first in, newest first out: a change keeps the time of its first event.
+  // A change keeps the time of its first event.
   list.reverse(items)
   |> list.fold([], fn(changes, item) {
     let #(second, at, entry) = item
@@ -1409,7 +1388,7 @@ fn describe(
   }
 }
 
-/// One sentence for the entry, where only text fits: a `<select>` option.
+/// Plain text: the SPA shows it in a `<select>` option.
 fn sentence(entry: wire.LineChangeEntry) -> String {
   let facts = string.join(entry.facts, ", ")
   case entry.kind {
@@ -1563,7 +1542,6 @@ pub fn from_input(input: wire.DesignInput) -> Design {
             id: station.id,
             name: station.name,
             branch: station.branch,
-            // A trunk Work Station has no outer Branch.
             parent_branch: case clean(station.branch) {
               None -> None
               Some(_) -> station.parent_branch

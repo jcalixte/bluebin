@@ -31,8 +31,6 @@ pub type Demand {
   )
 }
 
-/// Working days: every day between the first start and the later of today and
-/// the last due date that the Working Calendar counts.
 const list_sql = "
 with recursive
   span(day, last_day) as (
@@ -129,8 +127,6 @@ pub fn round_to_tenth(value: Float) -> Float {
   int.to_float(float.round(value *. 10.0)) /. 10.0
 }
 
-/// The working days the Demand still needs at its pace so far: Pieces
-/// deployed ÷ working days elapsed.
 pub fn remaining_working_days(demand: Demand) -> Option(Int) {
   case demand.pieces_deployed > 0 {
     False -> None
@@ -146,13 +142,11 @@ pub fn remaining_working_days(demand: Demand) -> Option(Int) {
   }
 }
 
-/// The day the last Piece should be deployed, and how many working days
-/// after the due date that is (≤ 0: on time).
 pub type Forecast {
   Forecast(on: String, late_days: Int)
 }
 
-/// Beyond about three years a forecast says nothing useful.
+/// About three years.
 const forecast_horizon_days = 1096
 
 /// `today` counts days since 1970-01-01.
@@ -234,8 +228,6 @@ pub type CreateError {
   StoreFailed
 }
 
-/// The Demand starts today, its Pieces waiting in the Backlog. Each Piece
-/// skips the Work Stations of `skips`.
 pub fn create(
   connection: sqlight.Connection,
   label: String,
@@ -274,8 +266,6 @@ pub fn create(
   insert(connection, label, client, due_on, pieces, code, route)
 }
 
-/// Gives the active Demand `id` a new code; every Piece Reference of its
-/// Pieces changes with it.
 pub fn change_code(
   connection: sqlight.Connection,
   id: String,
@@ -297,8 +287,6 @@ pub fn change_code(
   write_references(connection, id)
 }
 
-/// `code` in capitals, if it is valid and no other active Demand than
-/// `id` has it.
 fn check_code(
   connection: sqlight.Connection,
   code: String,

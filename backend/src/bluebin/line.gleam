@@ -30,7 +30,6 @@ pub type Parked {
     demand: String,
     /// Comma-separated Branches that already took their Sub-Piece at a Split.
     pulled_by: Option(String),
-    /// The Work Stations it skips, as stored.
     route: String,
   )
 }
@@ -70,7 +69,6 @@ pub type Rework {
   )
 }
 
-/// A Team Member on a Rework's Piece: one who helps it, or one who can.
 pub type Helper {
   Helper(rework_id: String, piece_id: String, id: String, name: String)
 }
@@ -249,7 +247,6 @@ fn wire_helpers(helpers: List(Helper)) -> List(wire.TeamMemberName) {
   })
 }
 
-/// The Piece waits in the last Work Station of its route.
 fn deploys_here(rows: Rows, piece: Parked) -> Bool {
   case shape.last(shape.kept(rows.nodes, shape.skips_of(piece.route))) {
     Ok(last) -> last.id == piece.station_id
@@ -449,8 +446,7 @@ const helpers_sql =
        join team_member pe on pe.id = h.team_member_id
       order by h.since, h.rowid"
 
-/// F61: the Team Members of the two Work Stations concerned, while someone
-/// repairs, but not who repairs nor who already helps a Piece.
+/// Help the Rework rules: DESIGN.md F61.
 const can_help_sql =
   "select r.id, r.piece_id, pe.id, pe.name
        from rework r
@@ -566,8 +562,7 @@ pub type RenameError {
   StoreFailed
 }
 
-/// The longest name (step, Work Station, Branch, Team Member, label) the
-/// wall-TV column layout holds without breaking.
+/// The longest name the wall-TV column layout holds without breaking.
 pub const max_name_length = 40
 
 pub fn list_steps(
@@ -604,7 +599,6 @@ pub fn rename_step(
       }
     }),
   )
-  // The new name and its flow event commit together.
   use <- db.transaction(connection, fn(_) { StoreFailed })
   let update =
     sqlight.query(

@@ -25,7 +25,6 @@ async function load() {
   const response = await lineFetch("/api/team-members")
   if (!response.ok) return
   teamMembers.value = (await response.json()) as TeamMember[]
-  // A Team Member removed in Design can no longer be played.
   if (actingAs.value !== "" && !teamMembers.value.some((one) => one.id === actingAs.value)) {
     actingAs.value = ""
   }

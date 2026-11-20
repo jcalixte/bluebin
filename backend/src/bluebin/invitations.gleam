@@ -9,37 +9,32 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import wisp
 
-/// The authentik that signs people in to Bluebin (ADR-0003).
 const authentik = "https://auth.bluebin.app"
 
 /// The sign-up flow of `authentik/bluebin-invitation.yaml`.
 const flow = "bluebin-invitation"
 
-/// Only authentik's own administrator invites people.
+/// authentik's built-in administrator.
 const admin = "akadmin"
 
 /// Traefik forward auth copies it from authentik's answer, so it is trusted
 /// only while SSO is on (ADR-0003).
 const username_header = "x-authentik-username"
 
-/// A week: time to read the message, and a forgotten link dies soon.
+/// A week.
 const lifetime_seconds = 604_800
 
 pub type Invitation {
-  /// `expires` is RFC 3339, in UTC.
   Invitation(link: String, expires: String)
 }
 
 pub type Failure {
-  /// `AUTHENTIK_TOKEN` is not set.
   NoToken
   Unreachable
-  /// authentik answered with this status, as 403 when the token lacks a permission.
   Refused(status: Int)
   UnknownAnswer
 }
 
-/// Sends a request to authentik and gives its status and body.
 pub type Send =
   fn(Request(String)) -> Result(#(Int, String), Nil)
 
@@ -50,7 +45,7 @@ pub fn is_admin(request: Request(body)) -> Bool {
   request.get_header(request, username_header) == Ok(admin)
 }
 
-/// `token` is an authentik API token allowed to view flows and add invitations.
+/// `token` needs the authentik permissions to view flows and add invitations.
 pub fn invite(token: Option(String), send: Send) -> Invite {
   fn() {
     case token {
@@ -60,7 +55,6 @@ pub fn invite(token: Option(String), send: Send) -> Invite {
   }
 }
 
-/// `now` is in Unix seconds.
 pub fn create(
   token: String,
   send: Send,
@@ -96,7 +90,6 @@ pub fn create(
   ))
 }
 
-/// The `pk` of the object authentik answers with.
 fn call(
   token: String,
   send: Send,

@@ -1,10 +1,8 @@
-//// The routes of a Line: where each Work Station pulls its Piece from.
-////
 //// A Line is a grid of steps. The trunk has one Work Station at a step; a
 //// Split opens Branches that run side by side over the next steps, each with
 //// its own number of Work Stations, until the trunk Work Station after them
 //// does the Assembly. A Branch can open one nested Split, closed by a later
-//// Work Station of the same Branch. `src/shape.ts` mirrors this module.
+//// Work Station of the same Branch. Keep in sync with `src/shape.ts`.
 
 import gleam/bool
 import gleam/dynamic/decode
@@ -30,16 +28,14 @@ pub type Node {
 
 pub type Inflow {
   FromBacklog
-  /// The Work Station before it in its own Branch, or on the trunk.
   Straight(from: String)
-  /// The first Work Station of a Branch pulls its Sub-Piece from `from`; the
-  /// Piece leaves there once every Branch of `branches` has pulled.
+  /// The Piece leaves `from` once every Branch of `branches` has pulled its
+  /// Sub-Piece.
   AtSplit(from: String, branches: List(String))
   /// The last Work Station of each Branch it closes, in Branch name order.
   Assembly(ends: List(String))
 }
 
-/// Every Work Station of the Line, in step order.
 pub fn load(
   connection: sqlight.Connection,
 ) -> Result(List(Node), sqlight.Error) {
@@ -85,8 +81,6 @@ pub fn inflow(nodes: List(Node), node: Node) -> Result(Inflow, Nil) {
   }
 }
 
-/// The Work Stations it pulls from: none from the Backlog, one, or the end of
-/// each Branch at an Assembly.
 pub fn upstream(nodes: List(Node), node: Node) -> List(String) {
   upstream_of(nodes, node)
 }
@@ -99,7 +93,6 @@ fn upstream_of(nodes: List(Node), node: Node) -> List(String) {
   }
 }
 
-/// Every Piece that reaches `downstream` has passed `upstream` first.
 pub fn is_upstream(
   nodes: List(Node),
   upstream: String,
@@ -117,7 +110,6 @@ pub fn is_upstream(
   )
 }
 
-/// `is_upstream` when the upstream list of each Work Station is known.
 pub fn reaches(
   upstream: fn(String) -> List(String),
   from: String,
@@ -177,7 +169,6 @@ fn split_around(nodes: List(Node), node: Node) -> List(Node) {
   }
 }
 
-/// A Work Station of a Branch that opens inside `lane`.
 fn inside(node: Node, lane: Option(String)) -> Bool {
   case lane, node.branch {
     _, None -> False
@@ -192,7 +183,6 @@ fn nearest(nodes: List(Node)) -> Result(Int, Nil) {
   |> list.reduce(int.max)
 }
 
-/// The Work Station before the Split, in the lane around the Branch.
 fn split_source(nodes: List(Node), first: Node) -> Result(Node, Nil) {
   nodes
   |> list.filter(fn(other) {
@@ -244,8 +234,6 @@ fn split_of(nodes: List(Node), node: Node) -> Result(Inflow, Nil) {
   }
 }
 
-/// The last Work Station of each Branch that opens inside `lane` and closes
-/// at `node`.
 fn ends(nodes: List(Node), lane: Option(String), node: Node) -> List(String) {
   let floor =
     nodes
@@ -277,13 +265,11 @@ pub fn skips_of(route: String) -> List(String) {
   json.parse(route, decode.list(decode.string)) |> result.unwrap([])
 }
 
-/// The Work Stations a Piece goes through: every one but those it skips.
 pub fn kept(nodes: List(Node), skips: List(String)) -> List(Node) {
   list.filter(nodes, fn(node) { !list.contains(skips, node.id) })
 }
 
-/// The Work Station a Piece deploys from: the last one of its route, which is
-/// on the trunk because a Line ends with one.
+/// The Work Station a Piece deploys from: a Line ends on the trunk.
 pub fn last(nodes: List(Node)) -> Result(Node, Nil) {
   nodes
   |> list.filter(fn(node) { node.branch == None })
@@ -298,15 +284,11 @@ pub fn last(nodes: List(Node)) -> Result(Node, Nil) {
 pub type RouteError {
   UnknownStation(String)
   SkipsEveryStation
-  /// The Work Station would assemble Branches the Piece keeps.
   SkipsAnAssembly(String)
   /// The Work Station has nothing left to pull the Piece from.
   Stranded(String)
 }
 
-/// A Piece can skip any Work Station but one that would do its Assembly, and
-/// each Work Station it keeps must still have a place to pull from. Answers
-/// the skipped ids, sorted and unique.
 pub fn check_route(
   nodes: List(Node),
   skips: List(String),

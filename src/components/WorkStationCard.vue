@@ -7,7 +7,6 @@ const props = defineProps<{
   /** The Piece each Team Member transforms now, by Team Member id. */
   activePieces: Map<string, { piece: string; station: string; position: number }>
   busy?: boolean
-  /** The Work Station after the Branches pulls by Assembly. */
   assembly?: boolean
   andons: Andon[]
   /** Keys `piece:<id>` and `rework:<id>` of the stale Assignments. */
@@ -84,7 +83,6 @@ const stop = computed(() => {
   return found?.kind === "stop" ? found : null
 })
 
-/** What a pull does now, shown on the Pull button at the moment of the pull. */
 const pullWarning = computed(() =>
   [
     stop.value ? "The Andon is open: a pull is a Deviation until it is closed" : null,

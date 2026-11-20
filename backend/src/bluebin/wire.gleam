@@ -1,7 +1,5 @@
-//// The JSON shapes the API sends and reads, one custom type per shape.
-//// `gleam dev` reads this file and writes the encoders and decoders
-//// (`bluebin/wire_json.gleam`) and the TypeScript types (`src/wire.ts`), so
-//// the two sides cannot drift.
+//// `gleam dev` writes `bluebin/wire_json.gleam` and `src/wire.ts` from this
+//// file.
 ////
 //// - A type with one variant and labelled fields is a JSON object. Field
 ////   types: `String`, `Int`, `Float`, `Bool`, `Option(t)`, `List(t)` and the
@@ -15,16 +13,15 @@
 //// name, so two types can share a kind: `ReworkItem` of `PriorityItem` is
 //// `"rework"`. The `///` comment of a type or a field becomes its JSDoc.
 ////
-//// A type whose name ends in `Input` is a request body: it gets a decoder
-//// (`pull_input_decoder()`) and no encoder, and each type it reaches gets a
-//// decoder too. An `Option` field of a request body may be absent or null.
+//// A type whose name ends in `Input` is a request body: it gets a decoder and
+//// no encoder, and each type it reaches gets a decoder too. An `Option` field
+//// of a request body may be absent or null.
 
 import gleam/option.{type Option}
 
 pub type Demand {
   Demand(
     id: String,
-    /// The Demand Code, `CHK`: it starts the Piece Reference of each of its Pieces.
     code: String,
     label: String,
     client: String,
@@ -57,7 +54,7 @@ pub type WorkingCalendar {
   )
 }
 
-/// What the Account may do in a Line; the server checks it again (H10).
+/// The server checks it again (H10).
 pub type LineRole {
   OwnerRole
   MemberRole
@@ -68,7 +65,6 @@ pub type LineEntry {
   LineEntry(
     id: String,
     name: String,
-    /// Anyone with its look-only link sees a Shared Line, signed in or not.
     shared: Bool,
     role: LineRole,
     /// The Account's own Team Member, for a member.
@@ -76,7 +72,7 @@ pub type LineEntry {
   )
 }
 
-/// One Workspace of the Line menu, from `GET /api/workspaces`.
+/// `GET /api/workspaces`.
 pub type Workspace {
   Workspace(
     owner: String,
@@ -87,7 +83,7 @@ pub type Workspace {
   )
 }
 
-/// Hours, in each view; the whole Duration is null when there is nothing to average.
+/// Hours; the whole Duration is null when there is nothing to average.
 pub type Duration {
   Duration(calendar: Option(Float), working: Option(Float))
 }
@@ -109,7 +105,7 @@ pub type DemandMeasures {
     label: String,
     client: String,
     pieces: Int,
-    /// The Demand's own Lead Time: null until its last Piece is released.
+    /// Null until the Demand's last Piece is released.
     demand_lead_time: Option(Duration),
     lead_time: Option(Duration),
     touch_time: Option(Duration),
@@ -132,9 +128,8 @@ pub type StationMeasures {
     /// A fraction in 0..1.
     touch_share: Option(Float),
     starvation_time: Option(Duration),
-    /// The time an Andon stopped the Work Station inside the period.
     andon_time: Option(Duration),
-    /// The Andons raised on the Work Station inside the period.
+    /// Andons raised inside the period.
     andons: Int,
     pulls: Int,
     deviations: Int,
@@ -156,7 +151,7 @@ pub type OnTime {
   OnTime(delivered: Int, on_time: Int)
 }
 
-/// The Deviations recorded in the period: how many per rule, most first, then each one.
+/// `byRule` is sorted most first.
 pub type DeviationMeasures {
   DeviationMeasures(by_rule: List(RuleCount), list: List(RecordedDeviation))
 }
@@ -172,20 +167,18 @@ pub type Measures {
     pieces: PieceMeasures,
     demands: List(DemandMeasures),
     stations: List(StationMeasures),
-    /// The time at least one Work Station is stopped by an Andon; stops at the same time count once.
+    /// Stops at the same time count once.
     andon_time: Option(Duration),
-    /// Demands delivered in the period, and those delivered by their due date.
     on_time: OnTime,
     deviations: DeviationMeasures,
   )
 }
 
-/// What a reorder of the Heijunka Sequence costs one Demand.
 pub type ReorderEffect {
   ReorderEffect(
     demand: String,
     label: String,
-    /// Places its next Piece moves: positive is later.
+    /// Positive is later.
     places: Int,
     hours: Float,
     takt_gap: Float,
@@ -203,7 +196,6 @@ pub type BacklogPiece {
     slot_hours: Float,
     urgent: Bool,
     can_be_urgent: Bool,
-    /// The ids of the Work Stations it skips; empty when it goes through all.
     skips: List(String),
   )
 }
@@ -217,16 +209,10 @@ pub type MixTotal {
 }
 
 pub type MixRow {
-  MixRow(
-    demand: String,
-    label: String,
-    cells: List(MixCell),
-    /// The days shown, added up.
-    total: MixTotal,
-  )
+  MixRow(demand: String, label: String, cells: List(MixCell), total: MixTotal)
 }
 
-/// `sequence` is the Heijunka Sequence: its first Piece leaves the Backlog next.
+/// `sequence` is the Heijunka Sequence, next Piece first.
 pub type Backlog {
   Backlog(
     takt_time_hours: Float,
@@ -245,8 +231,7 @@ pub type AccountName {
 }
 
 /// `email` links the Team Member to the Account that has it; `account` stays
-/// null until that Account signs in ("not linked yet"). Both are empty while
-/// nobody is signed in.
+/// null until that Account signs in. Both are empty while nobody is signed in.
 pub type DesignTeamMember {
   DesignTeamMember(
     id: String,
@@ -256,10 +241,9 @@ pub type DesignTeamMember {
   )
 }
 
-/// Suggested Blue Bins (DESIGN.md F55): the last `passes` (at most 20) that went
-/// in the Blue Bin. `replenishmentHours` is their 85th percentile in Working
-/// Time, without the pauses while the Team Member held another Piece; null
-/// under 5 passes. `blueBins` is null without it or without a Takt Time.
+/// DESIGN.md F55: the last `passes` (at most 20) that went in the Blue Bin.
+/// `replenishmentHours` is their 85th percentile in Working Time, without the
+/// pauses while the Team Member held another Piece; null under 5 passes. `blueBins` is null without it or without a Takt Time.
 pub type BlueBinSuggestion {
   BlueBinSuggestion(
     passes: Int,
@@ -275,7 +259,6 @@ pub type DesignStation {
     id: String,
     name: String,
     branch: Option(String),
-    /// The outer Branch of a nested Branch.
     parent_branch: Option(String),
     blue_bins: Int,
     team_leader: String,
@@ -286,7 +269,6 @@ pub type DesignStation {
   )
 }
 
-/// Steps are in flow order: the first step pulls from the Backlog.
 pub type DesignStep {
   DesignStep(name: String, stations: List(DesignStation))
 }
@@ -294,17 +276,16 @@ pub type DesignStep {
 pub type Design {
   Design(
     labels: Labels,
-    /// The Takt Time of the Line, in hours of Working Time; 0 with no active Demand.
+    /// 0 with no active Demand.
     takt_time_hours: Float,
     team_members: List(DesignTeamMember),
     steps: List(DesignStep),
   )
 }
 
-/// The run chart (F38): the Line's first day, and its last weeks.
 pub type WeekHistory {
   WeekHistory(
-    /// The day of the first event of the Line, `YYYY-MM-DD` (UTC): no measure before it.
+    /// `YYYY-MM-DD` (UTC), the day of the first event of the Line.
     started_on: String,
     weeks: List(WeekMeasures),
   )
@@ -317,31 +298,28 @@ pub type WeekMeasures {
     to: String,
     /// Pieces released in the week.
     pieces: Int,
-    /// Average per Piece released; null with no Piece released.
+    /// Average per Piece released.
     lead_time: Option(Duration),
   )
 }
 
-/// One save of the Design that changes the flow: the pivot of a before/after comparison (F38).
+/// A save of the Design that changes the flow (F38).
 pub type LineChange {
   LineChange(
-    /// When the Design was saved, `YYYY-MM-DDTHH:MM:SSZ` (UTC).
+    /// `YYYY-MM-DDTHH:MM:SSZ` (UTC).
     at: String,
     /// What changed, one sentence for each Work Station or Team Member.
     items: List(String),
-    /// The same changes as `items`, one entry each, for a list that shows
-    /// the name apart from the facts.
+    /// The same changes as `items`, one entry each.
     entries: List(LineChangeEntry),
   )
 }
 
-/// What one save changed on one Work Station or Team Member.
 pub type LineChangeEntry {
   LineChangeEntry(
     /// `station_added`, `station_changed`, `station_removed`,
     /// `team_member_added` or `team_member_removed`.
     kind: String,
-    /// The Work Station or Team Member.
     name: String,
     /// Short facts: "3 Blue Bins", "Team Leader Anne → Bob".
     facts: List(String),
@@ -356,7 +334,6 @@ pub type BlueBin {
     demand: Option(String),
     /// At a Split, the Branches that already pulled their Sub-Piece of it.
     pulled_by: Option(String),
-    /// This is the last Work Station of the Piece's route: it deploys from here.
     deploys_here: Bool,
   )
 }
@@ -387,7 +364,6 @@ pub type InProgressPiece {
     paused: Bool,
     /// An open Rework repairs it: finishing it accepts the repair.
     under_rework: Bool,
-    /// The Team Members who Help the Rework on this Piece.
     helpers: List(TeamMemberName),
   )
 }
@@ -416,7 +392,6 @@ pub type WorkStation {
     name: String,
     position: Int,
     branch: Option(String),
-    /// The outer Branch of a nested Branch.
     parent_branch: Option(String),
     blue_bin_count: Int,
     team_leader: Option(String),
@@ -439,7 +414,7 @@ pub type RuleConfirm {
   RuleConfirm(confirm: String, rules: List(String), message: String)
 }
 
-/// The 409 answer of a reorder of the Heijunka Sequence, with what it costs.
+/// The 409 answer of a reorder of the Heijunka Sequence.
 pub type ReorderConfirm {
   ReorderConfirm(confirm: String, message: String, effects: List(ReorderEffect))
 }
@@ -487,7 +462,7 @@ pub type Bottleneck {
   )
 }
 
-/// A deployed Piece that waits for its Release; `waitingHours` since its Deployment, in Calendar Time.
+/// `waitingHours` since its Deployment, in Calendar Time.
 pub type HeldForRelease {
   HeldForRelease(
     id: String,
@@ -600,7 +575,6 @@ pub type AccountInput {
   AccountInput(first_name: String, last_name: String)
 }
 
-/// The name of a new or renamed Line, Team Member or step.
 pub type NameInput {
   NameInput(name: String)
 }
@@ -681,7 +655,7 @@ pub type UrgentInput {
   UrgentInput(piece: String, reason: Option(String))
 }
 
-/// `POST /api/backlog/route`: the Work Stations a Piece in the Backlog skips.
+/// `POST /api/backlog/route`, for a Piece in the Backlog.
 pub type RouteInput {
   RouteInput(piece: String, skips: List(String))
 }

@@ -1,13 +1,6 @@
 #!/usr/bin/env sh
-# Smoke-test a running Bluebin API.
-#
-#   scripts/test-api.sh                        against a local backend
-#   scripts/test-api.sh http://localhost:8000  the same, explicit
-#
-# Each call acts as the workspace in $WORKSPACE (default "smoke"), the way
-# Traefik forward auth sends the authentik user id when SSO is on.
-#
-# Needs curl and jq only, no Erlang.
+# Each call acts as the workspace in $WORKSPACE, the way Traefik forward auth
+# sends the authentik user id when SSO is on.
 set -eu
 
 BASE="${1:-http://localhost:8000}"
@@ -29,7 +22,7 @@ check() {
   fi
 }
 
-# `jq -e` exits non-zero when the expression is false or null: that is the assertion.
+# `jq -e` exits non-zero when the expression is false or null.
 assert_json() {
   printf '%s' "$2" | jq -e "$1"
 }

@@ -1,9 +1,8 @@
 name = "simulation"
 version = "1.0.0"
 target = "javascript"
+description = "The API's Line routes, run in the browser on an in-memory SQLite (see the SPA's src/simulation/)."
 
-# The Line routes of the API, compiled to JavaScript and run in the browser on
-# an in-memory SQLite (see src/simulation.gleam and the SPA's src/simulation/).
 [dependencies]
 bluebin = { path = "../backend" }
 gleam_stdlib = ">= 1.0.0 and < 2.0.0"

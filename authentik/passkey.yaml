@@ -4,12 +4,10 @@
 #
 # All sign-in flows share the stage default-authentication-identification.
 # With webauthn_stage set, the browser offers the user's passkeys when the
-# username field gets focus (WebAuthn conditional UI). A passkey signs the user
-# in with no password and no second factor. The password stays as fallback.
+# username field gets focus (WebAuthn conditional UI).
 #
-# The flow passkey-authentication is linked under the sign-in form as the
-# button "Use a security key". It asks the browser for a passkey at once, with
-# no username, then signs the user in.
+# passwordless_flow shows as the button "Use a security key" under the
+# sign-in form.
 #
 # A passkey belongs to one host name: a passkey made on auth.apoena.dev does not
 # work on auth.bluebin.app. Make one on each host where you sign in:

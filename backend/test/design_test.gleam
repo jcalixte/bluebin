@@ -173,7 +173,7 @@ pub fn two_branches_cannot_share_a_name_test() {
 }
 
 pub fn branches_can_have_different_lengths_test() {
-  // The software team example (F74): Web has one Work Station, iOS two.
+  // The software team example (F74).
   assert design.check_structure([
       trunk("Spec"),
       split("Build", ["Web", "iOS"]),
@@ -241,7 +241,7 @@ fn with_branch(step: Step, branch: String) -> Step {
 }
 
 pub fn a_branch_can_open_a_nested_split_test() {
-  // Mobile splits into iOS and Android, and QA Mobile assembles them (F75).
+  // F75.
   assert design.check_structure([
       trunk("Spec"),
       split("Build", ["Web", "Mobile"]),

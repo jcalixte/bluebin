@@ -1,10 +1,8 @@
-# try.bluebin.app: the Simulation, static files only. No API, no database and
-# no sign-in: the Line lives in the visitor's page. Coolify builds this file
-# as its own app, with no forward-auth labels.
+# try.bluebin.app: Coolify builds this file as its own app, with no
+# forward-auth labels.
 
 ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine
 
-# The API's Line routes, compiled to JavaScript for the browser.
 FROM ${GLEAM_IMAGE} AS sim
 WORKDIR /build
 COPY backend/ backend/

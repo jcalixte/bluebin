@@ -17,8 +17,7 @@ pub fn serve(
         use <- wisp.serve_static(request, under: "/", from: directory)
         wisp.not_found()
       }
-      // Vite puts a content hash in every asset name, so a new build never
-      // reuses a URL and the browser can keep each one for good.
+      // Vite hashes every asset name, so a URL is never reused.
       |> cache("public, max-age=31536000, immutable")
     http.Get, _ ->
       {

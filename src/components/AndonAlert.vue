@@ -24,8 +24,6 @@ function time(at: string) {
         {{ andons.length }}
       </span>
     </p>
-    <!-- One row per Andon; on wider screens the rows share columns, so names,
-         times and Team Leaders line up and the eye scans down, not across. -->
     <ul
       class="divide-y divide-error-content/20 text-sm sm:grid sm:grid-cols-[max-content_max-content_1fr_auto] sm:gap-x-4"
     >

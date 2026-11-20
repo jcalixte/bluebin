@@ -1,5 +1,4 @@
-//// The Simulation on Node, whose `node:sqlite` stands in for sql.js. A
-//// dependency compiles to JavaScript even when it calls Erlang only, and
+//// A dependency that calls Erlang only still compiles to JavaScript and
 //// fails at the call: these tests are the guard.
 
 import gleam/list

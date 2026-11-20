@@ -10,7 +10,7 @@ const appId = "app.bluebin.try"
 
 const callTimeoutMs = 15000
 
-/** A Team Member a Guest can pick: its Work Stations, and those it is Team Leader of. */
+/** `leads`: the names of the Work Stations it is Team Leader of. */
 export type Pickable = TeamMember & { leads: string[] }
 type Table = { teamMembers: Pickable[]; seats: Seats }
 type Call = { method: string; path: string; body: string }
@@ -59,7 +59,6 @@ function actions(room: Room) {
   }
 }
 
-/** Work Station names by the id of their Team Leader, from the Design the owner sees. */
 function teamLeads(): Map<string, string[]> {
   const leads = new Map<string, string[]>()
   const [status, text] = answer("GET", "/api/design", "", "")

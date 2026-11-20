@@ -17,7 +17,7 @@ const KEEP_BUSY_FOR_MS = 500
 export function useFlowRunner() {
   const pending = ref<Pending | null>(null)
   const actionError = ref<string | null>(null)
-  /** True once an action runs longer than SHOW_BUSY_AFTER_MS: drives the spinner and disabled look. */
+  /** True once an action runs longer than SHOW_BUSY_AFTER_MS. */
   const busy = ref(false)
   let running = false
 

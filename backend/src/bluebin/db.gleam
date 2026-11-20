@@ -8,20 +8,18 @@ import gleam/string
 import simplifile
 import sqlight
 
-/// Each workspace has its own SQLite file in this directory, so no query can
-/// read the data of another workspace. Must stay under `data/`, the mounted
-/// volume, or the data is lost on redeploy.
+/// Must stay under `data/`, the mounted volume, or the data is lost on
+/// redeploy.
 pub const workspaces_directory = "data/workspaces"
 
-/// The schema of a new database. Raise `schema_version` when it changes, and
-/// add a step to `migrations` when the change only adds; a database whose
-/// version has no step is refused (ADR-0006).
+/// Raise it when `schema` changes, and add a step to `migrations` when the
+/// change only adds; a database whose version has no step is refused
+/// (ADR-0006).
 const schema_version = 6
 
-/// Parents before children. `foreign_keys` holds only on the connection that
-/// runs this schema and the seed, and only outside a transaction: `ready`
-/// runs it inside one, where SQLite ignores the pragma, and request
-/// connections leave it off. So foreign keys are not enforced at runtime.
+/// Parents before children. Foreign keys are not enforced at runtime: `ready`
+/// runs this inside a transaction, where SQLite ignores the pragma, and
+/// request connections leave it off.
 const schema =
   "
 pragma foreign_keys = on;
@@ -174,8 +172,8 @@ create table helper (
 );
 "
 
-/// Each step takes a database from the version of its key to the next one.
-/// A step only adds, and has its own SQL: the schema above moves on.
+/// Keyed by the version a step upgrades from. A step only adds, and keeps its
+/// own SQL: `schema` moves on.
 const migrations = [
   #(
     2,
@@ -452,20 +450,17 @@ pub fn workspace_path(workspace: String) -> String {
   workspaces_directory <> "/" <> workspace <> ".db"
 }
 
-/// What a new Line holds: the demo data, in the Simulation and with SSO off,
-/// or one Work Station and one Team Member to rename in Design.
 pub type Start {
   Demo
   Empty
 }
 
-/// The SPA sends several requests at once on its first load, so the slow path
-/// holds the write lock: the other requests wait, then see the current version.
+/// Migrates under the write lock: the SPA's concurrent first-load requests
+/// wait, then see the current version.
 pub fn ready(database: String, start: Start) -> Result(Nil, sqlight.Error) {
   open(database, start, function.identity, fn(_) { Ok(Nil) })
 }
 
-/// `ready`, then `run` on the same connection.
 pub fn open(
   database: String,
   start: Start,
@@ -492,10 +487,8 @@ pub fn open(
   run(connection)
 }
 
-/// For the container healthcheck: the SQLite NIF loads and `database` answers
-/// a read. A rolling deploy moves the traffic only to a container that passes.
-/// Opens with `sqlight.open`, not `with_connection_at`, which crashes when the
-/// file cannot open.
+/// Container healthcheck. Uses `sqlight.open`, not `with_connection_at`, which
+/// crashes when the file cannot open.
 pub fn check(database: String) -> Result(Nil, sqlight.Error) {
   use connection <- result.try(sqlight.open(database))
   let version = user_version(connection)
@@ -526,8 +519,6 @@ pub fn with_connection_at(
   run(connection)
 }
 
-/// Makes the schema and the `start` data on a new database, migrates an older
-/// one (ADR-0006), and does nothing on a current one.
 pub fn prepare(
   connection: sqlight.Connection,
   start: Start,
@@ -654,7 +645,6 @@ pub fn reset(connection: sqlight.Connection) -> Result(Nil, sqlight.Error) {
   seed(connection)
 }
 
-/// Unlike `reset`, the Working Calendar and the labels stay.
 pub fn reset_empty(
   connection: sqlight.Connection,
 ) -> Result(Nil, sqlight.Error) {
@@ -689,7 +679,6 @@ pub fn transaction(
   }
 }
 
-/// In seconds since the Unix epoch, from SQLite's clock.
 pub fn now(connection: sqlight.Connection) -> Result(Int, sqlight.Error) {
   sqlight.query(
     "select cast(strftime('%s', 'now') as integer)",

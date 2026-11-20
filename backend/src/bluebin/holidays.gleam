@@ -5,26 +5,23 @@ import gleam/result
 import gleam/string
 import simplifile
 
-/// Nager.Date: free public holiday API, no key. See https://date.nager.at
+/// Nager.Date, no API key: https://date.nager.at
 const api = "https://date.nager.at/api/v3"
 
 /// Under `data/`, the mounted volume, so the cache outlives a redeploy.
 pub const directory = "data/holidays"
 
-/// Public holidays rarely change: one call per answer and per month at most.
+/// 30 days.
 const max_age_seconds = 2_592_000
 
 pub type Failure {
   Unreachable
-  /// Nager.Date answered with this status, as 404 for an unknown country.
   Refused(status: Int)
 }
 
-/// What Nager.Date answers to a GET of `path`: its status and body.
 pub type Fetch =
   fn(String) -> Result(#(Int, String), Nil)
 
-/// The countries Nager.Date knows, as its JSON.
 pub fn countries(
   fetch: Fetch,
   in directory: String,
@@ -32,8 +29,6 @@ pub fn countries(
   cached("/AvailableCountries", "countries.json", fetch, directory)
 }
 
-/// The public holidays of `country` in `year`, as Nager.Date's JSON.
-/// `Error(Nil)` when the year or the country code is not valid.
 pub fn public_holidays(
   year: String,
   country: String,
@@ -119,7 +114,7 @@ fn keep(file: String, body: String) -> Nil {
   Nil
 }
 
-/// A GET to Nager.Date over HTTPS, with the certificate checked.
+/// Over HTTPS, with the certificate checked.
 pub fn http_fetch(url: String) -> Result(#(Int, String), Nil) {
   use request <- result.try(request.to(url))
   httpc.configure()

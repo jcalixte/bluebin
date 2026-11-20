@@ -176,9 +176,9 @@ const kanbansByColumn = computed(() =>
   Object.fromEntries(columns.value.map((column, index) => [index, column.kanbans])),
 )
 
-/** One column for each step, with a gap column between two steps for the arrows. */
+const arrowColumn = "6rem"
 const gridColumns = computed(() => {
-  const steps = columns.value.map(() => "minmax(15rem, 1fr)").join(" 6rem ")
+  const steps = columns.value.map(() => "minmax(15rem, 1fr)").join(` ${arrowColumn} `)
   return line.value?.heldForRelease.length ? `${steps} 3rem auto` : steps
 })
 

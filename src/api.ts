@@ -89,7 +89,6 @@ export function rememberLine(line: string | null, owner: string | null = null) {
 
 export const lineApi = `/api${pageUrl("", lineId, workspaceOwner)}`
 
-/** `/api/demands` → the same route inside the Line of this page. */
 export function api(path: string): string {
   return `${lineApi}${path.slice("/api".length)}`
 }

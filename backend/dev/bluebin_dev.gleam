@@ -1,7 +1,5 @@
-//// `gleam dev`: writes the JSON encoders, the decoders of the request bodies
-//// and the TypeScript types of the custom types in `bluebin/wire.gleam`. Run
-//// it after each change to that file; `test/wire_test.gleam` fails while the
-//// written files are out of date.
+//// Run `gleam dev` after each change to `bluebin/wire.gleam`:
+//// `test/wire_test.gleam` fails while the written files are out of date.
 
 import glance
 import gleam/bit_array
@@ -36,11 +34,8 @@ pub type Generated {
 }
 
 type Definition {
-  /// One variant with labelled fields: a JSON object.
   Record(name: String, doc: List(String), fields: List(Field))
-  /// Variants with no fields only: a JSON string.
   Enum(name: String, doc: List(String), variants: List(Variant))
-  /// Several variants, some with fields: a JSON object tagged by `kind`.
   Union(name: String, doc: List(String), variants: List(Variant))
 }
 
@@ -80,12 +75,10 @@ pub fn generate(source: String) -> Result(Generated, String) {
   Generated(gleam:, typescript: typescript_module(definitions))
 }
 
-/// A request body: the generator writes its decoder and no encoder.
 fn is_input(definition: Definition) -> Bool {
   string.ends_with(definition.name, "Input")
 }
 
-/// The request bodies and each type they reach: the types to decode.
 fn decoded(definitions: List(Definition)) -> List(String) {
   definitions
   |> list.filter(is_input)
@@ -170,8 +163,6 @@ fn definition(
   }
 }
 
-/// `Owner` → `owner`. The last word of the type name is dropped from the end
-/// of the variant name, so that two types of the module can share a kind:
 /// `ReworkItem` of `PriorityItem` → `rework`.
 fn variant_kind(variant: String, type_: String) -> String {
   let word = last_word(type_)
@@ -241,11 +232,10 @@ fn kind(type_: glance.Type, names: List(String)) -> Result(Kind, String) {
   }
 }
 
-/// The `///` lines right above the code that starts at byte `start`.
-fn doc_before(source: String, start: Int) -> List(String) {
+fn doc_before(source: String, byte_offset: Int) -> List(String) {
   let before =
     bit_array.from_string(source)
-    |> bit_array.slice(0, start)
+    |> bit_array.slice(0, byte_offset)
     |> result.try(bit_array.to_string)
     |> result.unwrap("")
   before
@@ -368,17 +358,15 @@ fn union_arm(variant: Variant) -> String {
   }
 }
 
-/// `json.object([...])`, its first line at `indent`, the entries one level in.
-/// `first` are entries written before the fields, as `#(key, value)` code.
 fn object(
   fields: List(Field),
-  first: List(#(String, String)),
+  leading: List(#(String, String)),
   value: String,
   indent: String,
 ) -> String {
   let entries =
     list.append(
-      first,
+      leading,
       list.map(fields, fn(field) {
         #(
           camel_case(field.label),
@@ -507,7 +495,6 @@ fn decoder(definition: Definition) -> Result(String, String) {
   "\n" <> head <> body <> "}\n"
 }
 
-/// `use label <- decode.field(...)`: an `Option` field may be absent or null.
 fn use_field(field: Field) -> String {
   let key = "\"" <> camel_case(field.label) <> "\""
   let #(function, arguments) = case field.kind {
@@ -588,24 +575,21 @@ fn typescript_type(definition: Definition) -> String {
   }
 }
 
-/// An object type, its last line at `indent`. `first` are members written
-/// before the fields. In a request body (`input`) an `Option` field may be
-/// absent.
 fn ts_object(
   fields: List(Field),
-  first: List(String),
+  leading: List(String),
   indent: String,
-  input: Bool,
+  request_body: Bool,
 ) -> String {
   let inner = indent <> "  "
   "{\n"
-  <> string.concat(list.map(first, fn(member) { inner <> member <> "\n" }))
+  <> string.concat(list.map(leading, fn(member) { inner <> member <> "\n" }))
   <> string.concat(
     list.map(fields, fn(field) {
       jsdoc(field.doc, inner)
       <> inner
       <> camel_case(field.label)
-      <> case input, field.kind {
+      <> case request_body, field.kind {
         True, Nullable(_) -> "?: "
         _, _ -> ": "
       }

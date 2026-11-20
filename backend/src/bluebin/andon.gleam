@@ -13,10 +13,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/result
 import sqlight
 
-/// Computed on each read from the current state, the log and the Working
-/// Calendar; nothing here is stored.
 pub type Andon {
-  /// A Team Member stopped the Work Station; its Team Leader closes it (F42).
   Stop(
     station_id: String,
     station: String,
@@ -25,7 +22,6 @@ pub type Andon {
     team_leader_id: Option(String),
     team_leader: Option(String),
   )
-  /// A Rework waits with no active Assignment for too long (F15).
   ReworkWaits(
     station_id: String,
     station: String,
@@ -35,14 +31,10 @@ pub type Andon {
   )
 }
 
-/// An active Assignment with no event for more than one working day (F33).
 pub type Stale {
   Stale(kind: String, id: String)
 }
 
-/// A Work Station that holds up the flow (F10, F29). `capacity` is the
-/// average Touch Time of its last passes divided by its Team Members, in hours;
-/// `slower` says it is above the Takt Time of the Line.
 pub type Bottleneck {
   Bottleneck(
     station_id: String,
@@ -136,8 +128,6 @@ pub fn andons(
   Ok(list.append(stops, late))
 }
 
-/// The last activity of a Piece in hand is its newest event or state change;
-/// of a Rework, the start of its repair.
 pub fn stale(
   connection: sqlight.Connection,
   calendar: Calendar,
@@ -181,13 +171,12 @@ pub fn stale(
   Ok(#(stale, list.length(active)))
 }
 
-/// Capacity reads the passes that ended in the last 7 days.
 pub fn bottlenecks(
   connection: sqlight.Connection,
   takt_hours: Float,
 ) -> Result(List(Bottleneck), sqlight.Error) {
   use stations <- result.try(assignment.stations(connection))
-  use period <- result.try(
+  use last_7_days <- result.try(
     sqlight.query(
       "select date('now', '-6 day'), date('now')",
       on: connection,
@@ -199,7 +188,7 @@ pub fn bottlenecks(
       },
     ),
   )
-  let measured = case period {
+  let measured = case last_7_days {
     [#(from, to), ..] ->
       measures.load(connection, from, to)
       |> result.map(fn(found) { found.stations })
@@ -252,8 +241,6 @@ pub fn capacity_hours(
   }
 }
 
-/// The Andons a Team Member sees on their own screen: those of their Work Stations
-/// only (DESIGN.md R2).
 pub fn of_stations(andons: List(Andon), stations: List(String)) -> List(Andon) {
   list.filter(andons, fn(andon) { list.contains(stations, andon.station_id) })
 }

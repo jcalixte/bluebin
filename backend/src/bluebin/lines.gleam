@@ -9,12 +9,10 @@ import gleam/string
 import simplifile
 import sqlight
 
-/// The Line every account has; its data stays in the account's original,
-/// pre-Lines database file.
 pub const first = "main"
 
-/// The other Lines: this prefix and lowercase hex digits only, so an
-/// id is always a safe file name.
+/// Ids are this prefix and lowercase hex digits only, so an id is always a
+/// safe file name.
 const prefix = "ln-"
 
 const hex_digits = "0123456789abcdef"
@@ -59,9 +57,6 @@ fn directory(workspace: String) -> String {
   db.workspaces_directory <> "/" <> workspace
 }
 
-/// The ready database of one Line of the workspace. The first Value
-/// Line is made on demand from `start`; any other must exist, so an unknown
-/// id never creates a file.
 pub fn database(
   workspace: String,
   line: String,
@@ -151,7 +146,6 @@ fn name_of(connection: sqlight.Connection) -> Result(String, LineError) {
   }
 }
 
-/// A new Line starts empty: one Work Station and one Team Member.
 pub fn create(workspace: String, name: String) -> Result(Line, LineError) {
   use name <- result.try(check_name(name))
   let id = prefix <> random_hex()
@@ -209,8 +203,7 @@ fn check_name(name: String) -> Result(String, LineError) {
   })
 }
 
-/// 48 random bits: the ids live in one account's directory, so they only
-/// need to differ from the few others there.
+/// 48 random bits: ids only need to differ within one account's directory.
 fn random_hex() -> String {
   int.random(0x1000000000000)
   |> int.to_base16
@@ -218,7 +211,6 @@ fn random_hex() -> String {
   |> string.pad_start(to: 12, with: "0")
 }
 
-/// Two Lines, of one account or of two, never wake each other's screens.
 pub fn channel(workspace: String, line: String) -> String {
   workspace <> "/" <> line
 }

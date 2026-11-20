@@ -64,7 +64,6 @@ onMounted(async () => {
     problem.value = "This Line is not shared, or it does not exist."
     return
   }
-  // A Line this Account cannot open, or an old bookmark.
   rememberLine(null)
   location.replace(pageUrl(props.view, firstLine, null))
 })
@@ -121,7 +120,6 @@ async function saveName() {
     const saved = (await answerOf(response)) as { id: string; name: string }
     if (creating) {
       if (shareNew.value) await share(`/api/lines/${saved.id}`, true)
-      // A new Line is empty: its Work Stations come first.
       location.assign(pageUrl("/design", saved.id, null))
       return
     }

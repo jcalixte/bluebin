@@ -1,8 +1,5 @@
-# Bluebin sign-in, for authentik 2025.10.
+# For authentik 2025.10.
 # Import: authentik admin > Flows and Stages > Flows > Import.
-# It reuses the stages of default-authentication-flow and sets this flow as the
-# authentication flow of the proxy provider "bluebin". Other apps keep the
-# default sign-in.
 version: 1
 metadata:
   name: Bluebin - Sign-in

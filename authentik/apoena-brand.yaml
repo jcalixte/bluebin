@@ -1,16 +1,12 @@
-# Look of every flow on auth.apoena.dev (sign-in, sign-up, recovery), for
-# authentik 2025.10: the apoena.dev style and its toucan. Bluebin flows have
-# their own brand on auth.bluebin.app (bluebin-brand.yaml).
+# Every flow on auth.apoena.dev, for authentik 2025.10.
 # Import: authentik admin > Flows and Stages > Flows > Import.
 #
-# The sign-in flow "apoena-authentication" reuses the stages of
-# default-authentication-flow, so an authentik upgrade that re-applies the
-# default blueprint cannot reset its title.
+# A flow of its own, not default-authentication-flow: an authentik upgrade
+# re-applies the default blueprint and would reset its title.
 #
 # authentik adds the custom CSS to every shadow root of its UI. Only the flow
 # page root, <ak-flow-executor>, has the flowslug attribute, so the rules on
-# :host([flowslug]) touch flows only. They set --apoena-* and PatternFly
-# variables, which every nested stage inherits.
+# :host([flowslug]) touch flows only; nested stages inherit their variables.
 version: 1
 metadata:
   name: apoena - Brand

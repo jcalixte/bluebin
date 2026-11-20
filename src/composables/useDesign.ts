@@ -135,7 +135,6 @@ function freshBranch(taken: string[]) {
   return `Branch ${n}`
 }
 
-/** Each Work Station of the draft as a node of its shape; the id is its key. */
 export function draftNodes(steps: DraftStep[]): ShapeNode[] {
   return steps.flatMap((step, index) =>
     step.stations.map((station) => ({
@@ -147,7 +146,6 @@ export function draftNodes(steps: DraftStep[]): ShapeNode[] {
   )
 }
 
-/** The lanes at each step, by step index, and the number of rows of the grid. */
 export function draftLanes(steps: DraftStep[]) {
   const { lanes, rows } = laneRows(
     draftNodes(steps),
@@ -156,13 +154,11 @@ export function draftLanes(steps: DraftStep[]) {
   return { lanes: steps.map((_, index) => lanes.get(index + 1) ?? []), rows }
 }
 
-/** The keys of the Work Stations each Work Station of the draft pulls from. */
 export function draftUpstream(steps: DraftStep[]): Map<string, string[]> {
   const nodes = draftNodes(steps)
   return new Map(nodes.map((node) => [node.id, upstream(nodes, node)]))
 }
 
-/** Runs of steps between two trunk steps: the steps of one Split. */
 function splits(steps: DraftStep[]): number[][] {
   const runs: number[][] = []
   let run: number[] = []
@@ -410,7 +406,6 @@ export function useDesign() {
     return station.key
   }
 
-  /** Inside a Split the new step starts empty: each Branch gets a + there. */
   function addStepAfter(index: number) {
     const list = steps()
     const step: DraftStep = {
@@ -429,7 +424,6 @@ export function useDesign() {
     return step.key
   }
 
-  /** A Work Station for `branch` at this step, in an empty cell of the grid. */
   function addStationAt(stepIndex: number, branch: string) {
     const step = steps()[stepIndex]
     if (!step || step.stations.some((station) => station.branch === null)) return null
@@ -495,7 +489,6 @@ export function useDesign() {
     return keys[0]
   }
 
-  /** An outer Branch opens one nested Split at most. */
   function canSplitBranch(station: DraftStation) {
     const outer = station.branch?.trim()
     if (!outer || station.parentBranch !== null) return false

@@ -49,7 +49,6 @@ const { calendar, calendarError, saveCalendar } = useWorkingCalendar()
 const { account } = useAccount()
 
 const editingLabels = ref(false)
-/** The labels are set once: they show as one line until changed or left empty. */
 const labelsOpen = computed(
   () =>
     editingLabels.value ||

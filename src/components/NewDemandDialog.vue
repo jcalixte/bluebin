@@ -30,7 +30,6 @@ const label = ref("")
 const client = ref("")
 const dueOn = ref("")
 const pieces = ref(1)
-/** Follows the name until the Team Member types a code of their own. */
 const typedCode = ref<string | null>(null)
 const code = computed({
   get: () => typedCode.value ?? proposeCode(label.value),
@@ -38,7 +37,6 @@ const code = computed({
     typedCode.value = value.toUpperCase()
   },
 })
-/** The Work Stations every Piece of the Demand skips; none by default. */
 const skips = ref<string[]>([])
 const skippedNames = computed(() =>
   (line.value?.stations ?? [])

@@ -86,7 +86,6 @@ export function useMeasures() {
   const days = ref(7)
   const weekCount = ref(12)
   const weeks = ref<WeekMeasures[]>([])
-  /** The Line's first day; unknown until the weeks load. */
   const startedOn = ref<string | null>(null)
   const today = daysAgo(0)
   let ready = false
@@ -123,7 +122,6 @@ export function useMeasures() {
     await read()
   }
 
-  /** A watched change of the periods that `load` already read is not read again. */
   function periodsChanged() {
     if (JSON.stringify([before, after]) !== shown) void load()
   }

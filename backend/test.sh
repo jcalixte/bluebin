@@ -1,10 +1,5 @@
 #!/usr/bin/env sh
-#   ./test.sh            native when Erlang/OTP and a C toolchain are present,
-#                        otherwise inside the same image the deploy builds from
-#   ./test.sh --docker   force the container route
-#
-# sqlight compiles the esqlite NIF from C, so a native run needs gcc and make
-# on top of gleam and erlang.
+# sqlight compiles the esqlite NIF from C, so a native run needs a C toolchain.
 set -eu
 
 IMAGE="ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine"

@@ -1,6 +1,3 @@
-//// The Simulation: one Line that lives only in the page. The browser runs
-//// the API's own routes and guard on it, as the Team Member it picks.
-
 import bluebin
 import bluebin/access
 import bluebin/db
@@ -14,7 +11,6 @@ import wisp/simulate
 /// name, so every connection of the routes opens this same Line.
 const database = "simulation"
 
-/// The demo data, or one Work Station and one Team Member to rename.
 pub fn start(demo: Bool) -> Result(Nil, String) {
   db.with_connection_at(database, fn(connection) {
     use _ <- result.try(db.prepare(connection, db.Demo))
@@ -26,8 +22,7 @@ pub fn start(demo: Bool) -> Result(Nil, String) {
   |> result.map_error(fn(error: sqlight.Error) { error.message })
 }
 
-/// One API call inside the Line, as `team_member`, or as the owner when it
-/// is empty. Answers the status and the body.
+/// An empty `team_member` calls as the owner.
 pub fn call(
   method: String,
   path: String,

@@ -22,7 +22,7 @@ pub type Holiday {
   Holiday(day: String, label: String, index: Int)
 }
 
-/// SQL condition on a `day` column: a working day of the Working Calendar.
+/// Needs a `day` column in scope.
 pub const working_day_sql =
   "instr((select days from working_calendar), strftime('%w', day)) > 0
      and day not in (select day from holiday)"
@@ -131,7 +131,7 @@ fn validate(calendar: Calendar) -> Result(Nil, Invalid) {
   }
 }
 
-/// The Working Time between two Unix times, in seconds.
+/// `from` and `to` are Unix times.
 pub fn working_seconds(calendar: Calendar, from: Int, to: Int) -> Int {
   case to <= from {
     True -> 0
@@ -180,15 +180,13 @@ fn weekday(day: Int) -> Int {
   int.modulo(day + 4, 7) |> result.unwrap(0)
 }
 
-/// `day` counts days since 1970-01-01, like `Holiday.index`.
 fn is_working_day(calendar: Calendar, day: Int) -> Bool {
   list.contains(calendar.days, weekday(day))
   && !list.any(calendar.holidays, fn(holiday) { holiday.index == day })
 }
 
-/// The `count`-th working day after `day`, which itself does not count; `day`
-/// when `count` is 0. Error past `limit`, so a slow pace cannot search for
-/// ever.
+/// `day` itself does not count. Error past `limit`, so a slow pace cannot
+/// search for ever.
 pub fn add_working_days(
   calendar: Calendar,
   day: Int,
@@ -208,8 +206,6 @@ pub fn add_working_days(
   }
 }
 
-/// The working days after `from` up to `to` included; negative when `to`
-/// comes first.
 pub fn working_days_between(calendar: Calendar, from: Int, to: Int) -> Int {
   case to < from {
     True -> 0 - working_days_between(calendar, to, from)
@@ -233,7 +229,7 @@ fn count_working_days(calendar: Calendar, day: Int, last: Int, total: Int) {
   }
 }
 
-/// "2026-11-09" is day 20_766 since 1970-01-01 (proleptic Gregorian).
+/// Days since 1970-01-01, proleptic Gregorian.
 pub fn day_number(text: String) -> Result(Int, Nil) {
   case string.split(text, "-") {
     [year, month, day] -> {
@@ -297,7 +293,6 @@ fn floor_day(seconds: Int) -> Int {
   int.floor_divide(seconds, 86_400) |> result.unwrap(0)
 }
 
-/// "09:30" is 570 minutes after midnight.
 fn parse_time(text: String) -> Result(Int, Nil) {
   case string.split(text, ":") {
     [hours, minutes] -> {

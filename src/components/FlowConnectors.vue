@@ -14,8 +14,7 @@ const props = defineProps<{
 const CORNER_RADIUS = 10
 const LANE_OFFSET = 9
 const LANE_END_GAP = 5
-/** The height on a card where its links arrive and leave: its title row. */
-const ANCHOR = 30
+const TITLE_ROW_Y = 30
 const TURN = 18
 const BRANCH_LABEL_MAX = 14
 const LABEL_LINE = 14
@@ -81,8 +80,8 @@ function measure() {
     const from = cards.get(link.from)
     const to = cards.get(link.to)
     if (!from || !to) continue
-    const fromY = from.top + ANCHOR
-    const toY = to.top + ANCHOR
+    const fromY = from.top + TITLE_ROW_Y
+    const toY = to.top + TITLE_ROW_Y
     const turn = link.kind === "split" ? from.right + TURN : to.left - TURN
     nextLanes.push({
       kind: "piece",

@@ -15,7 +15,6 @@ import gleam/result
 import gleam/string
 import sqlight
 
-/// A Piece waiting in the Backlog. `arrived` is its global insertion order.
 pub type Waiting {
   Waiting(
     id: String,
@@ -23,7 +22,6 @@ pub type Waiting {
     demand: String,
     arrived: Int,
     urgent: Option(Int),
-    /// The Work Stations it skips.
     skips: List(String),
   )
 }
@@ -36,9 +34,6 @@ pub type Backlog {
   Backlog(sequence: List(Placed), demands: List(Demand))
 }
 
-/// What a manual reorder costs one Demand: its next Piece leaves `places`
-/// later (negative: earlier), which is `hours` of Working Time at the Value
-/// Line Takt Time, and `takt_gap` Pieces on its Takt Gap.
 pub type Effect {
   Effect(demand: Demand, places: Int, hours: Float, takt_gap: Float)
 }
@@ -80,12 +75,8 @@ fn waiting_decoder() -> decode.Decoder(Waiting) {
   ))
 }
 
-/// The Heijunka Sequence (F23): the Pieces made urgent by hand first, in the
-/// order they were made urgent, then the earliest slot, the earliest due date,
-/// first-in first-out. A Demand spreads the Pieces it has left in the Backlog
-/// evenly over the Working Time it has left: the slot of its k-th Piece is
-/// (k - 0.5) of that interval from now, so a late Demand gets more slots, still
-/// mixed with the others.
+/// F23: a Demand's k-th Piece slots at the middle of its k-th even share of
+/// the Working Time it has left.
 pub fn sequence(waiting: List(Waiting), demands: List(Demand)) -> List(Placed) {
   demands
   |> list.flat_map(fn(demand) {
@@ -102,11 +93,10 @@ pub fn sequence(waiting: List(Waiting), demands: List(Demand)) -> List(Placed) {
   |> list.sort(compare)
 }
 
-/// Working Time from today to the due date, today included. A Demand past its
-/// due date keeps one day, so its Pieces all go in the first day.
 fn hours_left(demand: Demand) -> Float {
-  let days = demand.working_days_total - demand.working_days_elapsed + 1
-  int.to_float(int.max(days, 1)) *. demand.hours_per_day
+  let days_including_today =
+    demand.working_days_total - demand.working_days_elapsed + 1
+  int.to_float(int.max(days_including_today, 1)) *. demand.hours_per_day
 }
 
 fn compare(a: Placed, b: Placed) -> order.Order {
@@ -121,8 +111,7 @@ fn compare(a: Placed, b: Placed) -> order.Order {
   |> order.break_tie(int.compare(a.piece.arrived, b.piece.arrived))
 }
 
-/// Inside one Demand Pieces keep first-in first-out, so only the oldest Piece
-/// of a Demand not yet urgent can be made urgent.
+/// Pieces of one Demand stay first-in first-out.
 pub fn next_of_its_demand(sequence: List(Placed), piece: Placed) -> Bool {
   !list.any(sequence, fn(other) {
     other.piece.demand == piece.piece.demand
@@ -190,8 +179,6 @@ pub fn wire_effect(effect: Effect) -> wire.ReorderEffect {
   )
 }
 
-/// One Demand on one day: the Pieces the Takt Time plans to leave the Backlog
-/// and the Pieces that really left it (F26).
 pub type MixCell {
   MixCell(day: String, planned: Float, real: Int)
 }
@@ -272,7 +259,7 @@ pub fn product_mix(
   )
 }
 
-/// F26 target: at most one Piece of gap for each Demand, each day.
+/// F26 target.
 pub fn on_plan(cell: MixCell) -> Bool {
   float.absolute_value(int.to_float(cell.real) -. cell.planned) <=. 1.0
 }

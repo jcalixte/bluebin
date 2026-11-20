@@ -1,15 +1,9 @@
-//// The Demand Code: two to four capital letters that name one active Demand
-//// in its Line, and start the Piece Reference of each of its Pieces.
-
 import gleam/list
 import gleam/result
 import gleam/string
 
 const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-/// The code Bluebin proposes for `label`: the initials of its words, or the
-/// first three letters of a one-word label. "Checkout redesign" gives "CR",
-/// "Billing" gives "BIL". When the code is in `taken`, a letter is added.
 pub fn propose(label: String, taken: List(String)) -> String {
   let words =
     string.split(string.uppercase(label), " ")
@@ -50,9 +44,7 @@ pub fn check(code: String) -> Result(String, String) {
   }
 }
 
-/// Writes the Piece Reference of each Piece from the code of its Demand and
-/// its number: "CHK-3", and "CHK-3 · iOS" for a Sub-Piece. Add a `where` to
-/// limit it to one Demand.
+/// Updates every Piece: add a `where` to limit it to one Demand.
 pub const write_references_sql =
   "
 update piece

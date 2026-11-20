@@ -1,12 +1,7 @@
 /**
- * The routes of a Line: where each Work Station pulls its Piece from.
  * Mirrors backend/src/bluebin/shape.gleam; the server stays the judge.
- *
- * A Line is a grid of steps. The trunk has one Work Station at a step; a Split
- * opens Branches that run side by side over the next steps, each with its own
- * number of Work Stations, until the trunk Work Station after them does the
- * Assembly. A Branch can open one nested Split, closed by a later Work Station
- * of the same Branch.
+ * A Line is a grid of steps: the trunk has one Work Station at a step, and the
+ * Branches of a Split run side by side over the next steps.
  */
 
 export type ShapeNode = {
@@ -14,7 +9,6 @@ export type ShapeNode = {
   position: number
   /** Null on the trunk. */
   branch: string | null
-  /** The outer Branch of a nested Branch. */
   parentBranch: string | null
 }
 
@@ -109,14 +103,12 @@ function ends(nodes: ShapeNode[], lane: string | null, node: ShapeNode) {
   return [...last.entries()].sort(([a], [b]) => byCodePoint(a, b)).map(([, one]) => one.id)
 }
 
-/** The Work Stations it pulls from: none from the Backlog, one, or each Branch end. */
 export function upstream(nodes: ShapeNode[], node: ShapeNode): string[] {
   const found = inflow(nodes, node)
   if (!found || found.kind === "backlog") return []
   return found.kind === "assembly" ? found.ends : [found.from]
 }
 
-/** Every Piece that reaches `downstream` has passed `up` first. */
 export function isUpstream(nodes: ShapeNode[], up: string, downstream: string): boolean {
   const byId = new Map(nodes.map((node) => [node.id, node]))
   const seen = new Set<string>()
@@ -133,10 +125,7 @@ export function isUpstream(nodes: ShapeNode[], up: string, downstream: string): 
   return seen.has(up)
 }
 
-/**
- * One arrow from a Work Station to one it feeds. `branch` names the Branch
- * when `to` is its first Work Station, so the name shows on the first arrow.
- */
+/** `branch` is set only on the arrow into the first Work Station of a Branch. */
 export type FlowLink = {
   from: string
   to: string
@@ -144,7 +133,6 @@ export type FlowLink = {
   branch: string | null
 }
 
-/** Every arrow of the Line: one into each Work Station from each it pulls from. */
 export function flowLinks(nodes: ShapeNode[]): FlowLink[] {
   return nodes.flatMap((node): FlowLink[] => {
     const found = inflow(nodes, node)
@@ -164,10 +152,9 @@ export function flowLinks(nodes: ShapeNode[]): FlowLink[] {
 }
 
 /**
- * The rows of the grid: at each step, the lanes it shows from top to bottom.
- * A trunk step shows the trunk (null); a step of a Split shows every Branch of
- * that Split, each nested Branch under its outer Branch, so a Branch keeps its
- * row across the Split and an empty cell shows where it skips a step.
+ * The lanes of each step, top to bottom: the trunk (null) at a trunk step; at a
+ * step of a Split, every Branch of that Split, each nested Branch under its
+ * outer Branch, so a Branch keeps its row across the Split.
  * `positions` lists every step, also the ones with no Work Station.
  */
 export function laneRows(

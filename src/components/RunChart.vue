@@ -14,7 +14,6 @@ const props = defineProps<{
 const frame = ref<HTMLElement | null>(null)
 const width = ref(720)
 const height = 260
-/** Below this width, the limit labels get short to leave room for the weeks. */
 const compactBelow = 480
 const compact = computed(() => width.value < compactBelow)
 const margin = computed(() => ({ top: 24, right: compact.value ? 52 : 84, bottom: 28, left: 52 }))
@@ -65,7 +64,6 @@ const points = computed(() =>
   })),
 )
 
-/** The full weeks the limits come from: before the chosen change, or all with custom dates. */
 const baseline = computed(() =>
   points.value.filter(
     (one) =>
@@ -158,7 +156,6 @@ const scale = computed(() => {
 const y = (value: number) =>
   margin.value.top + plotHeight.value - (value / scale.value.max) * plotHeight.value
 
-/** One path piece for each run of weeks with a value: a week with no Piece is a gap. */
 const path = computed(() =>
   points.value
     .map((one, index) => {

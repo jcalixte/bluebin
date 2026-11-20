@@ -12,10 +12,6 @@ export function release(seats: Seats, peer: string): Seats {
   return Object.fromEntries(Object.entries(seats).filter(([, one]) => one !== peer))
 }
 
-/**
- * The peer takes the seat of a Team Member and frees its own. `""` only frees it. Answers the new
- * seats, or why the peer cannot take it.
- */
 export function claim(
   seats: Seats,
   peer: string,

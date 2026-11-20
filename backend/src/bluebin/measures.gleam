@@ -45,9 +45,7 @@ pub type Pass {
   )
 }
 
-/// Lead Time = Touch Time + Stagnation Time, in seconds, in Calendar Time and
-/// in Working Time. Touch Time is net, so it is the same in both: only the
-/// Stagnation counts the Working Calendar.
+/// Seconds. Touch Time is net, so only the Stagnation has a Working Time twin.
 pub type Span {
   Span(touch: Int, stagnation: Int, stagnation_working: Int)
 }
@@ -76,9 +74,6 @@ type Replay {
   Replay(open: Dict(String, Open), done: List(Pass))
 }
 
-/// A Piece is in hand from its pull (or Assembly, or resume) to its pause or
-/// its Blue Bin; it leaves the Blue Bin on the next pull from there, on its
-/// Split, on its Assembly (for its Sub-Pieces) or at its Deployment.
 pub fn replay(
   events: List(Event),
   children: Dict(String, List(String)),
@@ -220,14 +215,11 @@ fn close_pass(unit: String, open: Open, end: Option(Int), at: Int) -> Pass {
   )
 }
 
-/// Replenishment Time of one pass, from the pull in to the Blue Bin.
 pub type Replenishment {
   Replenishment(
     filled: Int,
     calendar: Int,
     working: Int,
-    /// Working Time without the pauses while the Team Member held another
-    /// Piece: those grow with the WIP, not with the work (DESIGN.md R11).
     working_without_held: Int,
   )
 }
@@ -248,17 +240,15 @@ pub fn replenishment(
   ))
 }
 
-/// The value that 85 % of `values` stay at or under (nearest rank).
+/// Nearest-rank 85th percentile.
 pub fn p85(values: List(Int)) -> Result(Int, Nil) {
   let sorted = list.sort(values, int.compare)
   let rank = { list.length(sorted) * 85 + 99 } / 100
   sorted |> list.drop(int.max(rank - 1, 0)) |> list.first
 }
 
-/// Fewer passes than this give no Replenishment Time and no suggestion.
 pub const min_passes = 5
 
-/// The suggestion reads the last passes that went in the Blue Bin (H15).
 pub const suggestion_passes = 20
 
 /// Suggested Blue Bins (F55): enough to cover the Replenishment Time at the
@@ -351,7 +341,6 @@ fn gaps(touched: List(Interval), from: Int, to: Int) -> List(Interval) {
   |> list.filter(fn(gap) { gap.0 < gap.1 })
 }
 
-/// The time a Work Station holds at least one Kanban.
 pub fn kanban_held(
   events: List(Event),
   now: Int,
@@ -451,12 +440,9 @@ pub type Measures {
     demands: List(DemandMeasure),
     stations: List(StationMeasure),
     deviations: List(wire.RecordedDeviation),
-    /// The time at least one Work Station is stopped: stops at the same time
-    /// count once.
+    /// Stops at the same time count once.
     andon: Int,
     andon_working: Int,
-    /// Demands delivered in the period, and those of them delivered on or
-    /// before their due date.
     delivered: Int,
     on_time: Int,
   )
@@ -477,8 +463,8 @@ type PieceRow {
   )
 }
 
-/// Every measure is computed from the flow event log on each read, so a
-/// change of the Working Calendar recomputes them all (DESIGN.md §4, C3).
+/// Computed from the flow event log on each read, so a change of the Working
+/// Calendar recomputes every measure (DESIGN.md §4, C3).
 pub fn load(
   connection: sqlight.Connection,
   from: String,
@@ -540,8 +526,7 @@ pub fn load(
   ))
 }
 
-/// The first day of the Line, and the last `weeks` weeks, Monday to Sunday
-/// (UTC), the current week last: the points of the run chart (F38).
+/// The last `weeks` weeks, Monday to Sunday (UTC), the current week last (F38).
 pub fn weekly(
   connection: sqlight.Connection,
   weeks: Int,
@@ -571,8 +556,6 @@ pub fn weekly(
       },
     ),
   )
-  // Every Line sends its first Kanbans when it starts, so its log is never
-  // empty for long; until then, it starts today.
   use started <- result.try(query(
     connection,
     "select date(coalesce(min(at), 'now')) from flow_event",
@@ -657,7 +640,6 @@ fn load_period(
   }
 }
 
-/// Demands delivered in the period, and those of them on time.
 fn load_deliveries(
   connection: sqlight.Connection,
   from: String,
@@ -680,7 +662,6 @@ fn in_period(context: Context, at: Int) -> Bool {
   at >= context.period.start && at < context.period.end
 }
 
-/// Calendar Time and Working Time of `intervals` inside the period, up to now.
 fn measured(context: Context, intervals: List(Interval)) -> #(Int, Int) {
   let intervals =
     clip(
@@ -691,7 +672,6 @@ fn measured(context: Context, intervals: List(Interval)) -> #(Int, Int) {
   #(calendar_total(intervals), working_total(context.calendar, intervals))
 }
 
-/// The Piece and every Sub-Piece under it, nested ones too.
 fn units(children: Dict(String, List(String)), piece: String) -> List(String) {
   [piece, ..list.flat_map(lookup(children, piece), units(children, _))]
 }
@@ -744,7 +724,6 @@ fn piece_measures(
   })
 }
 
-/// The Demand Lead Time shows once every Piece of the Demand is released.
 fn demand_measures(
   context: Context,
   demands: List(DemandRow),
@@ -771,17 +750,16 @@ fn demand_measures(
   })
 }
 
-/// `all` is every Piece of the Demand.
-fn demand_lead(context: Context, all: List(PieceRow)) -> Option(Span) {
+fn demand_lead(context: Context, pieces: List(PieceRow)) -> Option(Span) {
   let end = context.period.end
   let last =
-    all
+    pieces
     |> list.map(fn(piece) { option.unwrap(piece.released, end) })
     |> list.fold(0, int.max)
-  case list.all(all, fn(piece) { piece.released != None }) && last < end {
+  case list.all(pieces, fn(piece) { piece.released != None }) && last < end {
     True -> {
       let first =
-        all
+        pieces
         |> list.map(fn(piece) { piece.entered })
         |> list.reduce(int.min)
         |> result.unwrap(last)
@@ -789,7 +767,7 @@ fn demand_lead(context: Context, all: List(PieceRow)) -> Option(Span) {
         context.calendar,
         first,
         last,
-        list.flat_map(all, fn(piece) { touches(context, piece.id) }),
+        list.flat_map(pieces, fn(piece) { touches(context, piece.id) }),
       ))
     }
     False -> None
@@ -854,8 +832,6 @@ fn station_measures(
   })
 }
 
-/// The Station Lead Time of each pass that ended in the period, with the
-/// Rework of its Piece as touch.
 fn closed_spans(context: Context, passes: List(Pass)) -> List(Span) {
   list.filter_map(passes, fn(pass) {
     case pass.end {
@@ -878,8 +854,8 @@ fn closed_spans(context: Context, passes: List(Pass)) -> List(Span) {
   })
 }
 
-/// `items` grouped by `key`, each group in the order of `items`: the order
-/// of the passes breaks ties when the suggestion sorts them.
+/// Each group keeps the order of `items`: the suggestion's sort relies on it
+/// to break ties.
 fn group(items: List(a), key: fn(a) -> k) -> Dict(k, List(a)) {
   // `list.group` prepends, so grouping the reversed list keeps the order.
   items |> list.reverse |> list.group(key)
@@ -930,7 +906,6 @@ fn load_passes(
   Ok(#(calendar, events, pieces, children, replay(events, children, now)))
 }
 
-/// Suggested Blue Bins for each Work Station that has passes (F55, H15).
 pub fn suggestions(
   connection: sqlight.Connection,
   takt_hours: Float,
@@ -991,7 +966,6 @@ select id, name, branch, position from work_station
 
 const demands_sql = "select id, label, client from demand order by due_on"
 
-/// A Demand is delivered on the day of the Release of its last Piece.
 const on_time_sql =
   "
 select count(*), coalesce(sum(delivered_on <= due_on), 0)
@@ -1033,7 +1007,6 @@ fn piece_decoder() -> decode.Decoder(PieceRow) {
   decode.success(PieceRow(id:, parent:, demand:, entered:, released:))
 }
 
-/// A Rework of a Piece, or an Andon of a Work Station, with its interval.
 fn timed_decoder() -> decode.Decoder(#(String, Interval)) {
   use id <- decode.field(0, decode.string)
   use start <- decode.field(1, decode.int)
@@ -1150,7 +1123,6 @@ pub fn to_json(measures: Measures) -> json.Json {
   |> wire_json.measures
 }
 
-/// p85 Replenishment Time, or null under `min_passes` passes (F54).
 fn p85_duration(replenishments: List(Replenishment)) -> Option(wire.Duration) {
   case list.length(replenishments) >= min_passes {
     False -> None

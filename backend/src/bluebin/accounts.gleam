@@ -10,8 +10,8 @@ import gleam/string
 import simplifile
 import sqlight
 
-/// One file for every Workspace: an Account and its links cross Lines and
-/// Workspaces (ADR-0004). Must stay under `data/`, the mounted volume.
+/// Shared by every Workspace (ADR-0004). Must stay under `data/`, the mounted
+/// volume.
 pub const database = "data/accounts.db"
 
 pub const max_name_length = 60
@@ -26,7 +26,6 @@ pub type AccountError {
   StoreFailed
 }
 
-/// The link holds once an Account with `email` exists (ADR-0003).
 pub type Link {
   Link(team_member: String, email: String, account: Option(Account))
 }
@@ -99,7 +98,6 @@ pub fn suggested_name(request: Request(body)) -> #(String, String) {
   }
 }
 
-/// `None` before its first and last name are given.
 pub fn sign_in(
   database: String,
   uid: String,
@@ -164,7 +162,6 @@ pub fn save(
   }
 }
 
-/// Lowercase, so a link does not depend on how the owner types the email.
 /// An empty email means no link.
 pub fn normal_email(email: String) -> Result(String, Nil) {
   let email = string.trim(email) |> string.lowercase
@@ -186,8 +183,8 @@ pub fn normal_email(email: String) -> Result(String, Nil) {
   }
 }
 
-/// A link to a Team Member who left the Line grants nothing: the caller keeps
-/// only the Team Members it knows (ADR-0004).
+/// May hold Team Members who left the Line: the caller must keep only the ones
+/// it knows, or a stale link grants access (ADR-0004).
 pub fn links(
   database: String,
   workspace: String,
@@ -221,9 +218,6 @@ pub fn links(
   |> result.replace_error(Nil)
 }
 
-/// Sets the email of each Team Member in `wanted` (an empty one removes the
-/// link) and removes the links of every Team Member not in `kept`. Each
-/// change goes to the dated log (R8), in the same transaction.
 pub fn save_links(
   database: String,
   workspace: String,
@@ -331,7 +325,6 @@ fn change_links(
   })
 }
 
-/// One email for each Line: an Account is at most one Team Member there.
 pub fn unique_emails(emails: List(String)) -> Result(Nil, LinkError) {
   case first_duplicate(emails) {
     None -> Ok(Nil)
@@ -389,8 +382,6 @@ fn write_link(
   |> result.replace_error(LinkStoreFailed)
 }
 
-/// Where the Account with `email` is a Team Member: (Workspace, Line, Team
-/// Member), across every Workspace.
 pub fn links_of(
   database: String,
   email: String,
@@ -451,7 +442,6 @@ pub fn share(
   |> result.replace_error(Nil)
 }
 
-/// `None` before the first sign-in.
 pub fn name_of_uid(
   database: String,
   uid: String,

@@ -11,7 +11,6 @@ const emit = defineEmits<{ changed: [] }>()
 
 const { labels } = useLabels()
 
-/** The code being typed, or null when the Demand Code is not being changed. */
 const newCode = ref<string | null>(null)
 const savingCode = ref(false)
 const codeProblem = ref<string | null>(null)

@@ -440,12 +440,10 @@ pub fn the_menu_lists_the_lines_of_each_workspace_test() {
     menu,
     "\"shared\":false,\"role\":\"member\",\"teamMember\":\"pe-ines\"",
   )
-  // The Private Line where Ada is no Team Member stays out.
   assert !string.contains(menu, world.other_line)
 }
 
-/// The owner can also be a Team Member of their own Line: the menu names it,
-/// so the first screen after sign-in shows their own work (F45).
+/// F45.
 pub fn the_menu_names_the_owners_own_team_member_test() {
   let world = world(True)
   let #(_, design) =

@@ -9,7 +9,6 @@ import gleam/result
 import gleam/string
 import sqlight
 
-/// What an Account may do in one Line (H10).
 pub type Role {
   Owner
   Member(team_member: String)
@@ -28,8 +27,7 @@ pub type Refusal {
   WrongMethod(allowed: List(http.Method))
 }
 
-/// The role table, the one list of routes inside a Line. `segments` is the
-/// path inside the Line, `["api"]` for the Line itself (§8).
+/// Every route inside a Line must be listed in `routes` (§8).
 pub fn need(
   method: http.Method,
   segments: List(String),
@@ -87,8 +85,7 @@ pub fn allows(role: Role, need: Need) -> Bool {
   }
 }
 
-/// `email` is `None` unless SSO is on and the Account is signed in (F52):
-/// then only its own Workspace opens.
+/// `email` is `None` unless SSO is on and the Account is signed in (F52).
 pub fn role(
   accounts_database: String,
   caller: String,
@@ -109,8 +106,6 @@ pub fn role(
   }
 }
 
-/// The Role of anyone, signed in or not, who is no Team Member of `line`:
-/// a Shared Line shows, look-only (F53).
 pub fn anyone(
   accounts_database: String,
   workspace: String,
@@ -132,8 +127,7 @@ pub fn anyone(
   }
 }
 
-/// The (Line, Team Member) pairs where `email` is a Team Member of
-/// `workspace`. A link to a Team Member who left grants nothing (ADR-0004).
+/// A link to a Team Member who left grants nothing (ADR-0004).
 pub fn live_links(
   accounts_database: String,
   email: String,
@@ -174,9 +168,6 @@ fn is_team_member(
   }
 }
 
-/// The Team Member a flow action acts as, from the `teamMember` of the
-/// request (F50). A Member acts only as themselves, by default too; the
-/// owner acts for any Team Member that `linked_elsewhere` does not claim.
 pub fn actor(
   role: Role,
   wanted: Option(String),
@@ -196,7 +187,7 @@ pub fn actor(
 }
 
 /// A Team Member linked to another Account acts only through that Account
-/// (R7). `email` is `None` unless the Account is signed in.
+/// (R7).
 pub fn linked_elsewhere(
   accounts_database: String,
   email: Option(String),
@@ -230,7 +221,6 @@ pub type OpenWorkspace {
   )
 }
 
-/// `team_member` is the Account's own Team Member in the Line, if any.
 pub type OpenLine {
   OpenLine(
     line: lines.Line,
@@ -240,18 +230,15 @@ pub type OpenLine {
   )
 }
 
-/// Every Line the Account can open, by Workspace, its own first (F46).
-/// `email` is `None` unless SSO is on and the Account is signed in: then
-/// only its own Workspace opens (F52). `start` is how the caller's own first
-/// Line starts, when this call makes it.
+/// `email` is `None` unless SSO is on and the Account is signed in (F52).
+/// May make the caller's first Line, from `start`.
 pub fn workspaces(
   accounts_database: String,
   caller: String,
   email: Option(String),
   start: db.Start,
 ) -> Result(List(OpenWorkspace), Nil) {
-  // The owner can be a Team Member of their own Lines too (F45).
-  use held <- result.try(case email {
+  use own_memberships <- result.try(case email {
     Some(email) -> live_links(accounts_database, email, caller)
     None -> Ok([])
   })
@@ -266,7 +253,8 @@ pub fn workspaces(
         line:,
         shared:,
         role: Owner,
-        team_member: list.key_find(held, line.id) |> option.from_result,
+        team_member: list.key_find(own_memberships, line.id)
+          |> option.from_result,
       )
     }),
   )

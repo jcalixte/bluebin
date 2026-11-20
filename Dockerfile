@@ -1,13 +1,10 @@
-# One image, so Coolify can do a rolling update: it starts the new container,
-# waits for its healthcheck, moves the traffic, then stops the old one. Its
-# Docker Compose build pack cannot, and stops the stack before starting again.
+# One image, not Docker Compose: Coolify's Compose build pack stops the stack
+# before starting again, so only a single image gets a rolling update.
 
 # Before the first FROM, or the FROM lines below cannot read it.
 ARG GLEAM_IMAGE=ghcr.io/gleam-lang/gleam:v1.19.2-erlang-alpine
 
-# The Simulation's code (try.bluebin.app, Dockerfile.simulation) imports the
-# API's Line routes compiled to JavaScript. This build drops it, but vue-tsc
-# still checks it, so it needs that output too.
+# vue-tsc checks the Simulation's code, which imports the sim output.
 FROM ${GLEAM_IMAGE} AS sim
 WORKDIR /build
 COPY backend/ backend/
@@ -30,10 +27,8 @@ RUN apk add --no-cache build-base sqlite-dev
 ENV ESQLITE_USE_SYSTEM=1
 WORKDIR /build
 COPY backend/ .
-# test/wire_test.gleam checks that `gleam dev` output is up to date, and the
-# TypeScript half lives in the SPA at ../src/wire.ts.
+# test/wire_test.gleam reads ../src/wire.ts.
 COPY src/wire.ts /src/wire.ts
-# The test suite is the deploy gate: a red suite fails the build before production.
 ARG SKIP_TESTS=0
 RUN [ "$SKIP_TESTS" = "1" ] || gleam test
 RUN gleam export erlang-shipment
@@ -50,8 +45,8 @@ COPY --from=web /app/dist ./static
 RUN mkdir -p /app/data
 EXPOSE 8000
 ENV PORT=8000
-# For a plain `docker run`. Coolify runs its own check (host 127.0.0.1: mist
-# listens on IPv4 only, and busybox wget resolves localhost to ::1 first).
+# For a plain `docker run`; Coolify runs its own. 127.0.0.1: mist listens on
+# IPv4 only, and busybox wget resolves localhost to ::1 first.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:8000/api/health || exit 1
 ENTRYPOINT ["./entrypoint.sh", "run"]

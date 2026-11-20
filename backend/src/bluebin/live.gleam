@@ -8,7 +8,6 @@ import gleam/result
 import gleam/string_tree
 import mist
 
-/// `Heartbeat` never leaves the stream itself.
 pub opaque type Signal {
   Changed(action: String)
   Heartbeat
@@ -32,8 +31,7 @@ pub type Hub =
 /// write fails, so each stream sends a `ping` event this often.
 const heartbeat_ms = 25_000
 
-/// Time alone raises some Andons (a Rework that waits, a Takt Gap that grows),
-/// so every minute the open screens reload as if the state changed
+/// Time alone raises some Andons, so open screens reload every minute
 /// (DESIGN.md R6).
 const tick_ms = 60_000
 
@@ -99,8 +97,6 @@ pub fn subscribe(hub: Hub, workspace: String, stream: Subject(Signal)) -> Nil {
   process.send(hub, Subscribe(workspace, stream))
 }
 
-/// `action` names what changed the state, for example `pull` or
-/// `rework/repair`.
 pub fn announce(hub: Hub, workspace: String, action: String) -> Nil {
   process.send(hub, Announce(workspace, action))
 }
@@ -112,8 +108,7 @@ pub fn changed_action(signal: Signal) -> Result(String, Nil) {
   }
 }
 
-/// `GET /api/events`. A screen that reconnects reloads the current state, so
-/// no event is replayed.
+/// No event is replayed: a screen that reconnects reloads the current state.
 pub fn stream(
   request: Request(mist.Connection),
   hub: Hub,

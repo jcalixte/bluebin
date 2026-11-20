@@ -15,10 +15,8 @@ type Group =
 
 const props = defineProps<{ stations: RouteStation[] }>()
 
-/** The ids of the Work Stations the Piece skips; the server judges the route. */
 const skips = defineModel<string[]>({ required: true })
 
-/** The trunk in step order, and each Branch of a Split with its nested Branches inside. */
 const groups = computed<Group[]>(() => {
   const groups: Group[] = []
   const branches = new Map<string, RouteStation[]>()

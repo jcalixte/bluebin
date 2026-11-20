@@ -1,12 +1,9 @@
-# Bluebin on its own authentik domain, auth.bluebin.app, for authentik 2025.10.
+# For authentik 2025.10.
 # Import: authentik admin > Flows and Stages > Flows > Import, after
 # bluebin-authentication.yaml and bluebin-invitation.yaml.
 #
-# The outpost "bluebin" serves the forward auth of bluebin.app. authentik runs
-# it as the container ak-outpost-bluebin on the Docker network "coolify", where
-# Traefik reaches it. Its authentik_host is auth.bluebin.app, so the browser
-# signs in there and the session cookie belongs to auth.bluebin.app: a new user
-# who signs up through an invitation is already signed in to Bluebin.
+# authentik_host is auth.bluebin.app so the session cookie belongs to it: a new
+# user who signs up through an invitation is already signed in to Bluebin.
 # Do not set authentik_host_browser: the outpost then expects that host as the
 # token issuer, but authentik signs the token with the host the outpost calls.
 version: 1
