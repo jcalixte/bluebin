@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue"
+import AnimatedCount from "./AnimatedCount.vue"
 import type { Andon, Bottleneck, Rework, TeamMemberName, WorkStation } from "../types"
 
 const props = defineProps<{
@@ -233,7 +234,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
                   : 'No Kanban: a pull is a Deviation'
               "
             >
-              {{ station.kanbans }} Kanban
+              <AnimatedCount :value="station.kanbans" /> Kanban
             </span>
           </button>
         </div>

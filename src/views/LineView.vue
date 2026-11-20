@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue"
 import AndonAlert from "../components/AndonAlert.vue"
+import AnimatedCount from "../components/AnimatedCount.vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import StepName from "../components/StepName.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
@@ -230,7 +231,7 @@ const taktLabel = computed(() => {
               class="size-2.5 rounded-full bg-andon"
               aria-hidden="true"
             />
-            {{ line.demandsBehind }}
+            <AnimatedCount :value="line.demandsBehind" />
           </dd>
         </div>
         <div
@@ -244,7 +245,7 @@ const taktLabel = computed(() => {
             class="text-2xl font-semibold tabular-nums"
             :class="staleShare > 5 ? 'text-warning-ink' : ''"
           >
-            {{ staleShare }} %
+            <AnimatedCount :value="staleShare" /> %
             <span class="text-sm font-normal opacity-70">
               {{ stale.size }} of {{ line.activeAssignments }}, target 5 %
             </span>

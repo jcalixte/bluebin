@@ -64,3 +64,11 @@
     scroll-behavior: smooth;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .countdown > *,
+  .countdown > *::before,
+  .countdown > *::after {
+    transition: none;
+  }
+}

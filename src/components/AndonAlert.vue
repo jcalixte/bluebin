@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Andon } from "../types"
+import AnimatedCount from "./AnimatedCount.vue"
 
 defineProps<{
   andons: Andon[]
@@ -21,7 +22,7 @@ function time(at: string) {
       <span class="size-3 rounded-full bg-current motion-safe:animate-pulse" aria-hidden="true" />
       Andon
       <span v-if="andons.length > 1" class="badge badge-sm tabular-nums">
-        {{ andons.length }}
+        <AnimatedCount :value="andons.length" />
       </span>
     </p>
     <ul
