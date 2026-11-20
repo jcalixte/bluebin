@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue"
+import { computed, nextTick, ref, watch } from "vue"
 import AddStepSlot from "../components/AddStepSlot.vue"
 import FlowConnectors from "../components/FlowConnectors.vue"
 import DesignTeamMembersCard from "../components/DesignTeamMembersCard.vue"
@@ -47,6 +47,17 @@ const {
 
 const { calendar, calendarError, saveCalendar } = useWorkingCalendar()
 const { account } = useAccount()
+
+const editingLabels = ref(false)
+/** The labels are set once: they show as one line until changed or left empty. */
+const labelsOpen = computed(
+  () =>
+    editingLabels.value ||
+    Object.values(draft.value?.labels ?? {}).some((label) => label.trim() === ""),
+)
+watch(dirty, (now) => {
+  if (!now) editingLabels.value = false
+})
 
 const labelFields: { key: keyof Labels; label: string; example: string }[] = [
   { key: "demand", label: "One Demand", example: "Feature" },
@@ -199,16 +210,7 @@ function confirmDiscard() {
           Draw the Line your work flows through. Nothing changes until you save.
         </p>
       </div>
-      <p v-if="draft" class="flex items-center gap-2 text-sm" role="status">
-        <span
-          class="size-2 rounded-full"
-          :class="dirty ? 'bg-warning' : 'bg-base-content/30'"
-          aria-hidden="true"
-        />
-        <span :class="dirty ? 'font-medium' : 'opacity-70'">
-          {{ dirty ? "Changes not saved" : "All changes are saved" }}
-        </span>
-      </p>
+      <p class="sr-only" role="status">{{ dirty ? "Changes not saved" : "" }}</p>
     </header>
 
     <ErrorToast v-model="error" tone="error" />
@@ -441,13 +443,23 @@ function confirmDiscard() {
 
         <div class="flex flex-col gap-6">
           <div class="card border border-base-300 bg-base-100">
-            <div class="card-body gap-4 p-5">
-              <h3 class="card-title text-base">Labels</h3>
-              <p class="text-sm opacity-70">
+            <div class="card-body gap-3 px-5 py-4">
+              <h3 class="text-base font-semibold">Labels</h3>
+              <p v-if="!labelsOpen" class="flex flex-wrap items-center gap-x-2 text-sm">
+                <span>{{ labelFields.map((field) => draft!.labels[field.key]).join(" · ") }}</span>
+                <button
+                  type="button"
+                  class="btn btn-ghost btn-sm -my-1 px-2 font-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+                  @click="editingLabels = true"
+                >
+                  Change<span class="sr-only"> the labels</span>
+                </button>
+              </p>
+              <p v-else class="text-sm opacity-70">
                 The names your teams use for a Demand and a Piece. They are saved with the other
                 changes.
               </p>
-              <div class="grid gap-3 sm:grid-cols-2">
+              <div v-if="labelsOpen" class="grid gap-3 sm:grid-cols-2">
                 <label v-for="field in labelFields" :key="field.key" class="flex flex-col gap-1">
                   <span class="text-sm font-medium">{{ field.label }}</span>
                   <input

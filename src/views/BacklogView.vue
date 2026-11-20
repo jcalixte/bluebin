@@ -132,11 +132,16 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
         <div class="card-body gap-4 p-5">
           <div>
             <h3 class="card-title text-base">Heijunka Sequence</h3>
-            <p class="text-sm opacity-70">
-              One lane for each {{ labels.demand }}. Each Piece has a slot at a multiple of its
-              Demand's Takt Time: the earliest slot goes first, then the earliest due date, then
-              first in.
-            </p>
+            <p class="text-sm opacity-70">One lane for each {{ labels.demand }}.</p>
+            <details class="mt-1 text-sm">
+              <summary class="cursor-pointer opacity-70 hover:opacity-100">
+                How is the order made?
+              </summary>
+              <p class="mt-1 max-w-prose opacity-70">
+                Each Piece has a slot at a multiple of its Demand's Takt Time: the earliest slot
+                goes first, then the earliest due date, then first in.
+              </p>
+            </details>
           </div>
           <HeijunkaBox v-model:hovered="hovered" :sequence="sequence" />
         </div>
@@ -213,7 +218,6 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
             <h3 class="card-title text-base">Product Mix</h3>
             <p class="text-sm opacity-70">
               Pieces that left the Backlog each day, against the plan of each Demand's Takt Time.
-              More than 1 Piece apart, on one day or over all the days, is off plan.
             </p>
             <div class="overflow-x-auto">
               <table class="table table-sm">
@@ -258,7 +262,10 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
                 </tbody>
               </table>
             </div>
-            <p class="text-xs opacity-70">Real / planned. Today counts the whole day.</p>
+            <p class="text-xs opacity-70">
+              Real / planned. More than 1 Piece apart, on one day or over all the days, is off plan.
+              Today counts the whole day.
+            </p>
           </div>
         </div>
       </div>

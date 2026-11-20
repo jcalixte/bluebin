@@ -50,14 +50,6 @@ function unlink(teamMember: DesignTeamMember) {
           {{ notLinked }} not linked yet
         </span>
       </div>
-      <p class="text-sm opacity-70">
-        A new Team Member is added now. A changed name or email, or a removed Team Member, is saved
-        with the other changes.
-      </p>
-      <p v-if="canLink" class="text-sm opacity-70">
-        Type the email of a Team Member's Account. The link holds from that Account's next sign-in,
-        and the Team Member then shows the Account's name.
-      </p>
 
       <p v-if="teamMembers.length === 0" class="text-sm opacity-70">No Team Member yet.</p>
       <ul v-else class="flex flex-col gap-3">
@@ -105,6 +97,11 @@ function unlink(teamMember: DesignTeamMember) {
             <span
               class="badge badge-sm shrink-0"
               :class="teamMember.account ? 'badge-ghost' : 'badge-outline'"
+              :title="
+                teamMember.account
+                  ? undefined
+                  : 'The link holds from the next sign-in of this Account. The Team Member then shows its name.'
+              "
             >
               {{ teamMember.account ? "Linked" : "Not linked yet" }}
             </span>
@@ -123,7 +120,12 @@ function unlink(teamMember: DesignTeamMember) {
             placeholder="Name"
           />
         </label>
-        <button type="submit" class="btn btn-sm" :disabled="adding || name.trim() === ''">
+        <button
+          type="submit"
+          class="btn btn-sm"
+          title="Adds the Team Member now. Other changes wait for Save."
+          :disabled="adding || name.trim() === ''"
+        >
           <span v-if="adding" class="loading loading-spinner loading-xs" />
           Add a Team Member
         </button>

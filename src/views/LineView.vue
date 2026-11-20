@@ -221,17 +221,6 @@ const taktLabel = computed(() => {
           </dd>
         </div>
         <div>
-          <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">Andons</dt>
-          <dd class="flex items-center gap-2 text-2xl font-semibold tabular-nums">
-            <span
-              v-if="line.andons.length > 0"
-              class="size-2.5 rounded-full bg-andon"
-              aria-hidden="true"
-            />
-            {{ line.andons.length }}
-          </dd>
-        </div>
-        <div>
           <dt class="text-xs font-semibold uppercase tracking-wide opacity-70">
             Demands behind Takt
           </dt>

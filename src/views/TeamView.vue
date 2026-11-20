@@ -188,6 +188,37 @@ function state(card: Card) {
 
     <ul v-else class="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100">
       <li
+        v-if="nobody.length > 0"
+        class="grid gap-3 rounded-t-box bg-base-200/40 p-4 md:grid-cols-[13rem_3.5rem_minmax(0,1fr)] md:items-start md:gap-5"
+      >
+        <div class="flex items-baseline justify-between gap-3 md:block">
+          <div>
+            <h3 class="font-semibold">Nobody</h3>
+            <p class="text-xs opacity-70">In the Line, with no Team Member</p>
+          </div>
+          <p class="shrink-0 text-2xl font-semibold tabular-nums md:hidden">{{ nobody.length }}</p>
+        </div>
+        <p class="hidden text-right text-3xl leading-none font-semibold tabular-nums md:block">
+          {{ nobody.length }}
+          <span class="sr-only">with no Team Member</span>
+        </p>
+        <ol class="flex flex-wrap gap-2" aria-label="In the Line with no Team Member">
+          <li
+            v-for="card in nobody"
+            :key="card.key"
+            class="flex w-36 flex-col rounded-field border bg-base-100 px-3 py-2"
+            :class="card.kind === 'rework' ? 'border-error' : 'border-base-300'"
+            :title="card.description"
+          >
+            <span class="text-xs font-semibold opacity-70">
+              {{ card.kind === "rework" ? "Rework waits" : "Unassigned" }}
+            </span>
+            <span class="font-semibold">{{ card.piece }}</span>
+            <span class="truncate text-xs opacity-70">{{ card.stationName }}</span>
+          </li>
+        </ol>
+      </li>
+      <li
         v-for="row in rows"
         :key="row.id"
         class="grid gap-3 p-4 md:grid-cols-[13rem_3.5rem_minmax(0,1fr)] md:items-start md:gap-5"
@@ -270,38 +301,6 @@ function state(card: Card) {
             class="flex min-h-16 items-center rounded-field border border-dashed border-base-300 px-3 py-2 text-sm opacity-70"
           >
             No Assignment
-          </li>
-        </ol>
-      </li>
-
-      <li
-        v-if="nobody.length > 0"
-        class="grid gap-3 bg-base-200/40 p-4 md:grid-cols-[13rem_3.5rem_minmax(0,1fr)] md:items-start md:gap-5"
-      >
-        <div class="flex items-baseline justify-between gap-3 md:block">
-          <div>
-            <h3 class="font-semibold">Nobody</h3>
-            <p class="text-xs opacity-70">In the Line, with no Team Member</p>
-          </div>
-          <p class="shrink-0 text-2xl font-semibold tabular-nums md:hidden">{{ nobody.length }}</p>
-        </div>
-        <p class="hidden text-right text-3xl leading-none font-semibold tabular-nums md:block">
-          {{ nobody.length }}
-          <span class="sr-only">with no Team Member</span>
-        </p>
-        <ol class="flex flex-wrap gap-2" aria-label="In the Line with no Team Member">
-          <li
-            v-for="card in nobody"
-            :key="card.key"
-            class="flex w-36 flex-col rounded-field border bg-base-100 px-3 py-2"
-            :class="card.kind === 'rework' ? 'border-error' : 'border-base-300'"
-            :title="card.description"
-          >
-            <span class="text-xs font-semibold opacity-70">
-              {{ card.kind === "rework" ? "Rework waits" : "Unassigned" }}
-            </span>
-            <span class="font-semibold">{{ card.piece }}</span>
-            <span class="truncate text-xs opacity-70">{{ card.stationName }}</span>
           </li>
         </ol>
       </li>

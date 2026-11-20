@@ -84,6 +84,16 @@ const stop = computed(() => {
   return found?.kind === "stop" ? found : null
 })
 
+/** What a pull does now, shown on the Pull button at the moment of the pull. */
+const pullWarning = computed(() =>
+  [
+    stop.value ? "The Andon is open: a pull is a Deviation until it is closed" : null,
+    keptFirst.value,
+  ]
+    .filter((one) => one !== null)
+    .join(". "),
+)
+
 function reworkWaits(rework: string) {
   const found = props.andons.find((one) => one.kind === "rework_waits" && one.rework === rework)
   return found?.kind === "rework_waits" ? found.waitingHours : null
@@ -145,10 +155,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         Andon: stopped at {{ raisedAt(stop.raisedAt) }}
         <template v-if="stop.raisedBy"> by {{ stop.raisedBy }}</template>
       </p>
-      <p v-if="stop.teamLeader">
-        Team Leader {{ stop.teamLeader }} is called. A pull is a Deviation until the Andon is
-        closed.
-      </p>
+      <p v-if="stop.teamLeader">Team Leader {{ stop.teamLeader }} is called.</p>
       <button
         v-if="stop.teamLeaderId && canActAs(stop.teamLeaderId)"
         class="btn btn-xs mt-1 self-start"
@@ -206,13 +213,17 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       </p>
       <section v-else aria-label="Pull">
         <div class="tooltip tooltip-warning block">
-          <div v-if="keptFirst" :id="`kept-first-${station.id}`" class="tooltip-content text-xs">
-            {{ keptFirst }}
+          <div
+            v-if="pullWarning"
+            :id="`pull-warning-${station.id}`"
+            class="tooltip-content text-xs"
+          >
+            {{ pullWarning }}
           </div>
           <button
             class="btn btn-sm btn-primary w-full justify-between"
             :disabled="busy"
-            :aria-describedby="keptFirst ? `kept-first-${station.id}` : undefined"
+            :aria-describedby="pullWarning ? `pull-warning-${station.id}` : undefined"
             @click="$emit('pull', teamMember === '' ? undefined : teamMember)"
           >
             {{ assembly ? "Assemble a Piece" : "Pull a Piece" }}
