@@ -119,7 +119,6 @@ function measure() {
   }
   if (!props.simple) {
     for (const [column, gap] of into) {
-      // Sit one line above the top Branch label, which shares this x.
       const y = Math.min(gap.top - LANE_OFFSET - 12, gap.branchTop - LABEL_LINE)
       nextLabels.push({ kind: "piece", x: gap.x, y, text: "Piece" })
       nextLabels.push({
