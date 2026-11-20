@@ -5,7 +5,7 @@ import FlowConnectors from "../components/FlowConnectors.vue"
 import DesignTeamMembersCard from "../components/DesignTeamMembersCard.vue"
 import DesignStationCard from "../components/DesignStationCard.vue"
 import ErrorToast from "../components/ErrorToast.vue"
-import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
+import WorkingCalendarSummary from "../components/WorkingCalendarSummary.vue"
 import {
   draftLanes,
   draftNodes,
@@ -463,10 +463,17 @@ function confirmDiscard() {
             </div>
           </div>
 
-          <div v-if="calendarError" class="alert alert-error">
-            <span>The Working Calendar did not load: {{ calendarError }}</span>
-          </div>
-          <WorkingCalendarCard v-else-if="calendar" :calendar="calendar" :save="saveCalendar" />
+          <section
+            aria-labelledby="design-calendar"
+            class="rounded-box border border-base-300 bg-base-100 px-5 py-4"
+          >
+            <h3 id="design-calendar" class="mb-1 text-base font-semibold">Working Calendar</h3>
+            <WorkingCalendarSummary
+              :calendar="calendar"
+              :error="calendarError"
+              :save="saveCalendar"
+            />
+          </section>
         </div>
       </div>
 

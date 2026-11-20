@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue"
 import CompareCell, { type Verdict } from "../components/CompareCell.vue"
 import RunChart from "../components/RunChart.vue"
 import VerdictPill from "../components/VerdictPill.vue"
-import WorkingCalendarCard from "../components/WorkingCalendarCard.vue"
+import WorkingCalendarSummary from "../components/WorkingCalendarSummary.vue"
 import { useLabels } from "../composables/useLabels"
 import {
   periodDays,
@@ -386,18 +386,26 @@ watch(deviationList, () => {
         <h2 class="text-xl font-semibold">Measures</h2>
         <p class="text-sm opacity-70">How the Line flows before and after a change</p>
       </div>
-      <div class="tabs tabs-box tabs-sm bg-base-100" role="group" aria-label="Time view">
-        <button
-          v-for="option in timeViews"
-          :key="option.id"
-          type="button"
-          class="tab"
-          :class="view === option.id ? 'tab-active font-medium' : 'opacity-70'"
-          :aria-pressed="view === option.id"
-          @click="view = option.id"
-        >
-          {{ option.label }}
-        </button>
+      <div class="flex flex-col items-start gap-1 sm:items-end">
+        <div class="tabs tabs-box tabs-sm bg-base-100" role="group" aria-label="Time view">
+          <button
+            v-for="option in timeViews"
+            :key="option.id"
+            type="button"
+            class="tab"
+            :class="view === option.id ? 'tab-active font-medium' : 'opacity-70'"
+            :aria-pressed="view === option.id"
+            @click="view = option.id"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+        <WorkingCalendarSummary
+          v-if="view === 'working'"
+          :calendar="calendar"
+          :error="calendarError"
+          :save="saveCalendar"
+        />
       </div>
     </header>
 
@@ -695,41 +703,34 @@ watch(deviationList, () => {
         </div>
       </div>
 
-      <div class="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <div class="card border border-base-300 bg-base-100">
-          <div class="card-body gap-3 p-5">
-            <h3 class="card-title text-base">Summary</h3>
-            <div class="overflow-x-auto">
-              <table class="table table-sm">
-                <thead>
-                  <tr>
-                    <th>Measure</th>
-                    <th class="text-right">Before · {{ periodLabel(measures.before) }}</th>
-                    <th class="text-right">After · {{ periodLabel(measures.after) }}</th>
-                    <th class="text-right">Change</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="row in summary" :key="row.label">
-                    <th class="font-medium">{{ row.label }}</th>
-                    <td class="text-right tabular-nums opacity-70">{{ row.before }}</td>
-                    <td class="text-right font-medium tabular-nums">{{ row.after }}</td>
-                    <td class="text-right whitespace-nowrap tabular-nums">
-                      {{ row.change }}
-                      <VerdictPill class="ml-1" :verdict="row.verdict" />
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p class="text-xs opacity-60">Touch Time is net time: it is the same in both views.</p>
+      <div class="card border border-base-300 bg-base-100">
+        <div class="card-body gap-3 p-5">
+          <h3 class="card-title text-base">Summary</h3>
+          <div class="overflow-x-auto">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Measure</th>
+                  <th class="text-right">Before · {{ periodLabel(measures.before) }}</th>
+                  <th class="text-right">After · {{ periodLabel(measures.after) }}</th>
+                  <th class="text-right">Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in summary" :key="row.label">
+                  <th class="font-medium">{{ row.label }}</th>
+                  <td class="text-right tabular-nums opacity-70">{{ row.before }}</td>
+                  <td class="text-right font-medium tabular-nums">{{ row.after }}</td>
+                  <td class="text-right whitespace-nowrap tabular-nums">
+                    {{ row.change }}
+                    <VerdictPill class="ml-1" :verdict="row.verdict" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+          <p class="text-xs opacity-60">Touch Time is net time: it is the same in both views.</p>
         </div>
-
-        <div v-if="calendarError" class="alert alert-error">
-          <span>The Working Calendar did not load: {{ calendarError }}</span>
-        </div>
-        <WorkingCalendarCard v-else-if="calendar" :calendar="calendar" :save="saveCalendar" />
       </div>
 
       <div class="card border border-base-300 bg-base-100">
