@@ -144,81 +144,48 @@ const rules = [
 
 const ruleIndex = computed(() => rules.findIndex((rule) => rule.kind === next.value?.kind))
 
-type Tone = "error" | "primary" | "warning" | "neutral"
-
-/** Rework is a defect, so it is the only red. */
-const focus = computed<{ tone: Tone; eyebrow: string; title: string; action: string | null }>(
-  () => {
-    const now = next.value
-    switch (now?.kind) {
-      case "continue":
-        return now.assignment.kind === "rework"
-          ? {
-              tone: "error",
-              eyebrow: "Rework first",
-              title: `Repair ${now.assignment.piece}`,
-              action: "Repaired",
-            }
-          : {
-              tone: "primary",
-              eyebrow: "In your hands",
-              title: `Transform ${now.assignment.piece}`,
-              action: "Finish: put it in a Blue Bin",
-            }
-      case "take_rework":
-        return {
-          tone: "error",
-          eyebrow: "Rework first",
-          title: `Take the Rework on ${now.piece}`,
-          action: "Take it",
-        }
-      case "take_kanban":
-        return {
-          tone: "primary",
-          eyebrow: "Your hands are free",
-          title: `Pull the next Piece at ${now.stationName}`,
-          action: "Pull a Piece",
-        }
-      case "helping":
-        return {
-          tone: "error",
-          eyebrow: "Help the Rework",
-          title: `Help ${now.assignee} on ${now.piece}`,
-          action: "Stop helping",
-        }
-      case "help_the_rework":
-        return {
-          tone: "error",
-          eyebrow: "Help the Rework",
-          title: `Help ${now.assignee} on ${now.piece}`,
-          action: "Help",
-        }
-      case "help_downstream":
-        return {
-          tone: "warning",
-          eyebrow: "No Kanban for you",
-          title: `Help Downstream at ${now.stationName}`,
-          action: null,
-        }
-      default:
-        return { tone: "neutral", eyebrow: "No Kanban for you", title: "Wait", action: null }
-    }
-  },
-)
-
-const toneBorder: Record<Tone, string> = {
-  error: "border-error",
-  primary: "border-primary",
-  warning: "border-warning",
-  neutral: "border-base-content/30",
-}
-
-const toneText: Record<Tone, string> = {
-  error: "text-error",
-  primary: "text-primary",
-  warning: "text-warning-ink",
-  neutral: "opacity-70",
-}
+const focus = computed<{ title: string; action: string | null }>(() => {
+  const now = next.value
+  switch (now?.kind) {
+    case "continue":
+      return now.assignment.kind === "rework"
+        ? {
+            title: `Repair ${now.assignment.piece}`,
+            action: "Repaired",
+          }
+        : {
+            title: `Transform ${now.assignment.piece}`,
+            action: "Finish: put it in a Blue Bin",
+          }
+    case "take_rework":
+      return {
+        title: `Take the Rework on ${now.piece}`,
+        action: "Take it",
+      }
+    case "take_kanban":
+      return {
+        title: `Pull the next Piece at ${now.stationName}`,
+        action: "Pull a Piece",
+      }
+    case "helping":
+      return {
+        title: `Help ${now.assignee} on ${now.piece}`,
+        action: "Stop helping",
+      }
+    case "help_the_rework":
+      return {
+        title: `Help ${now.assignee} on ${now.piece}`,
+        action: "Help",
+      }
+    case "help_downstream":
+      return {
+        title: `Help Downstream at ${now.stationName}`,
+        action: null,
+      }
+    default:
+      return { title: "Wait", action: null }
+  }
+})
 
 function since(at: string) {
   return new Date(at).toLocaleString(undefined, {
@@ -237,7 +204,7 @@ function since(at: string) {
         <p class="text-sm opacity-70">One thing to do now, chosen by the pull rules.</p>
       </div>
       <label v-if="!pinned" class="flex items-center gap-3">
-        <span class="text-xs font-semibold uppercase tracking-wide opacity-70">I am</span>
+        <span class="text-sm font-semibold opacity-70">I am</span>
         <select v-model="teamMemberId" class="select select-bordered h-11 w-auto min-w-56">
           <option value="" disabled>Pick your name</option>
           <option v-for="one in teamMembers" :key="one.id" :value="one.id">
@@ -273,24 +240,15 @@ function since(at: string) {
         @close="(station) => run(() => closeAndon(station))"
       />
 
-      <article
-        class="card overflow-hidden border border-l-8 border-base-300 bg-base-100 shadow-sm"
-        :class="toneBorder[focus.tone]"
-        aria-labelledby="next-thing-title"
-      >
+      <article class="card border border-base-300 bg-base-100" aria-labelledby="next-thing-title">
         <div class="card-body grid gap-6 p-5 sm:p-6 md:grid-cols-[minmax(0,1fr)_16rem]">
           <div class="flex min-w-0 flex-col gap-3">
-            <p class="text-xs font-semibold uppercase tracking-wide" :class="toneText[focus.tone]">
-              {{ focus.eyebrow }}
-            </p>
             <h3 id="next-thing-title" class="text-3xl font-semibold leading-tight">
               {{ focus.title }}
             </h3>
 
             <template v-if="next.kind === 'continue' && next.assignment.kind === 'rework'">
-              <blockquote
-                class="rounded-r-box border-l-4 border-error bg-error/5 px-4 py-3 text-base"
-              >
+              <blockquote class="text-base">
                 {{ next.assignment.description }}
                 <footer class="mt-1 text-sm opacity-70">
                   Found by {{ next.assignment.foundBy }} · made at
@@ -303,11 +261,11 @@ function since(at: string) {
               At {{ next.assignment.stationName }}. Finish it before anything else.
             </p>
             <p v-else-if="next.kind === 'take_rework'" class="opacity-80">
-              Nobody of {{ next.stationName }} repairs it yet.
+              Rework comes first: nobody of {{ next.stationName }} repairs it yet.
             </p>
             <p v-else-if="next.kind === 'take_kanban'" class="opacity-80">
-              A Kanban waits there, and a Piece waits upstream. It is your Work Station nearest to
-              Deployment.
+              Your hands are free. A Kanban waits there, and a Piece waits upstream. It is your Work
+              Station nearest to Deployment.
             </p>
             <p v-else-if="next.kind === 'helping'" class="opacity-80">
               At {{ next.stationName }}, with {{ next.assignee }}: reproduce the defect, write the
@@ -326,7 +284,7 @@ function since(at: string) {
                 Nothing downstream asks for a Piece, and nothing downstream holds up the flow.
                 Starting a Piece now would be a Deviation.
               </p>
-              <div class="rounded-box border border-base-300 bg-base-200/50 px-4 py-3">
+              <div>
                 <p class="text-sm font-semibold">Use the wait to improve the flow</p>
                 <ul class="mt-2 space-y-1.5 text-sm">
                   <li>
@@ -377,7 +335,7 @@ function since(at: string) {
             aria-label="Why this thing"
             class="border-t border-base-300 pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-6"
           >
-            <p class="text-xs font-semibold uppercase tracking-wide opacity-70">Pull rules</p>
+            <p class="text-sm font-semibold opacity-70">Pull rules</p>
             <ol class="mt-3 space-y-2.5 text-sm">
               <li
                 v-for="(rule, index) in rules"
@@ -414,12 +372,7 @@ function since(at: string) {
 
       <div class="mt-8 grid gap-8 lg:grid-cols-2">
         <section aria-labelledby="assignments-title">
-          <h3
-            id="assignments-title"
-            class="text-xs font-semibold uppercase tracking-wide opacity-70"
-          >
-            My Assignments
-          </h3>
+          <h3 id="assignments-title" class="text-sm font-semibold opacity-70">My Assignments</h3>
           <ul v-if="view.assignments.length > 0" class="mt-3 space-y-2">
             <li
               v-for="one in view.assignments"
@@ -466,7 +419,7 @@ function since(at: string) {
         </section>
 
         <section aria-labelledby="stations-title">
-          <h3 id="stations-title" class="text-xs font-semibold uppercase tracking-wide opacity-70">
+          <h3 id="stations-title" class="text-sm font-semibold opacity-70">
             My Work Stations, nearest to Deployment first
           </h3>
           <div
@@ -543,8 +496,7 @@ function since(at: string) {
                 <li
                   v-for="(item, index) in list.items"
                   :key="item.id"
-                  class="flex items-baseline gap-2.5 rounded-r-box border-l-4 px-3 py-1.5"
-                  :class="item.kind === 'rework' ? 'border-error bg-error/5' : 'border-base-300'"
+                  class="flex items-baseline gap-2.5 py-1.5"
                 >
                   <span class="w-4 shrink-0 text-xs tabular-nums opacity-70">{{ index + 1 }}</span>
                   <span v-if="item.kind === 'rework'" class="min-w-0">

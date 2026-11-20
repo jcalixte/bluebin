@@ -401,7 +401,7 @@ watch(deviationList, () => {
       </div>
     </header>
 
-    <div class="card mb-6 border border-base-300 bg-base-100 shadow-sm">
+    <div class="card mb-6 border border-base-300 bg-base-100">
       <div class="card-body gap-4 p-5">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <h3 class="text-sm font-semibold">Compare two periods</h3>
@@ -589,7 +589,7 @@ watch(deviationList, () => {
 
     <div v-else-if="measures && headline && onTime" class="flex flex-col gap-6">
       <section aria-label="Key measures" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <article class="rounded-box bg-primary p-5 text-primary-content shadow-sm">
+        <article class="rounded-box bg-primary p-5 text-primary-content">
           <h3 class="text-sm font-semibold">
             Lead Time <span class="font-normal opacity-80">· average per Piece</span>
           </h3>
@@ -602,7 +602,7 @@ watch(deviationList, () => {
           </p>
         </article>
 
-        <article class="rounded-box border border-base-300 bg-base-100 p-5 shadow-sm">
+        <article class="rounded-box border border-base-300 bg-base-100 p-5">
           <h3 class="text-sm font-semibold">
             On-time delivery
             <span class="font-normal opacity-70">· target {{ onTimeTarget * 100 }} %</span>
@@ -640,7 +640,7 @@ watch(deviationList, () => {
         <article
           v-for="one in headline.others"
           :key="one.label"
-          class="rounded-box border border-base-300 bg-base-100 p-5 shadow-sm"
+          class="rounded-box border border-base-300 bg-base-100 p-5"
         >
           <h3 class="text-sm font-semibold">
             {{ one.label }}
@@ -661,7 +661,7 @@ watch(deviationList, () => {
         delivered in the period by their due date.
       </p>
 
-      <div class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card border border-base-300 bg-base-100">
         <div class="card-body gap-3 p-5">
           <div class="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -696,7 +696,7 @@ watch(deviationList, () => {
       </div>
 
       <div class="grid gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <div class="card border border-base-300 bg-base-100 shadow-sm">
+        <div class="card border border-base-300 bg-base-100">
           <div class="card-body gap-3 p-5">
             <h3 class="card-title text-base">Summary</h3>
             <div class="overflow-x-auto">
@@ -732,7 +732,7 @@ watch(deviationList, () => {
         <WorkingCalendarCard v-else-if="calendar" :calendar="calendar" :save="saveCalendar" />
       </div>
 
-      <div class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card border border-base-300 bg-base-100">
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Demand</h3>
           <p class="text-sm opacity-70">Averages per Piece released.</p>
@@ -772,7 +772,7 @@ watch(deviationList, () => {
         </div>
       </div>
 
-      <div class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card border border-base-300 bg-base-100">
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Per Work Station</h3>
           <p class="text-sm opacity-70">
@@ -817,7 +817,7 @@ watch(deviationList, () => {
         </div>
       </div>
 
-      <div class="card border border-base-300 bg-base-100 shadow-sm">
+      <div class="card border border-base-300 bg-base-100">
         <div class="card-body gap-3 p-5">
           <h3 class="card-title text-base">Deviations</h3>
           <div class="overflow-x-auto">

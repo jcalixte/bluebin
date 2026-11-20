@@ -102,7 +102,7 @@ async function submit() {
 </script>
 
 <template>
-  <div class="card border border-base-300 bg-base-100 shadow-sm">
+  <div class="card border border-base-300 bg-base-100">
     <form class="card-body gap-4 p-5" @submit.prevent="submit">
       <h3 class="card-title text-base">Working Calendar</h3>
       <p class="text-sm opacity-70">

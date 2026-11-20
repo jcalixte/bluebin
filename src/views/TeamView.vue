@@ -186,10 +186,7 @@ function state(card: Card) {
       No Team Member yet. The owner adds them in Design.
     </p>
 
-    <ul
-      v-else
-      class="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100 shadow-sm"
-    >
+    <ul v-else class="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100">
       <li
         v-for="row in rows"
         :key="row.id"
@@ -231,7 +228,7 @@ function state(card: Card) {
             v-if="row.helping"
             class="flex w-36 flex-col rounded-field border border-dashed border-base-content/50 px-3 py-2"
           >
-            <span class="text-xs font-semibold uppercase tracking-wide opacity-70">Helps</span>
+            <span class="text-xs font-semibold opacity-70">Helps</span>
             <span class="font-semibold">{{ row.helping.piece }}</span>
             <span class="truncate text-xs opacity-70">
               {{ row.helping.assignee ? `with ${row.helping.assignee}` : "the Rework" }}
@@ -242,18 +239,17 @@ function state(card: Card) {
             :key="card.key"
             class="flex w-36 flex-col rounded-field border px-3 py-2"
             :class="[
-              card.active
-                ? 'border-primary bg-primary text-primary-content'
-                : 'border-base-300 bg-base-200/60',
-              card.kind === 'rework' ? 'border-l-4 border-l-error' : '',
+              card.active ? 'bg-primary text-primary-content' : 'bg-base-200/60',
+              card.kind === 'rework'
+                ? 'border-error'
+                : card.active
+                  ? 'border-primary'
+                  : 'border-base-300',
             ]"
             :title="card.description"
           >
             <span class="flex items-center justify-between gap-1">
-              <span
-                class="text-xs font-semibold uppercase tracking-wide"
-                :class="card.active ? '' : 'opacity-70'"
-              >
+              <span class="text-xs font-semibold" :class="card.active ? '' : 'opacity-70'">
                 {{ state(card) }}
               </span>
               <span
@@ -297,11 +293,11 @@ function state(card: Card) {
           <li
             v-for="card in nobody"
             :key="card.key"
-            class="flex w-36 flex-col rounded-field border border-base-300 bg-base-100 px-3 py-2"
-            :class="card.kind === 'rework' ? 'border-l-4 border-l-error' : ''"
+            class="flex w-36 flex-col rounded-field border bg-base-100 px-3 py-2"
+            :class="card.kind === 'rework' ? 'border-error' : 'border-base-300'"
             :title="card.description"
           >
-            <span class="text-xs font-semibold uppercase tracking-wide opacity-70">
+            <span class="text-xs font-semibold opacity-70">
               {{ card.kind === "rework" ? "Rework waits" : "Unassigned" }}
             </span>
             <span class="font-semibold">{{ card.piece }}</span>

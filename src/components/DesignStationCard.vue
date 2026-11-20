@@ -40,7 +40,7 @@ function useSuggestion() {
 </script>
 
 <template>
-  <article class="card border border-base-300 bg-base-100 shadow-sm">
+  <article class="card border border-base-300 bg-base-100">
     <div class="card-body gap-3 p-4">
       <header class="flex items-start gap-2">
         <label class="min-w-0 flex-1">

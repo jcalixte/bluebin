@@ -128,7 +128,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
         </p>
       </div>
 
-      <div v-else class="card border border-base-300 bg-base-100 shadow-sm">
+      <div v-else class="card border border-base-300 bg-base-100">
         <div class="card-body gap-4 p-5">
           <div>
             <h3 class="card-title text-base">Heijunka Sequence</h3>
@@ -143,7 +143,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
       </div>
 
       <div class="grid items-start gap-6 xl:grid-cols-2">
-        <div v-if="sequence.length > 0" class="card border border-base-300 bg-base-100 shadow-sm">
+        <div v-if="sequence.length > 0" class="card border border-base-300 bg-base-100">
           <div class="card-body gap-3 p-5">
             <h3 class="card-title text-base">In order</h3>
             <ol class="divide-y divide-base-300">
@@ -206,7 +206,7 @@ function dateLabel(day: string, options: Intl.DateTimeFormatOptions) {
         </div>
 
         <div
-          class="card border border-base-300 bg-base-100 shadow-sm xl:sticky xl:top-4"
+          class="card border border-base-300 bg-base-100 xl:sticky xl:top-4"
           :class="sequence.length === 0 ? 'xl:col-span-2' : ''"
         >
           <div class="card-body gap-3 p-5">

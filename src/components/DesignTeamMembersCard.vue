@@ -42,7 +42,7 @@ function unlink(teamMember: DesignTeamMember) {
 </script>
 
 <template>
-  <div class="card border border-base-300 bg-base-100 shadow-sm">
+  <div class="card border border-base-300 bg-base-100">
     <div class="card-body gap-4 p-5">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <h3 class="card-title text-base">Team Members</h3>

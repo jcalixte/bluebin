@@ -56,7 +56,10 @@ async function choose(teamMember: string) {
 <template>
   <App v-if="playing" />
   <main v-else class="grid min-h-screen place-items-center bg-base-200 px-4 py-10 sm:px-6">
-    <section class="card w-full max-w-lg bg-base-100 shadow-sm" aria-labelledby="guest-heading">
+    <section
+      class="card w-full max-w-lg border border-base-300 bg-base-100"
+      aria-labelledby="guest-heading"
+    >
       <div class="card-body gap-4">
         <p class="flex items-center gap-2 text-sm font-medium opacity-80">
           <BrandMark />

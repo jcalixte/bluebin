@@ -30,9 +30,7 @@ function waiting(hours: number): string {
 <template>
   <section aria-labelledby="held-for-release" class="flex min-w-[15rem] flex-col gap-3">
     <div class="flex min-h-6 items-center">
-      <h3 id="held-for-release" class="text-xs font-semibold uppercase tracking-wide opacity-70">
-        Held for Release
-      </h3>
+      <h3 id="held-for-release" class="text-sm font-semibold opacity-70">Held for Release</h3>
     </div>
     <article class="card border border-dashed border-base-content/40 bg-base-100">
       <div class="card-body gap-4 p-4">

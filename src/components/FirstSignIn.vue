@@ -32,7 +32,7 @@ async function save() {
 <template>
   <div class="grid min-h-screen place-items-center bg-base-200 px-6 py-12">
     <form
-      class="card w-full max-w-md bg-base-100 shadow-sm"
+      class="card w-full max-w-md border border-base-300 bg-base-100"
       aria-labelledby="first-sign-in-title"
       @submit.prevent="save"
     >

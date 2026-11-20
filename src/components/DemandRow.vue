@@ -122,7 +122,7 @@ const barLabel = computed(
 
 <template>
   <article
-    class="card overflow-hidden border bg-base-100 shadow-sm"
+    class="card overflow-hidden border bg-base-100"
     :class="status === 'andon' ? 'border-2 border-error' : 'border-base-300'"
   >
     <div

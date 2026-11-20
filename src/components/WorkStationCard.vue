@@ -129,7 +129,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
 
 <template>
   <article
-    class="card overflow-hidden border bg-base-100 shadow-sm"
+    class="card overflow-hidden border bg-base-100"
     :class="stop || hasRework ? 'border-2 border-error' : 'border-base-300'"
   >
     <div
@@ -179,13 +179,9 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
         </button>
       </header>
 
-      <section
-        v-if="bottleneck"
-        aria-label="Bottleneck"
-        class="rounded-r-box border-l-4 border-warning bg-warning/10 px-3 py-2 text-xs"
-      >
+      <section v-if="bottleneck" aria-label="Bottleneck" class="text-xs">
         <p class="flex items-baseline justify-between gap-2">
-          <span class="text-sm font-semibold">Bottleneck</span>
+          <span class="text-sm font-semibold text-warning-ink">Bottleneck</span>
           <span
             v-if="bottleneck.slow?.times"
             class="font-medium tabular-nums opacity-70"
@@ -253,20 +249,16 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       </section>
 
       <section v-if="hasRework" aria-label="Rework">
-        <h4 class="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
+        <h4 class="flex items-center gap-2 text-sm font-semibold">
           <span class="size-2 rounded-full bg-andon" aria-hidden="true" />
           Rework
         </h4>
-        <ul class="mt-2 space-y-2">
-          <li
-            v-for="item in station.rework"
-            :key="item.id"
-            class="rounded-r-box border-l-4 border-error bg-error/5 px-3 py-2 text-sm"
-          >
+        <ul class="mt-2 space-y-3">
+          <li v-for="item in station.rework" :key="item.id" class="text-sm">
             <div class="flex items-start justify-between gap-2">
               <p>
-                <span class="font-medium">{{ item.piece }}</span>
-                <span class="opacity-80"> — {{ item.description }}</span>
+                <span class="font-medium">{{ item.piece }}:</span>
+                <span class="opacity-80"> {{ item.description }}</span>
               </p>
               <button
                 v-if="canActAs()"
@@ -352,7 +344,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       </section>
 
       <section aria-label="In the hands of">
-        <h4 class="text-xs font-semibold uppercase tracking-wide opacity-70">In the hands of</h4>
+        <h4 class="text-sm font-semibold opacity-70">In the hands of</h4>
         <p v-if="station.inProgress.length === 0" class="mt-1 text-sm opacity-70">
           No Piece in hand
         </p>
@@ -434,9 +426,7 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       </section>
 
       <section aria-label="Blue Bins">
-        <h4
-          class="flex items-baseline justify-between text-xs font-semibold uppercase tracking-wide"
-        >
+        <h4 class="flex items-baseline justify-between text-sm font-semibold">
           <span class="opacity-70">Blue Bins</span>
           <span
             class="tabular-nums"
@@ -550,8 +540,8 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
           </summary>
           <ul class="mt-1 space-y-1 opacity-80">
             <li v-for="(item, index) in station.deviations" :key="index">
-              <span class="font-medium">{{ item.piece ?? "—" }}</span>
-              — {{ item.reason }}
+              <span class="font-medium">{{ item.piece ?? "—" }}:</span>
+              {{ item.reason }}
             </li>
           </ul>
         </details>

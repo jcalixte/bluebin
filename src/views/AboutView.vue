@@ -205,7 +205,6 @@ const readings = [
       <section class="border-b border-base-300 bg-base-100" aria-labelledby="about-title">
         <div class="mx-auto grid max-w-6xl gap-10 px-6 py-12 sm:py-16">
           <div class="grid max-w-3xl gap-5">
-            <p class="text-sm font-semibold uppercase tracking-wide text-primary">About Bluebin</p>
             <h2
               id="about-title"
               class="text-[clamp(2rem,1.4rem+2.6vw,3.25rem)] font-semibold leading-[1.1] tracking-tight text-balance"
@@ -251,7 +250,7 @@ const readings = [
                 </li>
                 <li
                   v-else-if="node.kind === 'station'"
-                  class="rounded-box border border-base-300 bg-base-100 px-4 py-3 text-center font-semibold shadow-sm sm:flex-[1.4]"
+                  class="rounded-box border border-base-300 bg-base-100 px-4 py-3 text-center font-semibold sm:flex-[1.4]"
                 >
                   {{ node.name }}
                 </li>
@@ -333,9 +332,7 @@ const readings = [
       >
         <nav aria-label="On this page" class="hidden lg:block">
           <div class="sticky top-8 grid gap-1">
-            <p class="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-base-content/70">
-              On this page
-            </p>
+            <p class="mb-2 px-3 text-sm font-semibold text-base-content/70">On this page</p>
             <a
               v-for="s in sections"
               :key="s.id"

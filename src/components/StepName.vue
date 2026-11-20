@@ -30,18 +30,18 @@ function save() {
       v-if="editing"
       ref="input"
       v-model="draft"
-      class="input input-xs w-full max-w-[12rem] uppercase tracking-wide"
+      class="input input-xs w-full max-w-[12rem]"
       :maxlength="maxLength"
       @keyup.enter="save"
       @keyup.escape="editing = false"
       @blur="save"
     />
-    <span v-else-if="readonly" class="text-xs font-semibold uppercase tracking-wide opacity-70">
+    <span v-else-if="readonly" class="text-sm font-semibold opacity-70">
       {{ name }}
     </span>
     <button
       v-else
-      class="group flex items-center gap-1 text-xs font-semibold uppercase tracking-wide opacity-70 hover:opacity-100 focus-visible:opacity-100"
+      class="group flex items-center gap-1 text-sm font-semibold opacity-70 hover:opacity-100 focus-visible:opacity-100"
       :title="`Rename ${name}`"
       @click="start"
     >

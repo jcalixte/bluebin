@@ -63,7 +63,7 @@ const rows = computed<Row[]>(() => {
 </script>
 
 <template>
-  <div class="card border border-base-300 bg-base-100 shadow-sm">
+  <div class="card border border-base-300 bg-base-100">
     <div class="card-body gap-3 p-5">
       <div>
         <h3 class="card-title text-base">In the Line</h3>

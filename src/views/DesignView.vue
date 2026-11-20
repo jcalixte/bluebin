@@ -238,7 +238,7 @@ function confirmDiscard() {
             class="relative flex flex-col items-center lg:min-w-max lg:flex-row lg:items-start"
           >
             <div
-              class="flex h-10 shrink-0 items-center rounded-box border border-dashed border-base-content/30 px-4 text-xs font-semibold uppercase tracking-wide opacity-70"
+              class="flex h-10 shrink-0 items-center rounded-box border border-dashed border-base-content/30 px-4 text-sm font-semibold opacity-70"
             >
               Backlog
             </div>
@@ -281,7 +281,7 @@ function confirmDiscard() {
                       <input
                         v-model="step.name"
                         type="text"
-                        class="input input-sm w-full text-xs font-semibold uppercase tracking-wide"
+                        class="input input-sm w-full font-semibold"
                         :class="step.name.trim() === '' ? 'input-warning' : ''"
                         :maxlength="maxNameLength"
                       />
@@ -440,7 +440,7 @@ function confirmDiscard() {
         />
 
         <div class="flex flex-col gap-6">
-          <div class="card border border-base-300 bg-base-100 shadow-sm">
+          <div class="card border border-base-300 bg-base-100">
             <div class="card-body gap-4 p-5">
               <h3 class="card-title text-base">Labels</h3>
               <p class="text-sm opacity-70">
