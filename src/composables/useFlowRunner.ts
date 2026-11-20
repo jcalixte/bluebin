@@ -1,5 +1,5 @@
 import { ref } from "vue"
-import type { FlowConfirm, ReorderEffect } from "../types"
+import type { FlowConfirm, ReorderEffect } from "../types.ts"
 
 export type Pending = {
   /** The names of the rules the action breaks, space-separated. */
@@ -9,14 +9,23 @@ export type Pending = {
   again: (reason: string) => Promise<FlowConfirm | null>
 }
 
+/** Most actions answer faster than this: showing a spinner for them only flickers. */
+const SHOW_BUSY_AFTER_MS = 300
+
 export function useFlowRunner() {
   const pending = ref<Pending | null>(null)
   const actionError = ref<string | null>(null)
+  /** True once an action runs longer than SHOW_BUSY_AFTER_MS: drives the spinner and disabled look. */
   const busy = ref(false)
+  let running = false
 
   async function run(action: (reason?: string) => Promise<FlowConfirm | null>) {
+    if (running) {
+      return
+    }
+    running = true
     actionError.value = null
-    busy.value = true
+    const showBusy = setTimeout(() => (busy.value = true), SHOW_BUSY_AFTER_MS)
     try {
       const confirm = await action()
       if (confirm) {
@@ -30,6 +39,8 @@ export function useFlowRunner() {
     } catch (cause) {
       actionError.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
+      clearTimeout(showBusy)
+      running = false
       busy.value = false
     }
   }

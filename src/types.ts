@@ -1,6 +1,6 @@
 // The API shapes come from `./wire`, which `gleam dev` writes from
 // backend/src/bluebin/wire.gleam: change them there.
-import type { Duration, ReorderEffect } from "./wire"
+import type { Duration, ReorderEffect } from "./wire.ts"
 
 export type {
   Andon,
@@ -51,7 +51,7 @@ export type {
   WorkStation,
   WorkingCalendar,
   Workspace,
-} from "./wire"
+} from "./wire.ts"
 
 export type HelpOffer = {
   rework: string
