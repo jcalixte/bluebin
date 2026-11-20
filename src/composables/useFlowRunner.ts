@@ -11,6 +11,8 @@ export type Pending = {
 
 /** Most actions answer faster than this: showing a spinner for them only flickers. */
 const SHOW_BUSY_AFTER_MS = 300
+/** Once shown, the spinner stays this long, so it does not blink on and off. */
+const KEEP_BUSY_FOR_MS = 500
 
 export function useFlowRunner() {
   const pending = ref<Pending | null>(null)
@@ -25,7 +27,11 @@ export function useFlowRunner() {
     }
     running = true
     actionError.value = null
-    const showBusy = setTimeout(() => (busy.value = true), SHOW_BUSY_AFTER_MS)
+    let shownAt: number | null = null
+    const showBusy = setTimeout(() => {
+      busy.value = true
+      shownAt = Date.now()
+    }, SHOW_BUSY_AFTER_MS)
     try {
       const confirm = await action()
       if (confirm) {
@@ -40,6 +46,10 @@ export function useFlowRunner() {
       actionError.value = cause instanceof Error ? cause.message : String(cause)
     } finally {
       clearTimeout(showBusy)
+      if (shownAt !== null) {
+        const left = KEEP_BUSY_FOR_MS - (Date.now() - shownAt)
+        if (left > 0) await new Promise((resolve) => setTimeout(resolve, left))
+      }
       running = false
       busy.value = false
     }

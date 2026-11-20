@@ -38,3 +38,14 @@ test("a second action while one runs is dropped", async () => {
   await run(action)
   assert.equal(calls, 2)
 })
+
+test("a spinner shown just before the action ends stays for the minimum time", async () => {
+  const { busy, run } = useFlowRunner()
+  const started = Date.now()
+  const running = run(() => wait(310).then(() => null))
+  await wait(330)
+  assert.equal(busy.value, true)
+  await running
+  assert.equal(busy.value, false)
+  assert.ok(Date.now() - started >= 790, "busy shown at ~300ms must stay until ~800ms")
+})
