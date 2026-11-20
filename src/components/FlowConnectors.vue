@@ -18,6 +18,7 @@ const LANE_END_GAP = 5
 const ANCHOR = 30
 const TURN = 18
 const BRANCH_LABEL_MAX = 14
+const LABEL_LINE = 14
 
 type Card = { column: number; left: number; right: number; top: number }
 type Lane = { d: string; kind: "piece" | "kanban" }
@@ -75,7 +76,7 @@ function measure() {
   const nextLanes: Lane[] = []
   const nextLabels: Label[] = []
   const nextMarks = new Map<string, Mark>()
-  const into = new Map<number, { x: number; top: number; bottom: number }>()
+  const into = new Map<number, { x: number; top: number; bottom: number; branchTop: number }>()
   for (const link of props.links) {
     const from = cards.get(link.from)
     const to = cards.get(link.to)
@@ -99,11 +100,12 @@ function measure() {
     if (link.kind === "assembly") {
       nextMarks.set(`assembly-${link.to}`, { x: turn - offset, y: toY - offset, kind: "assembly" })
     }
+    const branchY = toY - offset - 6
     if (link.branch) {
       nextLabels.push({
         kind: "branch",
         x: to.left - LANE_END_GAP - 4,
-        y: toY - offset - 6,
+        y: branchY,
         text: short(link.branch),
       })
     }
@@ -112,11 +114,14 @@ function measure() {
       x: Math.min(gap?.x ?? Infinity, to.left - TURN * 2),
       top: Math.min(gap?.top ?? Infinity, fromY, toY),
       bottom: Math.max(gap?.bottom ?? -Infinity, fromY, toY),
+      branchTop: Math.min(gap?.branchTop ?? Infinity, link.branch ? branchY : Infinity),
     })
   }
   if (!props.simple) {
     for (const [column, gap] of into) {
-      nextLabels.push({ kind: "piece", x: gap.x, y: gap.top - LANE_OFFSET - 12, text: "Piece" })
+      // Sit one line above the top Branch label, which shares this x.
+      const y = Math.min(gap.top - LANE_OFFSET - 12, gap.branchTop - LABEL_LINE)
+      nextLabels.push({ kind: "piece", x: gap.x, y, text: "Piece" })
       nextLabels.push({
         kind: "kanban",
         x: gap.x,
@@ -247,8 +252,7 @@ watch(
       :x="label.x"
       :y="label.y"
       :text-anchor="label.kind === 'branch' ? 'end' : 'middle'"
-      class="text-[0.6875rem] font-medium tracking-wide"
-      :class="label.kind === 'branch' ? '' : 'uppercase'"
+      class="text-[0.6875rem] font-medium"
       :fill="label.kind === 'kanban' ? 'var(--color-base-content)' : 'var(--color-primary)'"
       :fill-opacity="label.kind === 'kanban' ? 0.7 : 1"
     >
