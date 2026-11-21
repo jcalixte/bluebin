@@ -11,8 +11,9 @@ const rolls = computed(
 
 <template>
   <template v-if="rolls">
+    <!-- The hidden text inside gives the box a text baseline, so the digits line up. -->
     <span class="countdown" aria-hidden="true">
-      <span :style="{ '--value': value }" />
+      <span :style="{ '--value': value }">{{ value }}</span>
     </span>
     <span class="sr-only">{{ value }}</span>
   </template>
