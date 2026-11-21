@@ -208,7 +208,8 @@ const reworkHours = computed(() => Math.round(props.station.reworkHours * 10) / 
       </section>
 
       <p v-if="!actsHere" class="text-sm opacity-70">
-        {{ station.kanbans }} Kanban {{ station.kanbans === 1 ? "authorizes" : "authorize" }} a pull
+        <AnimatedCount :value="station.kanbans" /> Kanban
+        {{ station.kanbans === 1 ? "authorizes" : "authorize" }} a pull
       </p>
       <section v-else aria-label="Pull">
         <div class="tooltip tooltip-warning block">

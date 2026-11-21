@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue"
 import { lineId, workspaceOwner } from "../api"
 import AndonAlert from "../components/AndonAlert.vue"
+import AnimatedCount from "../components/AnimatedCount.vue"
 import DeviationDialog from "../components/DeviationDialog.vue"
 import ErrorToast from "../components/ErrorToast.vue"
 import RaiseReworkDialog from "../components/RaiseReworkDialog.vue"
@@ -434,7 +435,7 @@ function since(at: string) {
                 class="text-3xl font-semibold leading-none tabular-nums"
                 :class="kanbanTotal > 0 ? 'text-primary' : 'opacity-70'"
               >
-                {{ kanbanTotal }}
+                <AnimatedCount :value="kanbanTotal" />
               </span>
               <p class="min-w-0 text-sm leading-snug">
                 <span class="font-medium">{{ authorize(kanbanTotal) }}</span>
@@ -475,7 +476,8 @@ function since(at: string) {
                         class="tabular-nums"
                         :class="kanbans(list) > 0 ? 'font-medium' : 'opacity-70'"
                       >
-                        {{ kanbans(list) }} {{ kanbans(list) === 1 ? "Kanban" : "Kanbans" }}
+                        <AnimatedCount :value="kanbans(list)" />
+                        {{ kanbans(list) === 1 ? "Kanban" : "Kanbans" }}
                       </span>
                     </p>
                   </div>
